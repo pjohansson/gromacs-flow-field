@@ -57,7 +57,9 @@
 
 static gmx::EnumerationArray<SimulationAtomGroupType, const char*> c_simulationAtomGroupTypeShortNames = {
     { "T-Coupling", "Energy Mon.", "Acceleration", "Freeze", "User1", "User2", "VCM",
-      "Compressed X", "Or. Res. Fit", "QMMM" }
+      "Compressed X", "Or. Res. Fit", "QMMM", 
+      // [FLOW]
+      "FlowSwap" }
 };
 
 const char* shortName(SimulationAtomGroupType type)

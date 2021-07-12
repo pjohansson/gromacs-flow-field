@@ -64,6 +64,8 @@ enum class SimulationAtomGroupType : int
     CompressedPositionOutput,
     OrientationRestraintsFit,
     QuantumMechanics,
+    // [FLOW]
+    FlowSwap,
     Count
 };
 

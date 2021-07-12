@@ -109,7 +109,9 @@ struct gmx_inputrec_strings
             frdim[STRLEN], energy[STRLEN], user1[STRLEN], user2[STRLEN], vcm[STRLEN],
             x_compressed_groups[STRLEN], couple_moltype[STRLEN], orirefitgrp[STRLEN],
             egptable[STRLEN], egpexcl[STRLEN], wall_atomtype[STRLEN], wall_density[STRLEN],
-            deform[STRLEN], QMMM[STRLEN], imd_grp[STRLEN];
+            deform[STRLEN], QMMM[STRLEN], imd_grp[STRLEN], 
+            // [FLOW]
+            flow_swap_grps[STRLEN];
     char                     fep_lambda[efptNR][STRLEN];
     char                     lambda_weights[STRLEN];
     std::vector<std::string> pullGroupNames;
@@ -1510,7 +1512,7 @@ void check_ir(const char*                   mdparin,
         gmx_fatal(FARGS, "AdResS simulations are no longer supported");
     }
 
-    // [FLOW_FIELD]
+    // [FLOW]
     if (ir->flow_swap->do_swap)
     {
         if (ir->flow_swap->nstswap <= 0)
@@ -2105,10 +2107,6 @@ void get_ir(const char*     mdparin,
     replace_inp_entry(inp, "xtc-precision", "compressed-x-precision");
     replace_inp_entry(inp, "pull-print-com1", "pull-print-com");
 
-    /* [FLOW_FIELD] Rebind user2-grps to use for swapping
-        This is likely easier than trying to create an entire new group */
-    replace_inp_entry(inp, "user2-grps", "flow-swap-grps");
-
     printStringNewline(&inp, "VARIOUS PREPROCESSING OPTIONS");
     printStringNoNewline(&inp, "Preprocessor information: use cpp syntax.");
     printStringNoNewline(&inp, "e.g.: -I/home/joe/doe -I/home/mary/roe");
@@ -2498,7 +2496,7 @@ void get_ir(const char*     mdparin,
         mdModules->assignOptionsToModules(*ir->params, &errorHandler);
     }
 
-    // [FLOW_FIELD] Swapping
+    // [FLOW] Swapping
     {
         char strbuf[STRLEN];
 
@@ -2622,8 +2620,9 @@ void get_ir(const char*     mdparin,
         printStringNoNewline(&inp, "Groups to swap and fill with: must be 1 or 2, the first group is ");
         printStringNoNewline(&inp, "the swapped molecules and the second the replacements (will be ");
         printStringNoNewline(&inp, "the rest group if only one group is specified)");
-        printStringNoNewline(&inp, "Note: this replaces user2-grps");
-        setStringEntry(&inp, "flow-swap-grps", inputrecStrings->user2, nullptr);
+
+        // Prepare group string entry, the numbering will be done in `do_index`
+        setStringEntry(&inp, "flow-swap-grps", inputrecStrings->flow_swap_grps, nullptr);
     }
 
     /* Ion/water position swapping ("computational electrophysiology") */
@@ -4165,6 +4164,11 @@ void do_index(const char*                   mdparin,
                  SimulationAtomGroupType::QuantumMechanics, restnm, egrptpALL_GENREST, bVerbose, wi);
     ir->opts.ngQM = qmGroupNames.size();
 
+    // [FLOW]
+    auto FlowSwapGroupNames = gmx::splitString(inputrecStrings->flow_swap_grps);
+    do_numbering(natoms, groups, FlowSwapGroupNames, defaultIndexGroups, gnames,
+                SimulationAtomGroupType::FlowSwap, restnm, egrptpALL_GENREST, bVerbose, wi);
+
     /* end of MiMiC QMMM input */
 
     if (bVerbose)
@@ -4764,11 +4768,11 @@ void triple_check(const char* mdparin, t_inputrec* ir, gmx_mtop_t* sys, warninp_
         }
     }
 
-    // [FLOW_FIELD]
+    // [FLOW]
     if (ir->flow_swap->do_swap) 
     {
         // Verify that we have the required groups for swapping
-        const auto num_swap_groups = sys->groups.groups[SimulationAtomGroupType::User2].size();
+        const auto num_swap_groups = sys->groups.groups[SimulationAtomGroupType::FlowSwap].size();
 
         if (num_swap_groups < 2)
         {

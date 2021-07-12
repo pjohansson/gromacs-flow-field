@@ -46,7 +46,7 @@ for (int nodeid = 0; nodeid < commrec->nnodes; nodeid++) \
     body \
 )
 
-constexpr SimulationAtomGroupType FLOW_SWAP_GROUP = SimulationAtomGroupType::User2;
+constexpr SimulationAtomGroupType FLOW_SWAP_GROUP = SimulationAtomGroupType::FlowSwap;
 
 
 /*************************
