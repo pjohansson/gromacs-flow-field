@@ -4771,22 +4771,54 @@ void triple_check(const char* mdparin, t_inputrec* ir, gmx_mtop_t* sys, warninp_
     // [FLOW]
     if (ir->flow_swap->do_swap) 
     {
-        // Verify that we have the required groups for swapping
+        // Verify that we have the required groups for swapping:
+        // at least one to pull from, and one to replace (fill) with.
         const auto num_swap_groups = sys->groups.groups[SimulationAtomGroupType::FlowSwap].size();
 
+        // Find which group index is the "rest" group.
+        //   0: No group was set in the .mdp file, entire system is "rest"
+        //   1: One group was set in the .mdp file, use that as the swap
+        //      group and the "rest" as replacement
+        size_t index_rest_group = num_swap_groups;
+        for (size_t i = 0; i < num_swap_groups; ++i)
+        {
+            const auto global_group_index = static_cast<size_t>(
+                sys->groups.groups[SimulationAtomGroupType::FlowSwap].at(i));
+            const auto group_name = *sys->groups.groupNames.at(global_group_index);
+
+            if (strncmp(group_name, "rest", 4) == 0)
+            {
+                index_rest_group = i;
+                break;
+            }
+        }
+
+        // If we do not have two groups there can either be no group at
+        // all specified, or one group that is the entire system. Neither
+        // is valid.
         if (num_swap_groups < 2)
         {
-            if (num_swap_groups == 0)
+            if (index_rest_group == 0)
             {
-                snprintf(warn_buf, STRLEN, "no group to swap for was specified (flow-swap-grps)");
+                snprintf(warn_buf, STRLEN, 
+                         "no group to swap for was specified (flow-swap-grps)");
                 warning_error(wi, warn_buf);
             }
-            
-            if (num_swap_groups == 1)
+            else if (num_swap_groups == 1)
             {
-                snprintf(warn_buf, STRLEN, "no group to replace the swapped molecules with was specified (flow-swap-grps)");
+                snprintf(warn_buf, STRLEN, 
+                         "no group to replace the swapped molecules with was found, "
+                         "is group 1 \"System\"? (flow-swap-grps)");
                 warning_error(wi, warn_buf);
             }
+        }
+        // Warn if more than 2 groups were set (ignore if third is "rest")
+        else if ((num_swap_groups > 2) && (index_rest_group != 2))
+        {
+            snprintf(warn_buf, STRLEN, 
+                     "more than 2 swapping groups were set, but only the first "
+                     "2 will be used (flow-swap-grps)");
+            warning(wi, warn_buf);
         }
     }
 
