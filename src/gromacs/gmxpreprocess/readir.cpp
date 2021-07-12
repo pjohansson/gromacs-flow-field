@@ -1638,7 +1638,7 @@ void check_ir(const char*                   mdparin,
         if (num_zone_size_values != DIM)
         {
             snprintf(warn_buf, STRLEN, 
-                     "flow-swap-zone-size requires %d values, got %lu", 
+                     "flow-swap-zone-size requires %d values, got %d", 
                      DIM, num_zone_size_values);
             warning_error(wi, warn_buf);
         }
