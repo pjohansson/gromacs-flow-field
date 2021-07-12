@@ -236,25 +236,31 @@ static Histogram
 smooth_histogram(const Histogram &hist, const size_t num_smooth)
 {
     const auto num_bins = hist.count.size();
-    const double window_size = 2.0 * static_cast<double>(num_smooth) + 1.0;
-
     HistogramCounter smooth_count(num_bins, 0.0);
 
-    for (size_t i = 0; i < num_bins; i++)
+    const auto margin = static_cast<int>(num_smooth);
+
+    for (size_t from_index = 0; from_index < num_bins; from_index++)
     {
-        for (int j = -static_cast<int>(num_smooth); j <= static_cast<int>(num_smooth); j++)
+        const auto count = hist.count.at(from_index);
+
+        for (int i = -margin; i <= margin; i++)
         {
-            auto n = (static_cast<int>(i) + j) % static_cast<int>(num_bins);
+            auto n = static_cast<int>(from_index) + i;
 
             while (n < 0)
             {
                 n += num_bins;
             }
 
-            smooth_count.at(static_cast<size_t>(n)) += hist.count.at(i);
+            const auto to_index = static_cast<size_t>(
+                n % static_cast<int>(num_bins));
+
+            smooth_count.at(to_index) += count;
         }
     }
 
+    const double window_size = 2.0 * static_cast<double>(margin) + 1.0;
     for (auto& v : smooth_count)
     {
         v /= window_size;
@@ -366,7 +372,21 @@ get_two_largest_hist_regions(std::vector<HistRegion> &regions)
         }
     );
 
-    return std::pair(regions.at(0), regions.at(1));
+    const auto& region0 = regions.at(0);
+    const auto& region1 = regions.at(1);
+
+    const auto i0 = (region0.begin + region0.end) / 2;
+    const auto i1 = (region1.begin + region1.end) / 2;
+    const bool region0_before_region1 = (i0 < i1);
+
+    if (region0_before_region1)
+    {
+        return std::pair(regions.at(0), regions.at(1));
+    }
+    else 
+    {
+        return std::pair(regions.at(1), regions.at(0));
+    }
 }
 
 static size_t 
@@ -436,6 +456,41 @@ find_two_peaks(std::vector<HistRegion> &regions,
     );
 }
 
+static real 
+calc_histogram_median(const Histogram &hist)
+{
+    if (hist.count.empty())
+    {
+        return 0.0;
+    }
+
+    HistogramCounter counts (hist.count.cbegin(), hist.count.cend());
+    std::sort(counts.begin(), counts.end());
+
+    const auto i = counts.size() / 2;
+
+    return counts.at(i);
+}
+
+static Histogram 
+invert_histogram(const Histogram &hist)
+{
+    const auto bulk_value = calc_histogram_median(hist);
+
+    HistogramCounter inv_counts;
+    inv_counts.reserve(hist.count.size());
+
+    for (const auto& c : hist.count)
+    {
+        inv_counts.push_back(bulk_value - c);
+    }
+
+    return Histogram {
+        hist.dx,
+        inv_counts
+    };
+}
+
 static std::pair<real, real>
 find_contact_lines_from_hist(const Histogram &hist)
 {
@@ -448,7 +503,7 @@ find_contact_lines_from_hist(const Histogram &hist)
     // We then take the two contact lines regions as those with the highest integrated 
     // number of counts, which gets rid of noise. 
     // Finally, we get the average position in the regions.
-    constexpr double rel_cutoff = 0.10;
+    constexpr double rel_cutoff = 0.25;
     const auto max_value = *max_element(hist.count.cbegin(), hist.count.cend());
     const auto cutoff = rel_cutoff * max_value;
 
@@ -522,6 +577,9 @@ get_zones_at_contact_line_from_histograms(const Histogram                     &h
     {
         gmx_warning("could not detect 4 contact lines");
 
+        // log_histogram_to_file("bad_hist0.xvg", hist0);
+        // log_histogram_to_file("bad_hist1.xvg", hist1);
+
         set_bad_contact_line_at_default_zones(
             pos_from0, pos_from1, pos_to0, pos_to1, cl_def.axis, default_zones
         );
@@ -547,14 +605,14 @@ static std::vector<CoupledSwapZones>
 get_zones_at_contact_lines(const FlowSwap &flow_swap,
                            const matrix    box)
 {
-    constexpr size_t num_smooth = 10;
-    constexpr real histogram_resolution = 0.1;
+    constexpr size_t num_smooth = 5;
+    constexpr real histogram_resolution = 0.2;
 
     const ContactLineDef cl_def(flow_swap, box);
 
     Histogram hist0, hist1;
     std::tie(hist0, hist1) = create_atom_histograms(
-        cl_def, histogram_resolution, flow_swap.swap, flow_swap.pbc, box);
+        cl_def, histogram_resolution, flow_swap.fill, flow_swap.pbc, box);
 
     // log_histogram_to_file("hist0.xvg", hist0);
     // log_histogram_to_file("hist1.xvg", hist1);
@@ -568,8 +626,14 @@ get_zones_at_contact_lines(const FlowSwap &flow_swap,
         // log_histogram_to_file("smooth_hist1.xvg", hist1);
     }
 
+    const auto inv_hist0 = invert_histogram(hist0);
+    const auto inv_hist1 = invert_histogram(hist1);
+
+    // log_histogram_to_file("inv_hist0.xvg", inv_hist0);
+    // log_histogram_to_file("inv_hist1.xvg", inv_hist1);
+
     return get_zones_at_contact_line_from_histograms(
-        hist0, hist1, cl_def, flow_swap.init_coupled_zones
+        inv_hist0, inv_hist1, cl_def, flow_swap.init_coupled_zones
     );
 }
 
@@ -1325,6 +1389,7 @@ gmx_bool do_flowswap(FlowSwap         &flow_swap,
 
     if (flow_swap.do_track_contact_line)
     {
+        collect_group_positions_from_ranks(flow_swap.fill, cr, xs_local, state->box);
         coupled_zones = get_zones_at_contact_lines(flow_swap, state->box);
     }
 
