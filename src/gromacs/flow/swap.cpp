@@ -46,8 +46,6 @@ for (int nodeid = 0; nodeid < commrec->nnodes; nodeid++) \
     body \
 )
 
-constexpr SimulationAtomGroupType FLOW_SWAP_GROUP = SimulationAtomGroupType::FlowSwap;
-
 
 /*************************
  * Class implementations *
@@ -64,8 +62,10 @@ static FlowSwap init_empty_flow_swap(gmx::LocalAtomSetManager *atom_sets)
 
     const SwapGroup swap { atom_sets->add(inds) };
     const SwapGroup fill { atom_sets->add(inds) };
+    const SwapGroup phase1 { atom_sets->add(inds) };
+    const SwapGroup phase2 { atom_sets->add(inds) };
 
-    return FlowSwap { swap, fill };
+    return FlowSwap { swap, fill, phase1, phase2 };
 }
 
 /*************************
@@ -307,10 +307,13 @@ stitch_front_and_back_regions(std::vector<HistRegion> &regions,
 }
 
 static std::vector<HistRegion>
-find_hist_regions(const Histogram &hist,
-                  const double     cutoff)
+find_hist_regions(const Histogram &hist)
 {
     std::vector<HistRegion> regions;
+
+    constexpr double rel_cutoff = 0.25;
+    const auto max_value = *max_element(hist.count.cbegin(), hist.count.cend());
+    const auto cutoff = rel_cutoff * max_value;
 
     int i = 0,
         begin = 0;
@@ -389,6 +392,31 @@ get_two_largest_hist_regions(std::vector<HistRegion> &regions)
     }
 }
 
+//! Return the region with the largest total_counts.
+//!
+//! Assumes that the given vector has at least one element. 
+//! Will panic if fewer elements are present.
+static HistRegion
+get_largest_hist_region(const std::vector<HistRegion> &regions)
+{
+    auto max_counts = 0.0;
+    size_t max_index = 0;
+
+    size_t i = 0;
+    for (const auto& region : regions)
+    {
+        if (region.total_counts > max_counts)
+        {
+            max_counts = region.total_counts;
+            max_index = i;
+        }
+
+        ++i;
+    }
+
+    return regions.at(max_index);
+}
+
 static size_t 
 get_hist_index_pbc(const int        i,
                    const Histogram &hist)
@@ -404,95 +432,62 @@ get_hist_index_pbc(const int        i,
     return static_cast<size_t>(n);
 }
 
-static double
-get_hist_value(const int        i,
-               const Histogram &hist)
+template<typename T>
+static T 
+index_modulo(T index, const T max)
 {
-    return hist.count.at(get_hist_index_pbc(i, hist));
+    while (index < 0)
+    {
+        index += max;
+    }
+
+    return index % max;
 }
 
-static double
-get_hist_region_mean_position(const HistRegion &region,
-                              const Histogram  &hist)
+static size_t 
+get_mean_hist_index(int i0, int i1, const size_t num_bins)
 {
-    double mean = 0.0;
+    i0 = index_modulo(i0, static_cast<int>(num_bins));
+    i1 = index_modulo(i1, static_cast<int>(num_bins));
 
-    for (auto i = region.begin; i < region.end; i++)
-    {
-        const auto weight = get_hist_value(i, hist);
+    const auto imid = (i0 + i1) / 2;
 
-        mean += weight * static_cast<double>(i);
-    }
-
-    mean /= region.total_counts;
-
-    const auto length = static_cast<double>(hist.count.size());
-    while (mean < 0.0)
-    {
-        mean += length;
-    }
-
-    return fmod(mean, length) * hist.dx;
+    return static_cast<size_t>(imid);
 }
 
 static std::pair<real, real>
-find_two_peaks(std::vector<HistRegion> &regions,
-               const Histogram         &hist)
+find_phase_change_positions(const HistRegion &region1,
+                            const HistRegion &region2,
+                            const real        dx,
+                            const size_t      num_bins)
 {
-    if (regions.size() < 2)
+    const auto i0 = get_mean_hist_index(region1.begin, region2.end, num_bins);
+    const auto i1 = get_mean_hist_index(region2.begin, region1.end, num_bins);
+
+    const auto x0 = dx * static_cast<real>(i0);
+    const auto x1 = dx * static_cast<real>(i1);
+
+    if (x0 < x1)
     {
-        return std::pair(-1.0, -1.0);
+        return std::pair(x0, x1);
     }
-
-    HistRegion cl_region0, cl_region1;
-    std::tie(cl_region0, cl_region1) = get_two_largest_hist_regions(regions);
-
-    const auto x0 = get_hist_region_mean_position(cl_region0, hist);
-    const auto x1 = get_hist_region_mean_position(cl_region1, hist);
-
-    return std::pair(
-        static_cast<real>(x0), 
-        static_cast<real>(x1)
-    );
+    else 
+    {
+        return std::pair(x1, x0);
+    }
 }
 
-static real 
-calc_histogram_median(const Histogram &hist)
+static HistRegion 
+find_phase_region(const Histogram &phase_hist)
 {
-    if (hist.count.empty())
-    {
-        return 0.0;
-    }
+    const auto separate_regions = find_hist_regions(phase_hist);
 
-    HistogramCounter counts (hist.count.cbegin(), hist.count.cend());
-    std::sort(counts.begin(), counts.end());
-
-    const auto i = counts.size() / 2;
-
-    return counts.at(i);
-}
-
-static Histogram 
-invert_histogram(const Histogram &hist)
-{
-    const auto bulk_value = calc_histogram_median(hist);
-
-    HistogramCounter inv_counts;
-    inv_counts.reserve(hist.count.size());
-
-    for (const auto& c : hist.count)
-    {
-        inv_counts.push_back(bulk_value - c);
-    }
-
-    return Histogram {
-        hist.dx,
-        inv_counts
-    };
+    return get_largest_hist_region(separate_regions);
 }
 
 static std::pair<real, real>
-find_contact_lines_from_hist(const Histogram &hist)
+find_contact_lines_from_hist(const Histogram &phase1_hist, 
+                             const Histogram &phase2_hist)
 {
     // To detect the contact lines we make the following assumptions: 
     //  - The histogram has one peak for each contact line (the peak is a normal distribution)
@@ -503,13 +498,18 @@ find_contact_lines_from_hist(const Histogram &hist)
     // We then take the two contact lines regions as those with the highest integrated 
     // number of counts, which gets rid of noise. 
     // Finally, we get the average position in the regions.
-    constexpr double rel_cutoff = 0.25;
-    const auto max_value = *max_element(hist.count.cbegin(), hist.count.cend());
-    const auto cutoff = rel_cutoff * max_value;
+    // constexpr double rel_cutoff = 0.25;
+    // const auto max_value = *max_element(hist.count.cbegin(), hist.count.cend());
+    // const auto cutoff = rel_cutoff * max_value;
 
-    auto regions = find_hist_regions(hist, cutoff);
+    // auto regions = find_hist_regions(hist, cutoff);
+    const auto phase1_region = find_phase_region(phase1_hist);
+    const auto phase2_region = find_phase_region(phase2_hist);
 
-    return find_two_peaks(regions, hist);
+    const auto dx = phase1_hist.dx;
+    const auto num_bins = phase1_hist.count.size();
+
+    return find_phase_change_positions(phase1_region, phase2_region, dx, num_bins);
 }
 
 static gmx::RVec 
@@ -562,16 +562,18 @@ set_bad_contact_line_at_default_zones(real                                &from0
 
 
 static std::vector<CoupledSwapZones>
-get_zones_at_contact_line_from_histograms(const Histogram                     &hist0, 
-                                          const Histogram                     &hist1,
+get_zones_at_contact_line_from_histograms(const Histogram                     &phase1_lower, 
+                                          const Histogram                     &phase1_upper,
+                                          const Histogram                     &phase2_lower,
+                                          const Histogram                     &phase2_upper,
                                           const ContactLineDef                &cl_def,
                                           const std::vector<CoupledSwapZones> &default_zones)
 {
     real pos_from0, pos_from1,
          pos_to0, pos_to1;
 
-    std::tie(pos_from0, pos_to1) = find_contact_lines_from_hist(hist0);
-    std::tie(pos_to0, pos_from1) = find_contact_lines_from_hist(hist1);
+    std::tie(pos_from0, pos_to1) = find_contact_lines_from_hist(phase1_lower, phase2_lower);
+    std::tie(pos_to0, pos_from1) = find_contact_lines_from_hist(phase1_upper, phase2_upper);
 
     if (!verify_all_contact_lines_detected(pos_from0, pos_from1, pos_to0, pos_to1))
     {
@@ -605,35 +607,41 @@ static std::vector<CoupledSwapZones>
 get_zones_at_contact_lines(const FlowSwap &flow_swap,
                            const matrix    box)
 {
-    constexpr size_t num_smooth = 5;
-    constexpr real histogram_resolution = 0.2;
+    constexpr size_t num_smooth = 10;
+    constexpr real histogram_resolution = 0.25;
 
     const ContactLineDef cl_def(flow_swap, box);
 
-    Histogram hist0, hist1;
-    std::tie(hist0, hist1) = create_atom_histograms(
-        cl_def, histogram_resolution, flow_swap.fill, flow_swap.pbc, box);
+    Histogram phase1_lower, phase1_upper,
+              phase2_lower, phase2_upper;
 
-    // log_histogram_to_file("hist0.xvg", hist0);
-    // log_histogram_to_file("hist1.xvg", hist1);
+    std::tie(phase1_lower, phase1_upper) = create_atom_histograms(
+        cl_def, histogram_resolution, flow_swap.phase1, flow_swap.pbc, box);
+    std::tie(phase2_lower, phase2_upper) = create_atom_histograms(
+        cl_def, histogram_resolution, flow_swap.phase2, flow_swap.pbc, box);
+
+    // log_histogram_to_file("phase1_lower.xvg", phase1_lower);
+    // log_histogram_to_file("phase1_upper.xvg", phase1_upper);
+    // log_histogram_to_file("phase2_lower.xvg", phase2_lower);
+    // log_histogram_to_file("phase2_upper.xvg", phase2_upper);
     
     if (num_smooth > 0)
     {
-        hist0 = smooth_histogram(hist0, num_smooth);
-        hist1 = smooth_histogram(hist1, num_smooth);
+        phase1_lower = smooth_histogram(phase1_lower, num_smooth);
+        phase1_upper = smooth_histogram(phase1_upper, num_smooth);
+        phase2_lower = smooth_histogram(phase2_lower, num_smooth);
+        phase2_upper = smooth_histogram(phase2_upper, num_smooth);
 
-        // log_histogram_to_file("smooth_hist0.xvg", hist0);
-        // log_histogram_to_file("smooth_hist1.xvg", hist1);
+        // log_histogram_to_file("phase1_lower_smooth.xvg", phase1_lower);
+        // log_histogram_to_file("phase1_upper_smooth.xvg", phase1_upper);
+        // log_histogram_to_file("phase2_lower_smooth.xvg", phase2_lower);
+        // log_histogram_to_file("phase2_upper_smooth.xvg", phase2_upper);
     }
 
-    const auto inv_hist0 = invert_histogram(hist0);
-    const auto inv_hist1 = invert_histogram(hist1);
-
-    // log_histogram_to_file("inv_hist0.xvg", inv_hist0);
-    // log_histogram_to_file("inv_hist1.xvg", inv_hist1);
-
     return get_zones_at_contact_line_from_histograms(
-        inv_hist0, inv_hist1, cl_def, flow_swap.init_coupled_zones
+        phase1_lower, phase1_upper, 
+        phase2_lower, phase2_upper, 
+        cl_def, flow_swap.init_coupled_zones
     );
 }
 
@@ -643,15 +651,16 @@ get_zones_at_contact_lines(const FlowSwap &flow_swap,
  *************************/
 
 // Return the global atom indices of a given group.
-static std::vector<int> get_group_inds(const int               num_atoms, 
-                                       const int               group_index,
-                                       const SimulationGroups *groups)
+static std::vector<int> get_group_inds(const int                     num_atoms, 
+                                       const int                     group_index,
+                                       const SimulationGroups       *groups,
+                                       const SimulationAtomGroupType group_type)
 {
     std::vector<int> inds;
 
     for (int i = 0; i < num_atoms; ++i)
     {
-        if (getGroupType(*groups, FLOW_SWAP_GROUP, i) == group_index)
+        if (getGroupType(*groups, group_type, i) == group_index)
         {
             inds.push_back(i);
         }
@@ -717,17 +726,18 @@ create_swap_zones_at_height(const real                 at_height,
     return CoupledSwapZones { from, to };
 }
 
-static SwapGroup create_swap_group(const int                 group_index,
-                                   const gmx_mtop_t         *mtop,
-                                   gmx::LocalAtomSetManager *atom_sets,
-                                   const SimulationGroups   *groups)
+static SwapGroup create_swap_group(const int                     group_index,
+                                   const gmx_mtop_t             *mtop,
+                                   gmx::LocalAtomSetManager     *atom_sets,
+                                   const SimulationGroups       *groups,
+                                   const SimulationAtomGroupType group_type)
 {
     // The group index in User2 is used (later) to check whether atoms belong to the group,
     // but the *global* group index is used here to get the name of the group 
-    const int global_group_index = groups->groups[FLOW_SWAP_GROUP].at(group_index);
+    const int global_group_index = groups->groups[group_type].at(group_index);
     const std::string group_name { *groups->groupNames.at(global_group_index) };
 
-    const auto inds = get_group_inds(mtop->natoms, group_index, groups);
+    const auto inds = get_group_inds(mtop->natoms, group_index, groups, group_type);
     const auto atoms_per_mol = get_atoms_per_mol_for_group(inds, mtop);
 
     // Add the group indices as a set to be managed by the domain decomposition code
@@ -1317,8 +1327,11 @@ FlowSwap init_flowswap(gmx::LocalAtomSetManager *atom_sets,
 
     const auto coupled_zones = create_coupled_swap_zones(ir->flow_swap, box);
 
-    const auto swap_group = create_swap_group(0, top_global, atom_sets, groups);
-    const auto fill_group = create_swap_group(1, top_global, atom_sets, groups);
+    const auto swap_group = create_swap_group(0, top_global, atom_sets, groups, SimulationAtomGroupType::FlowSwap);
+    const auto fill_group = create_swap_group(1, top_global, atom_sets, groups, SimulationAtomGroupType::FlowSwap);
+
+    const auto phase1_group = create_swap_group(0, top_global, atom_sets, groups, SimulationAtomGroupType::TwoPhase);
+    const auto phase2_group = create_swap_group(1, top_global, atom_sets, groups, SimulationAtomGroupType::TwoPhase);
 
     // If we are using domain decompositioning, we must update the local and global
     // atom indices of the sets now that we have added new ones to the manager
@@ -1339,13 +1352,18 @@ FlowSwap init_flowswap(gmx::LocalAtomSetManager *atom_sets,
         print_zone_position_header(fplog, coupled_zones);
     }
 
+    const bool track_contact_lines = 
+        (ir->flow_swap->swap_method == eFlowSwapMethod::TwoPhaseContactLines);
+
     const FlowSwap flow_swap {
         nstswap,
         ir->flow_swap->zone_size,
         coupled_zones,
-        ir->flow_swap->swap_method == eFlowSwapMethod::TwoPhaseContactLines,
+        track_contact_lines,
         swap_group,
         fill_group,
+        phase1_group,
+        phase2_group,
         FlowSwapAxis { 
             static_cast<size_t>(ir->flow_swap->swap_axis), 
             static_cast<size_t>(ir->flow_swap->zone_position_axis)
@@ -1389,7 +1407,9 @@ gmx_bool do_flowswap(FlowSwap         &flow_swap,
 
     if (flow_swap.do_track_contact_line)
     {
-        collect_group_positions_from_ranks(flow_swap.fill, cr, xs_local, state->box);
+        collect_group_positions_from_ranks(flow_swap.phase1, cr, xs_local, state->box);
+        collect_group_positions_from_ranks(flow_swap.phase2, cr, xs_local, state->box);
+
         coupled_zones = get_zones_at_contact_lines(flow_swap, state->box);
     }
 

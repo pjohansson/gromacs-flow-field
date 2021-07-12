@@ -65,7 +65,8 @@ enum class SimulationAtomGroupType : int
     OrientationRestraintsFit,
     QuantumMechanics,
     // [FLOW]
-    FlowSwap,
+    FlowSwap, // Groups for swapping and replacing atoms in zones
+    TwoPhase, // Two groups defining a two-phase fluid system
     Count
 };
 

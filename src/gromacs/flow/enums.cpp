@@ -3,14 +3,16 @@
 
 const char* eFlowSwapMethodTypes_names[static_cast<size_t>(eFlowSwapMethod::NR) + 1] = {
     "center-edge",
-    // "positions-relative",
-    // "positions-absolute",
     "positions",
     "two-phase-contact-lines",
     nullptr
 };
-const char* eFlowSwapAxisTypes_names[eFlowSwapAxisTypesNR + 1] = { "X", "Y", "Z", nullptr };
-const char* eFlowSwapPositionAxisTypes_names[eFlowSwapPositionAxisTypesNR + 1] = { "Z", "X", "Y", nullptr };
+const char* eFlowSwapAxisTypes_names[eFlowSwapAxisTypesNR + 1] = { 
+    "X", "Y", "Z", nullptr 
+};
+const char* eFlowSwapPositionAxisTypes_names[eFlowSwapPositionAxisTypesNR + 1] = { 
+    "Z", "X", "Y", nullptr 
+};
 
 const char* eFlowSwapPosition2String(const int axis) 
 {

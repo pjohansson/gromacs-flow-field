@@ -111,7 +111,7 @@ struct gmx_inputrec_strings
             egptable[STRLEN], egpexcl[STRLEN], wall_atomtype[STRLEN], wall_density[STRLEN],
             deform[STRLEN], QMMM[STRLEN], imd_grp[STRLEN], 
             // [FLOW]
-            flow_swap_grps[STRLEN];
+            flow_swap_grps[STRLEN], flow_swap_two_phase[STRLEN];
     char                     fep_lambda[efptNR][STRLEN];
     char                     lambda_weights[STRLEN];
     std::vector<std::string> pullGroupNames;
@@ -2563,21 +2563,6 @@ void get_ir(const char*     mdparin,
 
         ir->flow_swap->num_input_zone_size_values = static_cast<int>(zone_size_entries.size());
 
-        // if (zone_size_entries.size() != DIM)
-        // {
-        //     gmx_fatal(FARGS, 
-        //               "Invalid flow-swap input: requires %d zone size values (got %lu)", 
-        //               DIM, zone_size_entries.size());
-        // }
-        // else 
-        // {
-        //     convertReals(
-        //         wi, 
-        //         zone_size_entries, 
-        //         "flow-swap-zone-size", 
-        //         ir->flow_swap->zone_size
-        //     );
-        // }
         convertReals(
             wi, 
             zone_size_entries, 
@@ -2623,6 +2608,10 @@ void get_ir(const char*     mdparin,
 
         // Prepare group string entry, the numbering will be done in `do_index`
         setStringEntry(&inp, "flow-swap-grps", inputrecStrings->flow_swap_grps, nullptr);
+
+        printStringNoNewline(&inp, "Exactly 2 groups which define the two-phase fluid system");
+        printStringNoNewline(&inp, "(only if `flow-swap-method = two-phase-contact-lines`)");
+        setStringEntry(&inp, "flow-swap-grps-two-phase", inputrecStrings->flow_swap_two_phase, nullptr);
     }
 
     /* Ion/water position swapping ("computational electrophysiology") */
@@ -4169,6 +4158,10 @@ void do_index(const char*                   mdparin,
     do_numbering(natoms, groups, FlowSwapGroupNames, defaultIndexGroups, gnames,
                 SimulationAtomGroupType::FlowSwap, restnm, egrptpALL_GENREST, bVerbose, wi);
 
+    auto FlowSwapTwoPhaseGroupNames = gmx::splitString(inputrecStrings->flow_swap_two_phase);
+    do_numbering(natoms, groups, FlowSwapTwoPhaseGroupNames, defaultIndexGroups, gnames,
+                SimulationAtomGroupType::TwoPhase, restnm, egrptpPART, bVerbose, wi);
+
     /* end of MiMiC QMMM input */
 
     if (bVerbose)
@@ -4769,6 +4762,9 @@ void triple_check(const char* mdparin, t_inputrec* ir, gmx_mtop_t* sys, warninp_
     }
 
     // [FLOW]
+    // I believe this triple-check function is called after everything 
+    // else has been processed. We use this time to verify that our groups 
+    // have been constructed correctly.
     if (ir->flow_swap->do_swap) 
     {
         // Verify that we have the required groups for swapping:
@@ -4819,6 +4815,20 @@ void triple_check(const char* mdparin, t_inputrec* ir, gmx_mtop_t* sys, warninp_
                      "more than 2 swapping groups were set, but only the first "
                      "2 will be used (flow-swap-grps)");
             warning(wi, warn_buf);
+        }
+
+        if (ir->flow_swap->swap_method == eFlowSwapMethod::TwoPhaseContactLines)
+        {
+            const auto num_phase_groups = sys->groups.groups[SimulationAtomGroupType::TwoPhase].size();
+
+            if (num_phase_groups != 2)
+            {
+                snprintf(warn_buf, STRLEN, 
+                         "expected 2 groups defining the two-phase liquids, "
+                         "got %lu (flow-swap-grps-two-phase)", 
+                         num_phase_groups);
+                warning_error(wi, warn_buf);
+            }
         }
     }
 

@@ -100,9 +100,14 @@ struct FlowSwapAxis {
 
 struct FlowSwap {
     /**< Dummy constructor for when no swapping is done */
-    FlowSwap(const SwapGroup swap, const SwapGroup fill)
+    FlowSwap(const SwapGroup swap, 
+             const SwapGroup fill,
+             const SwapGroup phase1,
+             const SwapGroup phase2)
     :swap { swap },
-     fill { fill } {}
+     fill { fill },
+     phase1 { phase1 },
+     phase2 { phase2 } {}
 
     /**< Full constructor of object */
     FlowSwap(const uint64_t  nstswap, 
@@ -111,6 +116,8 @@ struct FlowSwap {
              const gmx_bool do_track_contact_line,
              const SwapGroup swap, 
              const SwapGroup fill, 
+             const SwapGroup phase1, 
+             const SwapGroup phase2, 
              const FlowSwapAxis axis,
              const size_t    ref_num_atoms,
              FILE           *fp,
@@ -122,6 +129,8 @@ struct FlowSwap {
      init_coupled_zones{coupled_zones},
      swap{swap},
      fill{fill},
+     phase1{phase1},
+     phase2{phase2},
      axis{axis},
      ref_num_atoms{ref_num_atoms},
      fplog_zone{fp}
@@ -167,6 +176,10 @@ struct FlowSwap {
     //! Index group of molecules to swap and replace (fill) with
     SwapGroup swap, 
               fill;
+    
+    //! Index groups of molecules which define the two-phase fluids (used to track contact lines)
+    SwapGroup phase1, 
+              phase2;
 
     //! Axis definitions for swap zone positioning.
     FlowSwapAxis axis;
