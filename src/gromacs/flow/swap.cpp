@@ -273,6 +273,11 @@ smooth_histogram(const Histogram &hist, const size_t num_smooth)
 }
 
 struct HistRegion {
+    //! Return true if the region is empty.
+    const bool empty() const noexcept {
+        return (total_counts < 0.0);
+    }
+
     //! Beginning and end of region, half-open range ([begin, end)).
     //! 
     //! Note that for begin < 0 the region stretches across 
@@ -425,34 +430,39 @@ find_phase_change_positions(const HistRegion &region1,
     }
 }
 
+//! Find the region of the input histogram that corresponds to the bulk phase.
+//!
+//! This is detected as the largest connected span of histogram values above
+//! a cutoff. It will span across periodic boundaries.
+//!
+//! If no region is detected, an empty region is returned with total counts < 0.
 static HistRegion 
 find_phase_region(const Histogram &phase_hist)
 {
     const auto separate_regions = find_hist_regions(phase_hist);
 
-    return get_largest_hist_region(separate_regions);
+    if (separate_regions.empty())
+    {
+        const HistRegion empty_hist { -1, -1, -1.0 };
+        return empty_hist;
+    }
+    else 
+    {
+        return get_largest_hist_region(separate_regions);
+    }
 }
 
 static std::pair<real, real>
 find_contact_lines_from_hist(const Histogram &phase1_hist, 
                              const Histogram &phase2_hist)
 {
-    // To detect the contact lines we make the following assumptions: 
-    //  - The histogram has one peak for each contact line (the peak is a normal distribution)
-    //  - Each peak is separated from each other by a region with almost no counts
-    // 
-    // Thus we go through the histogram and detect continuous regions where 
-    // the number of counts exceed a cutoff (determined from the maximum histogram value).
-    // We then take the two contact lines regions as those with the highest integrated 
-    // number of counts, which gets rid of noise. 
-    // Finally, we get the average position in the regions.
-    // constexpr double rel_cutoff = 0.25;
-    // const auto max_value = *max_element(hist.count.cbegin(), hist.count.cend());
-    // const auto cutoff = rel_cutoff * max_value;
-
-    // auto regions = find_hist_regions(hist, cutoff);
     const auto phase1_region = find_phase_region(phase1_hist);
     const auto phase2_region = find_phase_region(phase2_hist);
+
+    if (phase1_region.empty() || phase2_region.empty())
+    {
+        return std::pair(-1.0, -1.0);
+    }
 
     const auto dx = phase1_hist.dx;
     const auto num_bins = phase1_hist.count.size();
