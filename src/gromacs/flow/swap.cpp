@@ -95,6 +95,10 @@ set_rvec_to_1dpos(rvec r, const real position, const size_t axis)
     }
 }
 
+//! Return true if the distance between r0 and r1 along an axis
+//! is less than a value.
+//!
+//! Periodic boundary conditions are accounted for.
 static bool
 check_if_position_is_within_range_1d(const rvec    r0,
                                      const rvec    r1,
@@ -108,6 +112,7 @@ check_if_position_is_within_range_1d(const rvec    r0,
     return (fabs(dr[axis]) <= drmax);
 }
 
+//! Increment histogram counter in the bin corresponding to the given position.
 static void
 add_atom_to_histogram_bins(HistogramCounter &count,
                            const rvec        position,
@@ -120,12 +125,35 @@ add_atom_to_histogram_bins(HistogramCounter &count,
     count.at(bin) += 1.0;
 }
 
+//! Definition of axis configuration for contact line tracking
+//!
+//! These three axes correspond to the axes along which the search is configured.
+//! For example, consider a two-phase system which are separated along x by two
+//! interfaces. The two phases are connected to a third phase at z = z0 and z = z1.
+//! 
+//! This gives four contact lines at the triple phase intersections: 
+//! At (x0, z0), (x1, z1), (x2, z0) and (x3, z1). The contact lines span the entire
+//! width along y. They can move independently along x, which is why four separate
+//! x values are specified for the two z values.
 struct ContactLineAxis {
+    //! Real axis along which the contact line is moving and tracked across.
+    //! 
+    //! Corresponds to the x axis in the above example.
     size_t contact_line;
+
+    //! Real axis along which the two-phases intersect with the third phase.
+    //! 
+    //! Corresponds to the z axis in the above example.
     size_t height;
-    size_t normal;
+
+    //! Real axis normal to the plane created by `contact_line` and `height`.
+    //! 
+    //! Corresponds to the y axis in the above example.
+    size_t depth; 
 };
 
+//! Definition of how to search for contact lines:
+//! at which two heights along which axis and how wide the search space is.
 struct ContactLineDef {
     ContactLineDef(const FlowSwap &flow_swap, const matrix box)
     :axis{ flow_swap.axis.zone, flow_swap.axis.swap, flow_swap.axis.normal },
@@ -133,7 +161,7 @@ struct ContactLineDef {
     {
         height0 = flow_swap.init_coupled_zones.at(0).from[axis.height];
         height1 = flow_swap.init_coupled_zones.at(0).to[axis.height];
-        normal_center = flow_swap.init_coupled_zones.at(0).to[axis.normal];
+        depth_axis_center = flow_swap.init_coupled_zones.at(0).to[axis.depth];
 
         if (dhmax < 0.0)
         {
@@ -141,14 +169,16 @@ struct ContactLineDef {
         }
     }
 
-    ContactLineAxis axis;
+    ContactLineAxis axis;   //! Axis specifications for normal and transverse directions.
 
-    real height0, 
-         height1,
-         dhmax,
-         normal_center;
+    real height0,           //! Height at which first contact lines exist
+         height1,           //! Height at which the second contact lines exist
+         dhmax,             //! Maximum distance from a height to include atoms in
+         depth_axis_center; //! Center of search area along the supporting depth axis
 };
 
+//! Collect atom counts for a given group at the heights 
+//! corresponding to the contact line definition.
 static std::pair<HistogramCounter, HistogramCounter>
 get_histogram_atom_counts(const ContactLineDef &cl_def,
                           const real            length,
@@ -185,6 +215,8 @@ get_histogram_atom_counts(const ContactLineDef &cl_def,
     return std::pair(count0, count1);
 }
 
+//! Create histograms of lower and upper atom counts using a given 
+//! contact line search definition.
 static std::pair<Histogram, Histogram>
 create_atom_histograms(const ContactLineDef &cl_def,
                        const real            target_resolution,
@@ -208,6 +240,7 @@ create_atom_histograms(const ContactLineDef &cl_def,
     return std::pair(hist0, hist1);
 }
 
+//! Write histogram counts to an open file.
 static void
 log_histogram(FILE            *fp,
               const Histogram &hist)
@@ -221,6 +254,7 @@ log_histogram(FILE            *fp,
     }
 }
 
+//! Write histogram counts to a file at a given path.
 static void
 log_histogram_to_file(const std::string &fn,
                       const Histogram   &hist)
@@ -232,6 +266,7 @@ log_histogram_to_file(const std::string &fn,
     gmx_ffclose(fp);
 }
 
+//! Smoothen a histogram using a running average.
 static Histogram
 smooth_histogram(const Histogram &hist, const size_t num_smooth)
 {
@@ -272,6 +307,7 @@ smooth_histogram(const Histogram &hist, const size_t num_smooth)
     };
 }
 
+//! Definition of a region inside a `Histogram`
 struct HistRegion {
     //! Return true if the region is empty.
     const bool empty() const noexcept {
@@ -288,6 +324,8 @@ struct HistRegion {
     double total_counts;
 };
 
+//! If the first and last region input regions are connected across 
+//! the periodic boundary, pop the last region and add its range to the first.
 static void 
 stitch_front_and_back_regions(std::vector<HistRegion> &regions,
                               const Histogram         &hist)
@@ -311,6 +349,9 @@ stitch_front_and_back_regions(std::vector<HistRegion> &regions,
     }
 }
 
+//! Find connected regions of a histogram with counts larger than a cutoff.
+//!
+//! Connected regions along periodic boundaries are stitched into one.
 static std::vector<HistRegion>
 find_hist_regions(const Histogram &hist)
 {
@@ -385,6 +426,8 @@ get_largest_hist_region(const std::vector<HistRegion> &regions)
     return regions.at(max_index);
 }
 
+//! Return the modulo of an input with a max. Ensure that 
+//! negative values are properly placed inside the region.
 template<typename T>
 static T 
 index_modulo(T index, const T max)
@@ -397,6 +440,7 @@ index_modulo(T index, const T max)
     return index % max;
 }
 
+//! From two indices, adjust for periodic boundaries and return the mean.
 static size_t 
 get_mean_hist_index(int i0, int i1, const size_t num_bins)
 {
@@ -408,6 +452,7 @@ get_mean_hist_index(int i0, int i1, const size_t num_bins)
     return static_cast<size_t>(imid);
 }
 
+//! Return the real positions where two separate phases are connected.
 static std::pair<real, real>
 find_phase_change_positions(const HistRegion &region1,
                             const HistRegion &region2,
@@ -452,6 +497,13 @@ find_phase_region(const Histogram &phase_hist)
     }
 }
 
+//! Return the contact line positions from histograms of each phase along a line.
+//!
+//! The positions are at the boundaries between the largest connected regions
+//! of each phase histogram. The returned value is always positive and put inside
+//! the simulation box.
+//!
+//! If no contact lines are found, positions which are < 0 are returned.
 static std::pair<real, real>
 find_contact_lines_from_hist(const Histogram &phase1_hist, 
                              const Histogram &phase2_hist)
@@ -470,6 +522,8 @@ find_contact_lines_from_hist(const Histogram &phase1_hist,
     return find_phase_change_positions(phase1_region, phase2_region, dx, num_bins);
 }
 
+//! Return the real position vector corresponding to the input position 
+//! and height corresponding to the contact line search axis definition.
 static gmx::RVec 
 create_contact_line_zone_position(const real             contact_line_position,
                                   const real             height,
@@ -479,11 +533,13 @@ create_contact_line_zone_position(const real             contact_line_position,
 
     r[cl_def.axis.contact_line] = contact_line_position;
     r[cl_def.axis.height]       = height;
-    r[cl_def.axis.normal]       = cl_def.normal_center;
+    r[cl_def.axis.depth]       = cl_def.depth_axis_center;
 
     return r;
 }
 
+//! Return whether all contact line positions are in the box,
+//! which is the condition for whether a contact line was detected.
 static bool
 verify_all_contact_lines_detected(const real from0,
                                   const real from1,
@@ -493,6 +549,8 @@ verify_all_contact_lines_detected(const real from0,
     return (from0 >= 0.0) && (from1 >= 0.0) && (to0 >= 0.0) && (to1 >= 0.0);
 }
 
+//! Adjust input positions to the default zone position if they 
+//! are not accepted contact line positions.
 static void 
 set_bad_contact_line_at_default_zones(real                                &from0,
                                       real                                &from1,
@@ -518,7 +576,8 @@ set_bad_contact_line_at_default_zones(real                                &from0
     }
 }
 
-
+//! Using input phase histograms, find and return the contact lines 
+//! as coupled swap zones.
 static std::vector<CoupledSwapZones>
 get_zones_at_contact_line_from_histograms(const Histogram                     &phase1_lower, 
                                           const Histogram                     &phase1_upper,
@@ -579,6 +638,15 @@ get_zones_at_contact_line_from_histograms(const Histogram                     &p
     };
 }
 
+//! Find the contact lines and return coupled swap zones located at them.
+//!
+//! If a contact line could not be detected, the zone is set to that 
+//! set in the `init_coupled_zones` element of `flow_swap`.
+//!
+//! The contact lines are detected by accumulating histograms of atom 
+//! counts for each phase at the heights where the contact lines are 
+//! set. The contact lines are then taken as the positions where the 
+//! phases change into one another.
 static std::vector<CoupledSwapZones> 
 get_zones_at_contact_lines(const FlowSwap &flow_swap,
                            const matrix    box)
