@@ -79,22 +79,6 @@ struct Histogram {
     HistogramCounter count; 
 };
 
-static void
-set_rvec_to_1dpos(rvec r, const real position, const size_t axis)
-{
-    for (size_t i = 0; i < DIM; i++)
-    {
-        if (i == axis)
-        {
-            r[i] = position;
-        }
-        else
-        {
-            r[i] = 0.0;
-        }
-    }
-}
-
 //! Return true if the distance between r0 and r1 along an axis
 //! is less than a value.
 //!
@@ -181,32 +165,36 @@ struct ContactLineDef {
 //! corresponding to the contact line definition.
 static std::pair<HistogramCounter, HistogramCounter>
 get_histogram_atom_counts(const ContactLineDef &cl_def,
-                          const real            length,
                           const real            bin_size,
                           const size_t          num_bins,
                           const SwapGroup      &group, 
                           const t_pbc          *pbc)
 {
-    const auto inv_length = 1.0 / length;
     const auto inv_bin_size = 1.0 / bin_size;
 
     HistogramCounter count0(num_bins, 0.0),
                      count1(num_bins, 0.0);
 
-    rvec r0, r1;
-    set_rvec_to_1dpos(r0, cl_def.height0, cl_def.axis.height);
-    set_rvec_to_1dpos(r1, cl_def.height1, cl_def.axis.height);
+    rvec r0 = {0.0, 0.0, 0.0}, r1 = {0.0, 0.0, 0.0};
+    r0[cl_def.axis.height] = cl_def.height0;
+    r1[cl_def.axis.height] = cl_def.height1;
 
     for (size_t i = 0; i < group.atom_set.numAtomsGlobal(); i++)
     {
         const auto r = group.xs[i];
 
-        if (check_if_position_is_within_range_1d(r, r0, cl_def.dhmax, cl_def.axis.height, pbc))
+        const bool in_range_of_height0 = check_if_position_is_within_range_1d(
+            r, r0, cl_def.dhmax, cl_def.axis.height, pbc);
+
+        const bool in_range_of_height1 = check_if_position_is_within_range_1d(
+            r, r1, cl_def.dhmax, cl_def.axis.height, pbc);
+
+        if (in_range_of_height0)
         {
             add_atom_to_histogram_bins(count0, r, cl_def.axis.contact_line, inv_bin_size);
         }
 
-        if (check_if_position_is_within_range_1d(r, r1, cl_def.dhmax, cl_def.axis.height, pbc))
+        if (in_range_of_height1)
         {
             add_atom_to_histogram_bins(count1, r, cl_def.axis.contact_line, inv_bin_size);
         }
@@ -225,14 +213,13 @@ create_atom_histograms(const ContactLineDef &cl_def,
                        const matrix          box)
 {
     const auto length = box[cl_def.axis.contact_line][cl_def.axis.contact_line];
-    const auto height = box[cl_def.axis.height][cl_def.axis.height];
 
     const auto num_bins = static_cast<size_t>(roundf(fabs(length / target_resolution)));
     const auto bin_size = length / static_cast<real>(num_bins);
 
     HistogramCounter count0, count1;
     std::tie(count0, count1) = 
-        get_histogram_atom_counts(cl_def, length, bin_size, num_bins, group, pbc);
+        get_histogram_atom_counts(cl_def, bin_size, num_bins, group, pbc);
 
     const Histogram hist0 { bin_size, count0 },
                     hist1 { bin_size, count1 };
@@ -310,7 +297,7 @@ smooth_histogram(const Histogram &hist, const size_t num_smooth)
 //! Definition of a region inside a `Histogram`
 struct HistRegion {
     //! Return true if the region is empty.
-    const bool empty() const noexcept {
+    bool empty() const noexcept {
         return (total_counts < 0.0);
     }
 
@@ -338,7 +325,7 @@ stitch_front_and_back_regions(std::vector<HistRegion> &regions,
     auto& front = regions.front();
     const auto& back = regions.back();
 
-    if ((front.begin == 0) && (back.end == hist.count.size()))
+    if ((front.begin == 0) && (back.end == static_cast<int>(hist.count.size())))
     {
         const auto diff = static_cast<int>(hist.count.size()) - back.begin;
 
@@ -587,13 +574,17 @@ get_zones_at_contact_line_from_histograms(const Histogram                     &p
                                           const std::vector<CoupledSwapZones> &default_zones,
                                           const bool                           swap_clockwise)
 {
-    real pos_from0, pos_from1,
-         pos_to0, pos_to1;
+    // Positions of detected contact lines in system along the contact line axis
     real lower_left, lower_right,
          upper_left, upper_right;
 
     std::tie(lower_left, lower_right) = find_contact_lines_from_hist(phase1_lower, phase2_lower);
     std::tie(upper_left, upper_right) = find_contact_lines_from_hist(phase1_upper, phase2_upper);
+
+    // Positions of coupled swap zones along the contact line axis,
+    // set at the contact lines depending on the direction of swapping
+    real pos_from0, pos_from1,
+         pos_to0, pos_to1;
 
     if (swap_clockwise)
     {
@@ -622,11 +613,6 @@ get_zones_at_contact_line_from_histograms(const Histogram                     &p
         );
     }
 
-    // Order of contact lines: lower left, upper left, upper right, lower right 
-    // We are swapping across the lower-upper axis, and the right swap direction 
-    // is opposite to the left swap direction. Thus we order the from-to zones 
-    // exactly like that, with one from-zone being at height 0 and the other 
-    // at height 1, with opposite to-zones.
     const auto from0 = create_contact_line_zone_position(pos_from0, cl_def.height0, cl_def);
     const auto to0 = create_contact_line_zone_position(pos_to0, cl_def.height1, cl_def);
     const auto from1 = create_contact_line_zone_position(pos_from1, cl_def.height1, cl_def);
@@ -834,11 +820,10 @@ get_swap_positions_array(const t_flowswap *flow_swap,
 {
     real from_position = 0.0,
          to_position   = 0.0;
-    bool is_relative = false;
 
     std::vector<std::array<real, 2>> swap_positions;
 
-    for (size_t n = 0; n < flow_swap->num_positions; n++)
+    for (size_t n = 0; n < static_cast<size_t>(flow_swap->num_positions); n++)
     {
         size_t i, j;
 
@@ -874,8 +859,13 @@ get_swap_positions_array(const t_flowswap *flow_swap,
                 gmx_fatal(FARGS, "swap: unexpected 'flow-swap-method'");
                 break;
         }
+
         const auto position = get_positions_from_reals(
-            from_position, to_position, flow_swap->bRelativeSwapPositions, flow_swap->swap_axis, box
+            from_position, 
+            to_position, 
+            flow_swap->bRelativeSwapPositions, 
+            flow_swap->swap_axis, 
+            box
         );
 
         swap_positions.push_back(position);
