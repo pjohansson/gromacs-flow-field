@@ -114,6 +114,7 @@ struct FlowSwap {
              const gmx::RVec zone_size,
              const std::vector<CoupledSwapZones> coupled_zones, 
              const gmx_bool do_track_contact_line,
+             const bool      swap_clockwise,
              const SwapGroup swap, 
              const SwapGroup fill, 
              const SwapGroup phase1, 
@@ -124,6 +125,7 @@ struct FlowSwap {
              const matrix    box)
     :do_swap{true},
      do_track_contact_line{do_track_contact_line},
+     swap_clockwise{swap_clockwise},
      nstswap{nstswap},
      zone_size{zone_size},
      init_coupled_zones{coupled_zones},
@@ -160,6 +162,9 @@ struct FlowSwap {
     //! This is set by `eFlowSwapMethod::TwoPhaseContactLines` which requires
     //! exactly two `CoupledSwapZones` to be defined.
     gmx_bool do_track_contact_line = false;
+
+    //! Whether or not to swap clockwise when contact line is tracked
+    gmx_bool swap_clockwise = true;
 
     //! How often to swap
     uint64_t nstswap = 0;

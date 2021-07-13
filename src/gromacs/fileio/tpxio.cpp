@@ -1659,8 +1659,12 @@ static void do_inputrec(gmx::ISerializer* serializer, t_inputrec* ir, int file_v
         serializer->doInt(&ir->flow_swap->ref_num_atoms);
         serializer->doInt(&ir->flow_swap->swap_axis);
 
+        // For enums, first read/write as int and later (if reading)
+        // cast the number to the final enum
         int swap_method = static_cast<int>(ir->flow_swap->swap_method);
         serializer->doInt(&swap_method);
+        int swap_direction = static_cast<int>(ir->flow_swap->swap_direction);
+        serializer->doInt(&swap_direction);
 
         serializer->doBool(&ir->flow_swap->bRelativeSwapPositions);
         serializer->doInt(&ir->flow_swap->zone_position_axis);
@@ -1671,6 +1675,7 @@ static void do_inputrec(gmx::ISerializer* serializer, t_inputrec* ir, int file_v
         if (serializer->reading())
         {
             ir->flow_swap->swap_method = static_cast<eFlowSwapMethod>(swap_method);
+            ir->flow_swap->swap_direction = static_cast<eFlowSwapTwoPhaseDirection>(swap_direction);
 
             snew(ir->flow_swap->zone_positions, ir->flow_swap->num_positions);
             snew(ir->flow_swap->swap_positions, ir->flow_swap->num_swap_zone_values);

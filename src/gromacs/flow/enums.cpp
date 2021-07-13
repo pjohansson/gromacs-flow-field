@@ -7,6 +7,11 @@ const char* eFlowSwapMethodTypes_names[static_cast<size_t>(eFlowSwapMethod::NR) 
     "two-phase-contact-lines",
     nullptr
 };
+extern const char* eFlowSwapTwoPhaseDirectionTypes_names[static_cast<size_t>(eFlowSwapTwoPhaseDirection::NR) + 1] = {
+    "clockwise",
+    "counterclockwise",
+    nullptr
+};
 const char* eFlowSwapAxisTypes_names[eFlowSwapAxisTypesNR + 1] = { 
     "X", "Y", "Z", nullptr 
 };

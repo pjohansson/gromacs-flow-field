@@ -327,6 +327,9 @@ struct t_flowswap
     //! Method for defining zones along the swap axis
     eFlowSwapMethod swap_method;
 
+    //! Direction for swapping when tracking contact lines
+    eFlowSwapTwoPhaseDirection swap_direction;
+
     //! Whether swap axis zone positions are relative to box size
     bool bRelativeSwapPositions;
 

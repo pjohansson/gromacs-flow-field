@@ -14,6 +14,16 @@ enum class eFlowSwapMethod
 extern const char* eFlowSwapMethodTypes_names[static_cast<size_t>(eFlowSwapMethod::NR) + 1];
 #define EFLOWSWAPMETHODTYPE(e) enum_name(static_cast<int>(e), static_cast<int>(eFlowSwapMethod::NR), eFlowSwapMethodTypes_names)
 
+//! \brief Contact line swapping direction
+enum class eFlowSwapTwoPhaseDirection
+{
+    Clockwise,
+    CounterClockwise,
+    NR,
+};
+extern const char* eFlowSwapTwoPhaseDirectionTypes_names[static_cast<size_t>(eFlowSwapTwoPhaseDirection::NR) + 1];
+#define EFLOWSWAPTWOPHASEDIRECTIONTYPE(e) enum_name(static_cast<int>(e), static_cast<int>(eFlowSwapTwoPhaseDirection::NR), eFlowSwapTwoPhaseDirectionTypes_names)
+
 /*! \brief Direction along which to construct swap zones
  */
 enum eFlowSwapPositionAxis

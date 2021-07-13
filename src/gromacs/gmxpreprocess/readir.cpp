@@ -2517,6 +2517,12 @@ void get_ir(const char*     mdparin,
         ir->flow_swap->swap_method = static_cast<eFlowSwapMethod>(
             get_eeenum(&inp, "flow-swap-method", eFlowSwapMethodTypes_names, wi));
 
+        printStringNoNewline(&inp, "Direction of swapping for `flow-swap-method = two-phase-contact-lines`");
+        printStringNoNewline(&inp, " - clockwise: swapping is done lower-left to upper-left, and upper-right to lower-right");
+        printStringNoNewline(&inp, " - counterclockwise: opposite to `clockwise`");
+        ir->flow_swap->swap_direction = static_cast<eFlowSwapTwoPhaseDirection>(
+            get_eeenum(&inp, "flow-swap-direction", eFlowSwapTwoPhaseDirectionTypes_names, wi));
+
         printStringNoNewline(&inp, "Swap positions of atoms along direction: X, Y, Z");
         const auto swap_axis = get_eeenum(&inp, "flow-swap-axis", eFlowSwapAxisTypes_names, wi);
 

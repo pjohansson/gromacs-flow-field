@@ -355,43 +355,6 @@ find_hist_regions(const Histogram &hist)
     return regions;
 }
 
-//! Return the two regions with largest total_counts.
-//!
-//! Assumes that the given vector has at least two elements. 
-//! Will panic if fewer elements are present.
-static std::pair<HistRegion, HistRegion>
-get_two_largest_hist_regions(std::vector<HistRegion> &regions)
-{
-    // Reminder: partial_sort ensures that the first N (here 2) elements
-    // of the entire range are the "minimum" values, but does not sort 
-    // the rest. Here, the "minimum" values are the largest counts so we 
-    // supply a custom lambda function that ensures that sorting. 
-    std::partial_sort(
-        regions.begin(), 
-        regions.begin() + 2, 
-        regions.end(),
-        [](HistRegion &reg0, HistRegion &reg1) {
-            return reg0.total_counts > reg1.total_counts;
-        }
-    );
-
-    const auto& region0 = regions.at(0);
-    const auto& region1 = regions.at(1);
-
-    const auto i0 = (region0.begin + region0.end) / 2;
-    const auto i1 = (region1.begin + region1.end) / 2;
-    const bool region0_before_region1 = (i0 < i1);
-
-    if (region0_before_region1)
-    {
-        return std::pair(regions.at(0), regions.at(1));
-    }
-    else 
-    {
-        return std::pair(regions.at(1), regions.at(0));
-    }
-}
-
 //! Return the region with the largest total_counts.
 //!
 //! Assumes that the given vector has at least one element. 
@@ -415,21 +378,6 @@ get_largest_hist_region(const std::vector<HistRegion> &regions)
     }
 
     return regions.at(max_index);
-}
-
-static size_t 
-get_hist_index_pbc(const int        i,
-                   const Histogram &hist)
-{
-    const auto num_bins = static_cast<int>(hist.count.size());
-
-    int n = i % num_bins;
-    while (n < 0)
-    {
-        n += num_bins;
-    }
-
-    return static_cast<size_t>(n);
 }
 
 template<typename T>
@@ -567,13 +515,31 @@ get_zones_at_contact_line_from_histograms(const Histogram                     &p
                                           const Histogram                     &phase2_lower,
                                           const Histogram                     &phase2_upper,
                                           const ContactLineDef                &cl_def,
-                                          const std::vector<CoupledSwapZones> &default_zones)
+                                          const std::vector<CoupledSwapZones> &default_zones,
+                                          const bool                           swap_clockwise)
 {
     real pos_from0, pos_from1,
          pos_to0, pos_to1;
+    real lower_left, lower_right,
+         upper_left, upper_right;
 
-    std::tie(pos_from0, pos_to1) = find_contact_lines_from_hist(phase1_lower, phase2_lower);
-    std::tie(pos_to0, pos_from1) = find_contact_lines_from_hist(phase1_upper, phase2_upper);
+    std::tie(lower_left, lower_right) = find_contact_lines_from_hist(phase1_lower, phase2_lower);
+    std::tie(upper_left, upper_right) = find_contact_lines_from_hist(phase1_upper, phase2_upper);
+
+    if (swap_clockwise)
+    {
+        pos_from0 = lower_left;
+        pos_to0 = upper_left;
+        pos_from1 = upper_right;
+        pos_to1 = lower_right;
+    }
+    else 
+    {
+        pos_from0 = lower_right;
+        pos_to0 = upper_right;
+        pos_from1 = upper_left;
+        pos_to1 = lower_left;
+    }
 
     if (!verify_all_contact_lines_detected(pos_from0, pos_from1, pos_to0, pos_to1))
     {
@@ -641,7 +607,7 @@ get_zones_at_contact_lines(const FlowSwap &flow_swap,
     return get_zones_at_contact_line_from_histograms(
         phase1_lower, phase1_upper, 
         phase2_lower, phase2_upper, 
-        cl_def, flow_swap.init_coupled_zones
+        cl_def, flow_swap.init_coupled_zones, flow_swap.swap_clockwise
     );
 }
 
@@ -942,6 +908,19 @@ static void log_flow_swap_info(const FlowSwap      &flow_swap,
     GMX_LOG(mdlog.warning)
         .appendTextFormatted(
             "Swapping is turned on.\n"
+        );
+
+    if (flow_swap.do_track_contact_line)
+    {
+        GMX_LOG(mdlog.warning)
+            .appendTextFormatted(
+                "  Direction:                 %s\n",
+                flow_swap.swap_clockwise ? "clockwise" : "counter-clockwise"
+            );
+    }
+
+    GMX_LOG(mdlog.warning)
+        .appendTextFormatted(
             "  Frequency:                 %lu\n"
             "  Reference minimum atoms:   %lu\n"
             "  Zone size:                 [%g, %g, %g]\n"
@@ -1355,11 +1334,15 @@ FlowSwap init_flowswap(gmx::LocalAtomSetManager *atom_sets,
     const bool track_contact_lines = 
         (ir->flow_swap->swap_method == eFlowSwapMethod::TwoPhaseContactLines);
 
+    const bool swap_clockwise = 
+        (ir->flow_swap->swap_direction == eFlowSwapTwoPhaseDirection::Clockwise);
+
     const FlowSwap flow_swap {
         nstswap,
         ir->flow_swap->zone_size,
         coupled_zones,
         track_contact_lines,
+        swap_clockwise,
         swap_group,
         fill_group,
         phase1_group,
