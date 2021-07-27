@@ -11,6 +11,7 @@
 #include "gromacs/mdtypes/commrec.h"
 #include "gromacs/mdtypes/inputrec.h"
 #include "gromacs/mdtypes/mdatom.h"
+#include "gromacs/mdtypes/md_enums.h"
 #include "gromacs/math/vec.h"
 #include "gromacs/math/units.h"
 #include "gromacs/topology/topology.h"
@@ -211,13 +212,15 @@ add_flow_to_bin(std::vector<double> &data,
 
 
 static void
-collect_flow_data(FlowData               &flowcr,
-                  const t_commrec        *cr,
-                  const t_mdatoms        *mdatoms,
-                  const t_state          *state,
+collect_flow_data(FlowData           &flowcr,
+                  const t_commrec    *cr,
+                  const t_inputrec   *ir,
+                  const t_mdatoms    *mdatoms,
+                  const t_state      *state,
                   const SimulationGroups *groups)
 {
     const int num_groups = flowcr.group_data.empty() ? 1 : flowcr.group_data.size();
+    const auto dt_half = static_cast<real>(0.5 * ir->delta_t);
 
     for (size_t i = 0; i < static_cast<size_t>(mdatoms->homenr); ++i)
     {
@@ -231,8 +234,21 @@ collect_flow_data(FlowData               &flowcr,
 
         if (index_group < num_groups)
         {
-            const auto ix = flowcr.get_xbin(state->x[i][XX]);
-            const auto iz = flowcr.get_zbin(state->x[i][ZZ]);
+            auto x = state->x[i][XX];
+            auto z = state->x[i][ZZ];
+
+            /* Fix by Michele Pellegrino */
+            /* If we are using the leap-frog integrator, project the positions
+               back in time one-half step so that both positions and velocities
+               are at the same time. */
+            if (ir->eI == eiMD)
+            {
+                x -= dt_half * state->v[i][XX];
+                z -= dt_half * state->v[i][ZZ];
+            }
+
+            const auto ix = flowcr.get_xbin(x);
+            const auto iz = flowcr.get_zbin(z);
 
             const auto bin = flowcr.get_1d_index(ix, iz);
             const auto mass = mdatoms->massT[i];
@@ -536,7 +552,7 @@ flow_collect_or_output(FlowData               &flowcr,
                        const t_state          *state,
                        const SimulationGroups *groups)
 {
-    collect_flow_data(flowcr, cr, mdatoms, state, groups);
+    collect_flow_data(flowcr, cr, ir, mdatoms, state, groups);
 
     if (do_per_step(current_step, flowcr.step_output) 
         && (static_cast<int64_t>(current_step) != ir->init_step))
