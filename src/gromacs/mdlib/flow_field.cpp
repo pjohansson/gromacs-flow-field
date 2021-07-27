@@ -453,34 +453,14 @@ static void
 mpi_collect_flow_data_on_master(FlowData        &flowcr,
                                 const t_commrec *cr)
 {
-    // Reduce data from MPI processing elements
-    // Raise warning if MPI_IN_PLACE does not run on platform
     if (PAR(cr))
     {
-#if defined(MPI_IN_PLACE_EXISTS)
-        /* Master collects data from all PE's and prints */
         MPI_Reduce(MASTER(cr) ? MPI_IN_PLACE : flowcr.data.data(),
                 MASTER(cr) ? flowcr.data.data() : NULL,
                 flowcr.data.size(),
                 MPI_DOUBLE, MPI_SUM, MASTERRANK(cr),
                 cr->mpi_comm_mygroup);
-        
-        for (auto& group_data : flowcr.group_data)
-        {
-            MPI_Reduce(MASTER(cr) ? MPI_IN_PLACE : group_data.data.data(),
-                    MASTER(cr) ? group_data.data.data() : NULL,
-                    group_data.data.size(),
-                    MPI_DOUBLE, MPI_SUM, MASTERRANK(cr),
-                    cr->mpi_comm_mygroup);
 
-        }
-#else
-#warning "MPI_IN_PLACE not available on platform"
-        MPI_Reduce(MASTER(cr) ? MPI_IN_PLACE : flowcr.data.data(),
-                MASTER(cr) ? flowcr.data.data() : NULL,
-                flowcr.data.size(),
-                MPI_DOUBLE, MPI_SUM, MASTERRANK(cr),
-                cr->mpi_comm_mygroup);
         for (auto& group_data : flowcr.group_data)
         {
             MPI_Reduce(MASTER(cr) ? MPI_IN_PLACE : group_data.data.data(),
@@ -489,7 +469,6 @@ mpi_collect_flow_data_on_master(FlowData        &flowcr,
                     MPI_DOUBLE, MPI_SUM, MASTERRANK(cr),
                     cr->mpi_comm_mygroup);
         }
-#endif
     }
 }
 
