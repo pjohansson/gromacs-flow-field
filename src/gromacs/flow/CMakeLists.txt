@@ -1,7 +1,7 @@
-#
 # This file is part of the GROMACS molecular simulation package.
 #
-# Copyright (c) 2020,2021, by the GROMACS development team, led by
+# Copyright (c) 2010,2012,2013,2014,2015 by the GROMACS development team.
+# Copyright (c) 2018,2019,2020, by the GROMACS development team, led by
 # Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
 # and including many others, as listed in the AUTHORS file in the
 # top-level source directory and at http://www.gromacs.org.
@@ -31,35 +31,6 @@
 #
 # To help us fund GROMACS development, we humbly ask that you cite
 # the research papers on the package. Check out http://www.gromacs.org.
-#
-# \author Victor Holanda <victor.holanda@cscs.ch>
-# \author Joe Jordan <ejjordan@kth.se>
-# \author Prashanth Kanduri <kanduri@cscs.ch>
-# \author Sebastian Keller <keller@cscs.ch>
-#
 
-set(argon "argon-forces-integration")
-add_executable(${argon} "")
-
-target_sources(${argon}
-        PRIVATE
-        argon-forces-integration.cpp
-        )
-
-target_link_libraries(${argon} PRIVATE nblib)
-
-set(methane "methane-water-integration")
-add_executable(${methane} "")
-
-target_sources(${methane}
-        PRIVATE
-        methane-water-integration.cpp
-        )
-
-target_link_libraries(${methane} PRIVATE nblib)
-
-if(BUILD_TESTING)
-    add_test(NAME NbLibSamplesTestArgon COMMAND ${argon})
-    add_test(NAME NbLibSamplesTestMethaneWater COMMAND ${methane})
-    add_dependencies(nblib-tests ${argon} ${methane})
-endif()
+file(GLOB FLOW_SOURCES *.cpp)
+set(LIBGROMACS_SOURCES ${LIBGROMACS_SOURCES} ${FLOW_SOURCES} PARENT_SCOPE)
