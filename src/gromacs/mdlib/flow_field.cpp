@@ -523,8 +523,8 @@ get_average_flow_data(FlowData &flowcr)
 }
 static void
 output_flow_data(const FlowFieldOutput &output,
-                 const uint64_t        current_step,
-                 const uint64_t        step_output)
+                 const uint64_t         current_step,
+                 const uint64_t         step_output)
 {
     const auto file_index = static_cast<size_t>(current_step / step_output);
 
