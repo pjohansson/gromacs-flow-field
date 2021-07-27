@@ -152,7 +152,7 @@
 #include "shellfc.h"
 
 // [FLOW_FIELD]
-#include "gromacs/mdlib/flow_field.h"
+#include "gromacs/flow/flow_field.h"
 
 using gmx::SimulationSignaller;
 
