@@ -80,15 +80,15 @@ init_flow_container(const int               nfile,
     if (step_collect <= 0 || step_output <= 0)
     {
         gmx_fatal(FARGS,
-                  "Number of steps that elapse between collection (userint1 = %llu) "
-                  "and output (userint2 = %llu) of flow data must be larger than 0.",
+                  "Number of steps that elapse between collection (userint1 = %lu) "
+                  "and output (userint2 = %lu) of flow data must be larger than 0.",
                   step_collect, step_output);
     }
     else if (step_collect > step_output)
     {
         gmx_fatal(FARGS,
-                  "Number of steps elapsing between output (userint2 = %llu) "
-                  "must be larger than steps between collection (userint1 = %llu).",
+                  "Number of steps elapsing between output (userint2 = %lu) "
+                  "must be larger than steps between collection (userint1 = %lu).",
                   step_output, step_collect);
     }
     else if (step_output % step_collect != 0)
@@ -97,9 +97,9 @@ init_flow_container(const int               nfile,
             round(step_output / step_collect) * step_collect
         );
 
-        gmx_warning("Steps for outputting flow data (userint2 = %llu) not "
-                    "multiple of steps for collecting (userint1 = %llu). "
-                    "Setting number of steps that elapse between output to %llu.",
+        gmx_warning("Steps for outputting flow data (userint2 = %lu) not "
+                    "multiple of steps for collecting (userint1 = %lu). "
+                    "Setting number of steps that elapse between output to %lu.",
                     step_output, step_collect, new_step_output);
 
         step_output = new_step_output;
@@ -153,12 +153,12 @@ print_flow_collection_information(const FlowData &flowcr, const double dt)
 
     fprintf(stderr,
             "Data for flow field maps will be collected every %g ps "
-            "(%llu steps).\n\n", 
+            "(%lu steps).\n\n", 
             flowcr.step_collect * dt, flowcr.step_collect);
 
     fprintf(stderr,
             "It will be averaged and output to data maps every %g ps "
-            "(%llu steps).\n\n", 
+            "(%lu steps).\n\n", 
             flowcr.step_output * dt, flowcr.step_output);
 
     fprintf(stderr,
