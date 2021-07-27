@@ -311,7 +311,7 @@ struct FlowFieldOutput {
     {
         const auto num_bins = nx * nz;
 
-        for (const auto group_data : flowcr.group_data)
+        for (const auto& group_data : flowcr.group_data)
         {
             individual_groups.push_back(
                 GroupOutput(num_bins, group_data.fnbase)
