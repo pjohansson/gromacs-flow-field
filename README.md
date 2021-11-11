@@ -47,7 +47,10 @@ $ gmx mdrun -flow maps/flow   # Saves to `maps/flow_00001.dat`,
 
 ## File formats
 
-Documentation to come.
+Tools used to read and manipulate the created data is available in a Python 3 module.
+It is available in this repository:
+
+[https://github.com/pjohansson/gmx_flow_utils](https://github.com/pjohansson/gmx_flow_utils)
 
 ## License
 

@@ -172,7 +172,7 @@ gmx_detect_target_architecture()
 ########################################################################
 include(gmxOptionUtilities)
 
-set(CMAKE_PREFIX_PATH "" CACHE STRING "Extra locations to search for external libraries and tools (give directory without lib, bin, or include)")
+set(CMAKE_PREFIX_PATH "${CMAKE_PREFIX_PATH}" CACHE STRING "Extra locations to search for external libraries and tools (give directory without lib, bin, or include)")
 
 # Fujitsu only has SIMD in double precision, so this will be faster
 gmx_set_boolean(GMX_DOUBLE_DEFAULT GMX_TARGET_FUJITSU_SPARC64)
@@ -298,6 +298,7 @@ include(gmxManageOpenMP)
 # These need to be done early (before further tests).
 #####################################################################
 
+include(gmxTestIntelLLVM)
 include(gmxCFlags)
 gmx_c_flags()
 
