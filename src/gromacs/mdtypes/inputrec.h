@@ -47,7 +47,7 @@
 #include "gromacs/mdtypes/md_enums.h"
 #include "gromacs/utility/basedefinitions.h"
 #include "gromacs/utility/real.h"
-#include "gromacs/mdrun/md_shear_coupling_enum.h" /* [PETTER] */
+#include "gromacs/flow/md_shear_coupling_enum.h" /* [PETTER] */
 
 #define EGP_EXCL (1 << 0)
 #define EGP_TABLE (1 << 1)

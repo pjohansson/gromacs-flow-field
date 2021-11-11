@@ -1,4 +1,4 @@
-#include "gromacs/mdrun/md_shear_coupling.h"
+#include "gromacs/flow/md_shear_coupling.h"
 
 #include "gromacs/fileio/oenv.h"
 #include "gromacs/fileio/xvgr.h"

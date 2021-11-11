@@ -49,7 +49,6 @@ gmx_add_libgromacs_sources(
     simulationinputhandle.cpp
     simulatorbuilder.cpp
     tpi.cpp
-    md_shear_coupling.cpp
     )
 
 # TODO: Find a home for this header and a scheme for installation.
