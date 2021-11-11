@@ -1,4 +1,3 @@
-#
 # This file is part of the GROMACS molecular simulation package.
 #
 # Copyright (c) 2010,2012,2013,2014,2015 by the GROMACS development team.
