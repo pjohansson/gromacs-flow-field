@@ -153,8 +153,8 @@
 
 // [FLOW_FIELD]
 #include "gromacs/utility/futil.h"
-#include "gromacs/mdlib/flow_field.h"
 #include "md_shear_coupling.h"
+#include "gromacs/flow/flow_field.h"
 
 using gmx::SimulationSignaller;
 
