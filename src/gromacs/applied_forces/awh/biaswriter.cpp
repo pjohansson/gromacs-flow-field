@@ -1,7 +1,7 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2015,2016,2017,2018,2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2015,2016,2017,2018,2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -124,9 +124,7 @@ float getNormalizationValue(AwhOutputEntryType outputType, const Bias& bias, int
 } // namespace
 
 AwhEnergyBlock::AwhEnergyBlock(int numPoints, Normalization normalizationType, float normalizationValue) :
-    normalizationType(normalizationType),
-    normalizationValue(normalizationValue),
-    data_(numPoints)
+    normalizationType(normalizationType), normalizationValue(normalizationValue), data_(numPoints)
 {
 }
 
@@ -390,7 +388,7 @@ int BiasWriter::writeToEnergySubblocks(const Bias& bias, t_enxsubblock* sub)
 
     for (size_t b = 0; b < block_.size(); b++)
     {
-        sub[b].type = xdr_datatype_float;
+        sub[b].type = XdrDataType::Float;
         sub[b].nr   = block_[b].data().size();
         sub[b].fval = block_[b].data().data();
     }

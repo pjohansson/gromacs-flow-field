@@ -2,7 +2,7 @@
  * This file is part of the GROMACS molecular simulation package.
  *
  * Copyright (c) 2012,2013,2014,2015,2017 by the GROMACS development team.
- * Copyright (c) 2018,2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2018,2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -36,15 +36,18 @@
 #ifndef GMX_MDTYPES_INTERACTION_CONST_H
 #define GMX_MDTYPES_INTERACTION_CONST_H
 
+#include <cstdio>
+
 #include <memory>
 #include <vector>
 
 #include "gromacs/mdtypes/md_enums.h"
 #include "gromacs/utility/alignedallocator.h"
-#include "gromacs/utility/basedefinitions.h"
 #include "gromacs/utility/real.h"
 
 struct t_lambda;
+struct t_inputrec;
+struct gmx_mtop_t;
 
 /* Used with force switching or a constant potential shift:
  * rsw       = max(r - r_switch, 0)
@@ -124,43 +127,54 @@ struct interaction_const_t
         real sigma6WithInvalidSigma;
         // Minimum value for sigma^6, used when soft-core is applied to Coulomb interactions
         real sigma6Minimum;
+        // soft-core function
+        SoftcoreType softcoreType;
+        // (gapsys sc) linearization point scaling for vdW interactions
+        real gapsysScaleLinpointVdW;
+        // (gapsys sc) linearization point scaling for Coulomb interactions
+        real gapsysScaleLinpointCoul;
+        // (gapsys sc) lower bound/replacement for c12/c6 in vdw interactions
+        real gapsysSigma6VdW;
     };
 
     /* VdW */
-    int                    vdwtype          = evdwCUT;
-    int                    vdw_modifier     = eintmodNONE;
+    VanDerWaalsType        vdwtype          = VanDerWaalsType::Cut;
+    InteractionModifiers   vdw_modifier     = InteractionModifiers::None;
     double                 reppow           = 12;
     real                   rvdw             = 1;
     real                   rvdw_switch      = 0;
     struct shift_consts_t  dispersion_shift = { 0, 0, 0 };
     struct shift_consts_t  repulsion_shift  = { 0, 0, 0 };
     struct switch_consts_t vdw_switch       = { 0, 0, 0 };
-    gmx_bool               useBuckingham    = false;
+    bool                   useBuckingham    = false;
     real                   buckinghamBMax   = 0;
 
     /* type of electrostatics */
-    int eeltype          = eelCUT;
-    int coulomb_modifier = eintmodNONE;
+    CoulombInteractionType eeltype          = CoulombInteractionType::Cut;
+    InteractionModifiers   coulomb_modifier = InteractionModifiers::None;
 
     /* Coulomb */
     real rcoulomb        = 1;
     real rcoulomb_switch = 0;
 
     /* PME/Ewald */
-    real ewaldcoeff_q    = 0;
-    real ewaldcoeff_lj   = 0;
-    int  ljpme_comb_rule = eljpmeGEOM; /* LJ combination rule for the LJ PME mesh part */
-    real sh_ewald        = 0;          /* -sh_ewald is added to the direct space potential */
-    real sh_lj_ewald     = 0;          /* sh_lj_ewald is added to the correction potential */
+    real         ewaldcoeff_q  = 0;
+    real         ewaldcoeff_lj = 0;
+    LongRangeVdW ljpme_comb_rule = LongRangeVdW::Geom; /* LJ combination rule for the LJ PME mesh part */
+    real         sh_ewald        = 0; /* -sh_ewald is added to the direct space potential */
+    real         sh_lj_ewald = 0;     /* sh_lj_ewald is added to the correction potential */
 
     /* Dielectric constant resp. multiplication factor for charges */
     real epsilon_r = 1;
     real epsfac    = 1;
 
     /* Constants for reaction-field or plain cut-off */
-    real epsilon_rf = 1;
-    real k_rf       = 0;
-    real c_rf       = 0;
+    //! Dielectric constant for reaction field beyond the cutoff distance
+    real reactionFieldPermitivity = 1;
+    //! Coefficient for reaction field; scales relation between epsilon_r and reactionFieldPermitivity
+    real reactionFieldCoefficient = 0;
+    //! Constant shift to reaction field Coulomb interaction to make potential an integral of force
+    real reactionFieldShift = 0;
 
     // Coulomb Ewald correction table
     std::unique_ptr<EwaldCorrectionTables> coulombEwaldTables;
@@ -170,5 +184,16 @@ struct interaction_const_t
     // Free-energy parameters, only present when free-energy calculations are requested
     std::unique_ptr<SoftCoreParameters> softCoreParameters;
 };
+
+/*! \brief Construct interaction constants
+ *
+ * This data is used (particularly) by search and force code for
+ * short-range interactions. Many of these are constant for the whole
+ * simulation; some are constant only after PME tuning completes.
+ */
+interaction_const_t init_interaction_const(FILE*             fp,
+                                           const t_inputrec& ir,
+                                           const gmx_mtop_t& mtop,
+                                           bool              systemHasNetCharge);
 
 #endif

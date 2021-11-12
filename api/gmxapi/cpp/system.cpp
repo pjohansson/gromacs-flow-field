@@ -125,8 +125,7 @@ std::shared_ptr<Workflow> getWork(const System::Impl& system)
 }
 
 System::Impl::Impl(std::unique_ptr<gmxapi::Workflow> workflow) noexcept :
-    workflow_(std::move(workflow)),
-    spec_(std::make_shared<MDWorkSpec>())
+    workflow_(std::move(workflow)), spec_(std::make_shared<MDWorkSpec>())
 {
     GMX_ASSERT(workflow_, "Class invariant implies non-null workflow_ member");
     GMX_ASSERT(spec_, "Class invariant implies non-null work specification member.");

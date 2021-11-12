@@ -85,9 +85,6 @@ public:
     //! Marks particles to have Van der Waals interactions
     void setParticleInfoAllVdv(size_t numParticles);
 
-    //! Returns the kernel setup
-    Nbnxm::KernelSetup getKernelSetup(const NBKernelOptions& options);
-
     //! Set up StepWorkload data
     void setupStepWorkload(const NBKernelOptions& options);
 
@@ -121,29 +118,17 @@ private:
     std::vector<real> nonbondedParameters_;
 
     //! Particle info where all particles are marked to have Van der Waals interactions
-    std::vector<int> particleInfoAllVdw_;
+    std::vector<int64_t> particleInfoAllVdw_;
 
     //! GROMACS force calculator to compute forces
     std::unique_ptr<GmxForceCalculator> gmxForceCalculator_;
 };
 
-/*! \brief Calls the setup utilities needed to initialize a GmxForceCalculator object
- *
- * The GmxSetupDirector encapsulates the multi-stage setup of the GmxForceCalculator which
- * is done using the public functions of the NbvSetupUtil. This separation ensures that the
- * NbvSetupUtil object is temporary in scope. The function definition makes it easy for the
- * developers to follow the sequence of calls and the dataflow involved in setting up
- * the non-bonded force calculation backend. This is the only function needed to be called
- * from the ForceCalculator during construction.
- *
- */
-class GmxSetupDirector
-{
-public:
-    //! Sets up and returns a GmxForceCalculator
-    static std::unique_ptr<GmxForceCalculator> setupGmxForceCalculator(const SimulationState& system,
-                                                                       const NBKernelOptions& options);
-};
+//! Sets up and returns a GmxForceCalculator
+std::unique_ptr<GmxForceCalculator> setupGmxForceCalculator(const Topology&          topology,
+                                                            const std::vector<Vec3>& coordinates,
+                                                            const Box&               box,
+                                                            const NBKernelOptions&   options);
 
 } // namespace nblib
 #endif // NBLIB_GMXSETUP_H

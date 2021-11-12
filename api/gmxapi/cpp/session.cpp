@@ -1,7 +1,7 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2018,2020, by the GROMACS development team, led by
+ * Copyright (c) 2018,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -122,8 +122,10 @@ std::unique_ptr<SessionImpl> SessionImpl::create(std::shared_ptr<ContextImpl> co
 {
     // We should be able to get a communicator (or subcommunicator) through the
     // Context.
-    return std::make_unique<SessionImpl>(std::move(context), std::move(runnerBuilder),
-                                         std::move(simulationContext), std::move(logFilehandle));
+    return std::make_unique<SessionImpl>(std::move(context),
+                                         std::move(runnerBuilder),
+                                         std::move(simulationContext),
+                                         std::move(logFilehandle));
 }
 
 SessionImpl::SessionImpl(std::shared_ptr<ContextImpl> context,
@@ -156,8 +158,10 @@ std::shared_ptr<Session> createSession(std::shared_ptr<ContextImpl> context,
                                        gmx::SimulationContext&&     simulationContext,
                                        gmx::LogFilePtr              logFilehandle)
 {
-    auto newSession      = SessionImpl::create(std::move(context), std::move(runnerBuilder),
-                                          std::move(simulationContext), std::move(logFilehandle));
+    auto newSession      = SessionImpl::create(std::move(context),
+                                          std::move(runnerBuilder),
+                                          std::move(simulationContext),
+                                          std::move(logFilehandle));
     auto launchedSession = std::make_shared<Session>(std::move(newSession));
     return launchedSession;
 }
@@ -346,8 +350,7 @@ std::shared_ptr<Session> launchSession(Context* context, const Workflow& work) n
 SessionImpl::~SessionImpl() = default;
 
 SessionResources::SessionResources(gmxapi::SessionImpl* session, std::string name) :
-    sessionImpl_(session),
-    name_(std::move(name))
+    sessionImpl_(session), name_(std::move(name))
 {
 }
 

@@ -1,7 +1,7 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2018,2019, by the GROMACS development team, led by
+ * Copyright (c) 2018,2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -67,7 +67,7 @@ StopHandler::StopHandler(compat::not_null<SimulationSignal*>      signal,
 }
 
 StopConditionSignal::StopConditionSignal(int nstList, bool makeBinaryReproducibleSimulation, int nstSignalComm) :
-    handledStopCondition_(gmx_stop_cond_none),
+    handledStopCondition_(StopCondition::None),
     makeBinaryReproducibleSimulation_(makeBinaryReproducibleSimulation),
     nstSignalComm_(nstSignalComm),
     nstList_(nstList)
@@ -79,15 +79,15 @@ StopSignal StopConditionSignal::getSignal(FILE* fplog)
     StopSignal signal = StopSignal::noSignal;
 
     /* Check whether everything is still alright */
-    if (static_cast<int>(gmx_get_stop_condition()) > handledStopCondition_)
+    if (gmx_get_stop_condition() > handledStopCondition_)
     {
         int nsteps_stop = -1;
 
         /* this just makes signals[].sig compatible with the hack
            of sending signals around by MPI_Reduce together with
            other floats */
-        if ((gmx_get_stop_condition() == gmx_stop_cond_next_ns)
-            || (makeBinaryReproducibleSimulation_ && gmx_get_stop_condition() == gmx_stop_cond_next))
+        if ((gmx_get_stop_condition() == StopCondition::NextNS)
+            || (makeBinaryReproducibleSimulation_ && gmx_get_stop_condition() == StopCondition::Next))
         {
             /* We need at least two global communication steps to pass
              * around the signal. We stop at a pair-list creation step
@@ -96,7 +96,7 @@ StopSignal StopConditionSignal::getSignal(FILE* fplog)
             signal      = StopSignal::stopAtNextNSStep;
             nsteps_stop = std::max(nstList_, 2 * nstSignalComm_);
         }
-        else if (gmx_get_stop_condition() == gmx_stop_cond_next)
+        else if (gmx_get_stop_condition() == StopCondition::Next)
         {
             /* Stop directly after the next global communication step.
              * This breaks exact continuation.
@@ -106,14 +106,18 @@ StopSignal StopConditionSignal::getSignal(FILE* fplog)
         }
         if (fplog)
         {
-            fprintf(fplog, "\n\nReceived the %s signal, stopping within %d steps\n\n",
-                    gmx_get_signal_name(), nsteps_stop);
+            fprintf(fplog,
+                    "\n\nReceived the %s signal, stopping within %d steps\n\n",
+                    gmx_get_signal_name(),
+                    nsteps_stop);
             fflush(fplog);
         }
-        fprintf(stderr, "\n\nReceived the %s signal, stopping within %d steps\n\n",
-                gmx_get_signal_name(), nsteps_stop);
+        fprintf(stderr,
+                "\n\nReceived the %s signal, stopping within %d steps\n\n",
+                gmx_get_signal_name(),
+                nsteps_stop);
         fflush(stderr);
-        handledStopCondition_ = static_cast<int>(gmx_get_stop_condition());
+        handledStopCondition_ = gmx_get_stop_condition();
     }
 
     return signal;
@@ -147,12 +151,16 @@ StopSignal StopConditionTime::getSignal(bool bNS, int64_t step, FILE* fplog, gmx
             fprintf(fplog,
                     "\nStep %s: Run time exceeded %.3f hours, "
                     "will terminate the run within %d steps\n",
-                    gmx_step_str(step, sbuf), maximumHoursToRun_ * 0.99, nsteps_stop);
+                    gmx_step_str(step, sbuf),
+                    maximumHoursToRun_ * 0.99,
+                    nsteps_stop);
         }
         fprintf(stderr,
                 "\nStep %s: Run time exceeded %.3f hours, "
                 "will terminate the run within %d steps\n",
-                gmx_step_str(step, sbuf), maximumHoursToRun_ * 0.99, nsteps_stop);
+                gmx_step_str(step, sbuf),
+                maximumHoursToRun_ * 0.99,
+                nsteps_stop);
         signalSent_ = true;
         return StopSignal::stopAtNextNSStep;
     }
@@ -196,8 +204,8 @@ std::unique_ptr<StopHandler> StopHandlerBuilder::getStopHandlerMD(compat::not_nu
         });
     }
 
-    return std::make_unique<StopHandler>(signal, simulationShareState, stopConditions_,
-                                         neverUpdateNeighborList);
+    return std::make_unique<StopHandler>(
+            signal, simulationShareState, stopConditions_, neverUpdateNeighborList);
 }
 
 } // namespace gmx

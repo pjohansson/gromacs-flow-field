@@ -1,7 +1,7 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2015,2016,2017,2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2015,2016,2017,2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -46,8 +46,8 @@
 
 #include "correlationgrid.h"
 
-#include "gromacs/math/utilities.h"
 #include "gromacs/utility/gmxassert.h"
+#include "gromacs/utility/real.h"
 
 namespace gmx
 {
@@ -85,8 +85,7 @@ CorrelationGrid::CorrelationGrid(int                numPoints,
                                  double             blockLengthInit,
                                  BlockLengthMeasure blockLengthMeasure,
                                  double             dtSample) :
-    dtSample(dtSample),
-    blockLengthMeasure(blockLengthMeasure)
+    dtSample(dtSample), blockLengthMeasure(blockLengthMeasure)
 {
     /* Set the initial block length for the block averaging. The length doesn't really matter
        after the block length has been doubled a few times, as long as it's set small enough */

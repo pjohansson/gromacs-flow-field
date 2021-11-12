@@ -44,22 +44,32 @@
 
 const char* gmx_version()
 {
-    return _gmx_ver_string;
+    return gmx_ver_string;
 }
 
 const char* gmx_version_git_full_hash()
 {
-    return _gmx_full_git_hash;
+    return gmx_full_git_hash;
 }
 
 const char* gmx_version_git_central_base_hash()
 {
-    return _gmx_central_base_hash;
+    return gmx_central_base_hash;
 }
 
 const char* gmxDOI()
 {
     return gmxSourceDoiString;
+}
+
+const char* gmxReleaseSourceChecksum()
+{
+    return gmxReleaseSourceFileChecksum;
+}
+
+const char* gmxCurrentSourceChecksum()
+{
+    return gmxCurrentSourceFileChecksum;
 }
 
 #if GMX_DOUBLE
@@ -70,6 +80,11 @@ void gmx_is_single_precision() {}
 
 const char* getGpuImplementationString()
 {
+    // Some flavors of clang complain about unreachable returns.
+#ifdef __clang__
+#    pragma clang diagnostic push
+#    pragma clang diagnostic ignored "-Wunreachable-code-return"
+#endif
     if (GMX_GPU)
     {
         if (GMX_GPU_CUDA)
@@ -82,7 +97,18 @@ const char* getGpuImplementationString()
         }
         else if (GMX_GPU_SYCL)
         {
-            return "SYCL";
+            if (GMX_SYCL_DPCPP)
+            {
+                return "SYCL (DPCPP)";
+            }
+            else if (GMX_SYCL_HIPSYCL)
+            {
+                return "SYCL (hipSYCL)";
+            }
+            else
+            {
+                return "SYCL (unknown)";
+            }
         }
         else
         {
@@ -94,4 +120,7 @@ const char* getGpuImplementationString()
     {
         return "disabled";
     }
+#ifdef __clang__
+#    pragma clang diagnostic pop
+#endif
 }

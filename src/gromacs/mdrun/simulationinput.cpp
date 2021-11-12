@@ -1,7 +1,7 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2020, by the GROMACS development team, led by
+ * Copyright (c) 2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -52,8 +52,8 @@ void applyGlobalSimulationState(const SimulationInput&      simulationInput,
                                 t_inputrec*                 inputRecord,
                                 gmx_mtop_t*                 molecularTopology)
 {
-    *partialDeserializedTpr = read_tpx_state(simulationInput.tprFilename_.c_str(), inputRecord,
-                                             globalState, molecularTopology);
+    *partialDeserializedTpr = read_tpx_state(
+            simulationInput.tprFilename_.c_str(), inputRecord, globalState, molecularTopology);
 }
 
 void applyLocalState(const SimulationInput&         simulationInput,
@@ -64,13 +64,21 @@ void applyLocalState(const SimulationInput&         simulationInput,
                      t_state*                       state,
                      ObservablesHistory*            observablesHistory,
                      bool                           reproducibilityRequested,
-                     const MdModulesNotifier&       mdModulesNotifier,
+                     const MDModulesNotifiers&      mdModulesNotifiers,
                      gmx::ReadCheckpointDataHolder* modularSimulatorCheckpointData,
                      const bool                     useModularSimulator)
 {
-    load_checkpoint(simulationInput.cpiFilename_.c_str(), logfio, cr, dd_nc, inputRecord, state,
-                    observablesHistory, reproducibilityRequested, mdModulesNotifier,
-                    modularSimulatorCheckpointData, useModularSimulator);
+    load_checkpoint(simulationInput.cpiFilename_.c_str(),
+                    logfio,
+                    cr,
+                    dd_nc,
+                    inputRecord,
+                    state,
+                    observablesHistory,
+                    reproducibilityRequested,
+                    mdModulesNotifiers,
+                    modularSimulatorCheckpointData,
+                    useModularSimulator);
 }
 
 } // end namespace gmx

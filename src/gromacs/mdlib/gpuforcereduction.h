@@ -1,7 +1,7 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2020, by the GROMACS development team, led by
+ * Copyright (c) 2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -43,11 +43,14 @@
 #ifndef GMX_MDLIB_GPUFORCEREDUCTION_H
 #define GMX_MDLIB_GPUFORCEREDUCTION_H
 
+#include <memory>
+
+#include "config.h"
+
 #include "gromacs/gpu_utils/devicebuffer_datatype.h"
 #include "gromacs/math/vectypes.h"
 #include "gromacs/timing/wallcycle.h"
 #include "gromacs/utility/arrayref.h"
-#include "gromacs/utility/classhelpers.h"
 #include "gromacs/utility/fixedcapacityvector.h"
 
 class GpuEventSynchronizer;
@@ -56,6 +59,8 @@ class DeviceContext;
 
 namespace gmx
 {
+
+#define HAVE_GPU_FORCE_REDUCTION (GMX_GPU_CUDA || GMX_GPU_SYCL)
 
 /*! \internal
  * \brief Manages the force reduction directly in GPU memory
@@ -85,13 +90,13 @@ public:
      *
      * \param [in] forcePtr  Pointer to force to be reduced
      */
-    void registerNbnxmForce(void* forcePtr);
+    void registerNbnxmForce(DeviceBuffer<RVec> forcePtr);
 
     /*! \brief Register a rvec-format force to be reduced
      *
      * \param [in] forcePtr  Pointer to force to be reduced
      */
-    void registerRvecForce(void* forcePtr);
+    void registerRvecForce(DeviceBuffer<RVec> forcePtr);
 
     /*! \brief Add a dependency for this force reduction
      *
@@ -120,7 +125,7 @@ public:
 
 private:
     class Impl;
-    gmx::PrivateImplPointer<Impl> impl_;
+    std::unique_ptr<Impl> impl_;
 };
 
 } // namespace gmx

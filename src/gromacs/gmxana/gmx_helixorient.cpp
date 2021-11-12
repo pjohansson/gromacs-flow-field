@@ -3,7 +3,7 @@
  *
  * Copyright (c) 1991-2000, University of Groningen, The Netherlands.
  * Copyright (c) 2001-2004, The GROMACS development team.
- * Copyright (c) 2013,2014,2015,2017,2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2013,2014,2015,2017,2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -44,6 +44,7 @@
 #include "gromacs/gmxana/gmx_ana.h"
 #include "gromacs/gmxana/gstat.h"
 #include "gromacs/math/do_fit.h"
+#include "gromacs/math/units.h"
 #include "gromacs/math/utilities.h"
 #include "gromacs/math/vec.h"
 #include "gromacs/pbcutil/pbc.h"
@@ -162,8 +163,8 @@ int gmx_helixorient(int argc, char* argv[])
     };
 #define NFILE asize(fnm)
 
-    if (!parse_common_args(&argc, argv, PCA_CAN_TIME, NFILE, fnm, NPA, pa, asize(desc), desc, 0,
-                           nullptr, &oenv))
+    if (!parse_common_args(
+                &argc, argv, PCA_CAN_TIME, NFILE, fnm, NPA, pa, asize(desc), desc, 0, nullptr, &oenv))
     {
         return 0;
     }
@@ -231,17 +232,29 @@ int gmx_helixorient(int argc, char* argv[])
 
     if (bIncremental)
     {
-        fptilt = xvgropen(opt2fn("-otilt", NFILE, fnm), "Incremental local helix tilt", "Time(ps)",
-                          "Tilt (degrees)", oenv);
-        fprotation = xvgropen(opt2fn("-orot", NFILE, fnm), "Incremental local helix rotation",
-                              "Time(ps)", "Rotation (degrees)", oenv);
+        fptilt     = xvgropen(opt2fn("-otilt", NFILE, fnm),
+                          "Incremental local helix tilt",
+                          "Time(ps)",
+                          "Tilt (degrees)",
+                          oenv);
+        fprotation = xvgropen(opt2fn("-orot", NFILE, fnm),
+                              "Incremental local helix rotation",
+                              "Time(ps)",
+                              "Rotation (degrees)",
+                              oenv);
     }
     else
     {
-        fptilt = xvgropen(opt2fn("-otilt", NFILE, fnm), "Cumulative local helix tilt", "Time(ps)",
-                          "Tilt (degrees)", oenv);
-        fprotation = xvgropen(opt2fn("-orot", NFILE, fnm), "Cumulative local helix rotation",
-                              "Time(ps)", "Rotation (degrees)", oenv);
+        fptilt     = xvgropen(opt2fn("-otilt", NFILE, fnm),
+                          "Cumulative local helix tilt",
+                          "Time(ps)",
+                          "Tilt (degrees)",
+                          oenv);
+        fprotation = xvgropen(opt2fn("-orot", NFILE, fnm),
+                              "Cumulative local helix rotation",
+                              "Time(ps)",
+                              "Rotation (degrees)",
+                              oenv);
     }
 
     clear_rvecs(3, unitaxes);
@@ -357,10 +370,16 @@ int gmx_helixorient(int argc, char* argv[])
                 rvec_sub(bSC ? x_SC[i] : x_CA[i], residueorigin[i], residuevector[i]);
                 svmul(1.0 / norm(residuevector[i]), residuevector[i], residuevector[i]);
                 cprod(residuehelixaxis[i], residuevector[i], axis3[i]);
-                fprintf(fpaxis, "%15.12g %15.12g %15.12g       ", residuehelixaxis[i][0],
-                        residuehelixaxis[i][1], residuehelixaxis[i][2]);
-                fprintf(fpcenter, "%15.12g %15.12g %15.12g       ", residueorigin[i][0],
-                        residueorigin[i][1], residueorigin[i][2]);
+                fprintf(fpaxis,
+                        "%15.12g %15.12g %15.12g       ",
+                        residuehelixaxis[i][0],
+                        residuehelixaxis[i][1],
+                        residuehelixaxis[i][2]);
+                fprintf(fpcenter,
+                        "%15.12g %15.12g %15.12g       ",
+                        residueorigin[i][0],
+                        residueorigin[i][1],
+                        residueorigin[i][2]);
 
                 fprintf(fprise, "%15.12g  ", residuerise[i]);
                 fprintf(fpradius, "%15.12g  ", residueradius[i]);

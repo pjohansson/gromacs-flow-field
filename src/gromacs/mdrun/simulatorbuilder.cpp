@@ -1,7 +1,7 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2019-2020, by the GROMACS development team, led by
+ * Copyright (c) 2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -51,7 +51,7 @@
 #include "gromacs/mdtypes/state.h"
 #include "gromacs/modularsimulator/modularsimulator.h"
 #include "gromacs/topology/topology.h"
-#include "gromacs/utility/mdmodulenotification.h"
+#include "gromacs/utility/mdmodulesnotifiers.h"
 
 #include "legacysimulator.h"
 #include "membedholder.h"
@@ -128,39 +128,83 @@ std::unique_ptr<ISimulator> SimulatorBuilder::build(bool useModularSimulator)
     {
         // NOLINTNEXTLINE(modernize-make-unique): make_unique does not work with private constructor
         return std::unique_ptr<ModularSimulator>(new ModularSimulator(
-                std::make_unique<LegacySimulatorData>(
-                        simulatorEnv_->fplog_, simulatorEnv_->commRec_, simulatorEnv_->multisimCommRec_,
-                        simulatorEnv_->logger_, legacyInput_->numFile, legacyInput_->filenames,
-                        simulatorEnv_->outputEnv_, simulatorConfig_->mdrunOptions_,
-                        simulatorConfig_->startingBehavior_, constraintsParam_->vsite,
-                        constraintsParam_->constr, constraintsParam_->enforcedRotation,
-                        boxDeformation_->deform, simulatorModules_->outputProvider,
-                        simulatorModules_->mdModulesNotifier, legacyInput_->inputrec,
-                        interactiveMD_->imdSession, centerOfMassPulling_->pull_work, ionSwapping_->ionSwap,
-                        topologyData_->top_global, simulatorStateData_->globalState_p,
-                        simulatorStateData_->observablesHistory_p, topologyData_->mdAtoms,
-                        profiling_->nrnb, profiling_->wallCycle, legacyInput_->forceRec,
-                        simulatorStateData_->enerdata_p, simulatorStateData_->ekindata_p,
-                        simulatorConfig_->runScheduleWork_, *replicaExchangeParameters_,
-                        membedHolder_->membed(), profiling_->walltimeAccounting,
-                        std::move(stopHandlerBuilder_), simulatorConfig_->mdrunOptions_.rerun),
+                std::make_unique<LegacySimulatorData>(simulatorEnv_->fplog_,
+                                                      simulatorEnv_->commRec_,
+                                                      simulatorEnv_->multisimCommRec_,
+                                                      simulatorEnv_->logger_,
+                                                      legacyInput_->numFile,
+                                                      legacyInput_->filenames,
+                                                      simulatorEnv_->outputEnv_,
+                                                      simulatorConfig_->mdrunOptions_,
+                                                      simulatorConfig_->startingBehavior_,
+                                                      constraintsParam_->vsite,
+                                                      constraintsParam_->constr,
+                                                      constraintsParam_->enforcedRotation,
+                                                      boxDeformation_->deform,
+                                                      simulatorModules_->outputProvider,
+                                                      simulatorModules_->mdModulesNotifiers,
+                                                      legacyInput_->inputrec,
+                                                      interactiveMD_->imdSession,
+                                                      centerOfMassPulling_->pull_work,
+                                                      ionSwapping_->ionSwap,
+                                                      topologyData_->top_global,
+                                                      topologyData_->localTopology,
+                                                      simulatorStateData_->globalState_p,
+                                                      simulatorStateData_->localState_p,
+                                                      simulatorStateData_->observablesHistory_p,
+                                                      topologyData_->mdAtoms,
+                                                      profiling_->nrnb,
+                                                      profiling_->wallCycle,
+                                                      legacyInput_->forceRec,
+                                                      simulatorStateData_->enerdata_p,
+                                                      simulatorEnv_->observablesReducerBuilder_,
+                                                      simulatorStateData_->ekindata_p,
+                                                      simulatorConfig_->runScheduleWork_,
+                                                      *replicaExchangeParameters_,
+                                                      membedHolder_->membed(),
+                                                      profiling_->walltimeAccounting,
+                                                      std::move(stopHandlerBuilder_),
+                                                      simulatorConfig_->mdrunOptions_.rerun),
                 std::move(modularSimulatorCheckpointData_)));
     }
     // NOLINTNEXTLINE(modernize-make-unique): make_unique does not work with private constructor
-    return std::unique_ptr<LegacySimulator>(new LegacySimulator(
-            simulatorEnv_->fplog_, simulatorEnv_->commRec_, simulatorEnv_->multisimCommRec_,
-            simulatorEnv_->logger_, legacyInput_->numFile, legacyInput_->filenames,
-            simulatorEnv_->outputEnv_, simulatorConfig_->mdrunOptions_,
-            simulatorConfig_->startingBehavior_, constraintsParam_->vsite,
-            constraintsParam_->constr, constraintsParam_->enforcedRotation, boxDeformation_->deform,
-            simulatorModules_->outputProvider, simulatorModules_->mdModulesNotifier,
-            legacyInput_->inputrec, interactiveMD_->imdSession, centerOfMassPulling_->pull_work,
-            ionSwapping_->ionSwap, topologyData_->top_global, simulatorStateData_->globalState_p,
-            simulatorStateData_->observablesHistory_p, topologyData_->mdAtoms, profiling_->nrnb,
-            profiling_->wallCycle, legacyInput_->forceRec, simulatorStateData_->enerdata_p,
-            simulatorStateData_->ekindata_p, simulatorConfig_->runScheduleWork_,
-            *replicaExchangeParameters_, membedHolder_->membed(), profiling_->walltimeAccounting,
-            std::move(stopHandlerBuilder_), simulatorConfig_->mdrunOptions_.rerun));
+    return std::unique_ptr<LegacySimulator>(new LegacySimulator(simulatorEnv_->fplog_,
+                                                                simulatorEnv_->commRec_,
+                                                                simulatorEnv_->multisimCommRec_,
+                                                                simulatorEnv_->logger_,
+                                                                legacyInput_->numFile,
+                                                                legacyInput_->filenames,
+                                                                simulatorEnv_->outputEnv_,
+                                                                simulatorConfig_->mdrunOptions_,
+                                                                simulatorConfig_->startingBehavior_,
+                                                                constraintsParam_->vsite,
+                                                                constraintsParam_->constr,
+                                                                constraintsParam_->enforcedRotation,
+                                                                boxDeformation_->deform,
+                                                                simulatorModules_->outputProvider,
+                                                                simulatorModules_->mdModulesNotifiers,
+                                                                legacyInput_->inputrec,
+                                                                interactiveMD_->imdSession,
+                                                                centerOfMassPulling_->pull_work,
+                                                                ionSwapping_->ionSwap,
+                                                                topologyData_->top_global,
+                                                                topologyData_->localTopology,
+                                                                simulatorStateData_->globalState_p,
+                                                                simulatorStateData_->localState_p,
+                                                                simulatorStateData_->observablesHistory_p,
+                                                                topologyData_->mdAtoms,
+                                                                profiling_->nrnb,
+                                                                profiling_->wallCycle,
+                                                                legacyInput_->forceRec,
+                                                                simulatorStateData_->enerdata_p,
+                                                                simulatorEnv_->observablesReducerBuilder_,
+                                                                simulatorStateData_->ekindata_p,
+                                                                simulatorConfig_->runScheduleWork_,
+                                                                *replicaExchangeParameters_,
+                                                                membedHolder_->membed(),
+                                                                profiling_->walltimeAccounting,
+                                                                std::move(stopHandlerBuilder_),
+                                                                simulatorConfig_->mdrunOptions_.rerun));
 }
 
 void SimulatorBuilder::add(MembedHolder&& membedHolder)

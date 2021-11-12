@@ -4,7 +4,7 @@
  * Copyright (c) 1991-2000, University of Groningen, The Netherlands.
  * Copyright (c) 2001-2004, The GROMACS development team.
  * Copyright (c) 2013,2014,2015,2017,2018 by the GROMACS development team.
- * Copyright (c) 2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -477,8 +477,8 @@ static int process_directive(gmx_cpp_t* handlep, const std::string& dname, const
         std::string inc_fn = dval.substr(i0, len);
 
         /* Open include file and store it as a child in the handle structure */
-        int status = cpp_open_file(inc_fn.c_str(), &(handle->child), nullptr, &handle->defines,
-                                   &handle->includes);
+        int status = cpp_open_file(
+                inc_fn.c_str(), &(handle->child), nullptr, &handle->defines, &handle->includes);
         if (status != eCPP_OK)
         {
             handle->child = nullptr;
@@ -751,9 +751,12 @@ char* cpp_error(gmx_cpp_t* handlep, int status)
         status = eCPP_NR;
     }
 
-    sprintf(buf, "%s - File %s, line %d\nLast line read:\n'%s'", ecpp[status],
+    sprintf(buf,
+            "%s - File %s, line %d\nLast line read:\n'%s'",
+            ecpp[status],
             (handle && !handle->fn.empty()) ? handle->fn.c_str() : "unknown",
-            (handle) ? handle->line_nr : -1, !handle->line.empty() ? handle->line.c_str() : "");
+            (handle) ? handle->line_nr : -1,
+            !handle->line.empty() ? handle->line.c_str() : "");
 
     return gmx_strdup(buf);
 }
@@ -767,7 +770,7 @@ std::string checkAndWarnForUnusedDefines(const gmx_cpp& handle)
                 "The following macros were defined in the 'define' mdp field with the -D prefix, "
                 "but "
                 "were not used in the topology:\n";
-        for (auto& str : handle.unmatched_defines)
+        for (const auto& str : handle.unmatched_defines)
         {
             warning += ("    " + str + "\n");
         }

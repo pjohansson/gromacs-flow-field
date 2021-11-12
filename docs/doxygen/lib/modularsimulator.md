@@ -200,13 +200,14 @@ the simulator algorithm.
             builder->add<ForceElement>();
              // We have a full state here (positions(t), velocities(t-dt/2), forces(t)
             builder->add<StatePropagatorData::Element>();
-            if (legacySimulatorData_->inputrec->etc == etcVRESCALE)
+            if (legacySimulatorData_->inputrec->etc == TemperatureCoupling::VRescale)
             {
-                builder->add<VRescaleThermostat>(-1, VRescaleThermostatUseFullStepKE::No);
+                builder->add<VRescaleThermostat>(-1,
+                                                 VRescaleThermostatUseFullStepKE::No,
+                                                 PropagatorTag("LeapFrogPropagator"));
             }
-            builder->add<Propagator<IntegrationStep::LeapFrog>>(legacySimulatorData_->inputrec->delta_t,
-                                                                RegisterWithThermostat::True,
-                                                                RegisterWithBarostat::True);
+            builder->add<Propagator<IntegrationStage::LeapFrog>>(PropagatorTag("LeapFrogPropagator"),
+                                                                legacySimulatorData_->inputrec->delta_t);
             if (legacySimulatorData_->constr)
             {
                 builder->add<ConstraintsElement<ConstraintVariable::Positions>>();
@@ -214,9 +215,9 @@ the simulator algorithm.
             builder->add<ComputeGlobalsElement<ComputeGlobalsAlgorithm::LeapFrog>>();
             // We have the energies at time t here
             builder->add<EnergyData::Element>();
-            if (legacySimulatorData_->inputrec->epc == epcPARRINELLORAHMAN)
+            if (legacySimulatorData_->inputrec->epc == PressureCoupling::ParrinelloRahman)
             {
-                builder->add<ParrinelloRahmanBarostat>(-1);
+                builder->add<ParrinelloRahmanBarostat>(-1, PropagatorTag("LeapFrogPropagator"));
             }
         }
     }
@@ -545,7 +546,15 @@ Currently, the (templated) implementation covers four cases:
     time step of PositionsOnly.
 
 The propagators also allow to implement temperature and pressure coupling
-schemes by offering (templated) scaling of the velocities.
+schemes by offering (templated) scaling of the velocities. In order to
+link temperature / pressure coupling objects to the propagators, the
+propagator objects have a tag (of strong type `PropagatorTag`). The
+temperature and pressure coupling objects can then connect to the
+matching propagator by comparing their target tag to the different
+propagators. Giving the propagators their tags and informing the
+temperature and pressure coupling algorithms which propagator they are
+connecting to is in the responsibility of the simulation algorithm
+builder.
 
 #### `CompositeSimulatorElement`
 The composite simulator element takes a list of elements and implements
@@ -663,6 +672,14 @@ arguments (e.g frequency, offset, ...).
 Note that `getElementPointer<Element>` will call `Element::getElementPointerImpl`,
 which needs to be implemented by the different elements.
 
+### Data management
+Modular simulator encourages design localizing data as much as possible. It
+also offers access to generally used data structures (such as the current
+state or energies). To allow for generic data to be shared between elements,
+the simulator algorithm builder also allows to store objects with life time
+guaranteed to be either equal to the simulator algorithm builder or equal to
+the simulator algorithm object (i.e. longer than the life time of the elements).
+
 ## Infrastructure
 ### `DomDecHelper` and `PmeLoadBalanceHelper`
 These infrastructure elements are responsible for domain decomposition and 
@@ -716,7 +733,7 @@ with the XDR library. The alternative would be to write an entirely new data
 structure, changing the function signature of all checkpoint-related functions,
 and write a corresponding low-level routine interacting with the XDR library.
 
-**The MdModule approach:** To allow for modules to write checkpoints, the legacy
+**The MDModule approach:** To allow for modules to write checkpoints, the legacy
 checkpoint was extended by a KVTree. When writing to checkpoint, this tree gets
 filled (via callbacks) by the single modules, and then serialized. When reading,
 the KVTree gets deserialized, and then distributed to the modules which can read
@@ -724,7 +741,7 @@ back the data previously stored.
 
 ##### Modular simulator design
 
-The MdModule checks off almost all requirements to a modularized checkpointing format.
+The MDModule checks off almost all requirements to a modularized checkpointing format.
 The proposed design is therefore an evolved form of this approach. Notably, two
 improvements include
 * Hide the implementation details of the data structure holding the data (currently,
@@ -784,13 +801,13 @@ if clients write self-consistent read and write code, this should never be neede
 Checking for key existence seems rather to be a lazy way to circumvent versioning,
 and is therefore discouraged.
 
-**Callback method:** The modular simulator and MdModules don't use the exact same
+**Callback method:** The modular simulator and MDModules don't use the exact same
 way of communicating with clients. The two methods could be unified if needed.
 The only _fundamental_ difference is that modular simulator clients need to identify
-with a unique key to receive their dedicated sub-data, while MdModules all read from
-and write to the same KV-tree. MdModules could be adapted to that by either requiring
+with a unique key to receive their dedicated sub-data, while MDModules all read from
+and write to the same KV-tree. MDModules could be adapted to that by either requiring
 a unique key from the modules, or by using the same `CheckpointData` for all modules
-and using a single unique key (something like "MdModules") to register that object
+and using a single unique key (something like "MDModules") to register that object
 with the global checkpoint.
 
 **Performance:** One of the major differences between the new approach and the legacy

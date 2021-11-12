@@ -70,9 +70,9 @@ from .exceptions import FeatureNotAvailableError
 
 # TODO: Version management policy and procedures.
 _major = 0
-_minor = 2
-_micro = 3
-_suffix = ''
+_minor = 3
+_micro = 0
+_suffix = 'b1'
 
 # Reference https://www.python.org/dev/peps/pep-0440/
 # and https://packaging.pypa.io/en/latest/version/

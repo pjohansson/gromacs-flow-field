@@ -173,7 +173,8 @@ public:
     }
 
 private:
-    union Data {
+    union Data
+    {
         std::vector<Entry>    direct;
         gmx::HashedMap<Entry> hashed;
         // constructor and destructor function in parent class

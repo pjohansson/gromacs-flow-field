@@ -1,7 +1,7 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2015,2016,2017,2018,2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2015,2016,2017,2018,2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -67,8 +67,8 @@ namespace gmx
 HistogramSize::HistogramSize(const AwhBiasParams& awhBiasParams, double histogramSizeInitial) :
     numUpdates_(0),
     histogramSize_(histogramSizeInitial),
-    inInitialStage_(awhBiasParams.eGrowth == eawhgrowthEXP_LINEAR),
-    equilibrateHistogram_(awhBiasParams.equilibrateHistogram),
+    inInitialStage_(awhBiasParams.growthType() == AwhHistogramGrowthType::ExponentialLinear),
+    equilibrateHistogram_(awhBiasParams.equilibrateHistogram()),
     logScaledSampleWeight_(0),
     maxLogScaledSampleWeight_(0),
     havePrintedAboutCovering_(false)
@@ -150,12 +150,12 @@ namespace
  * \param[in] pointStates  The state of the bias points.
  * \returns true if the histogram is equilibrated.
  */
-bool histogramIsEquilibrated(const std::vector<PointState>& pointStates)
+bool histogramIsEquilibrated(ArrayRef<const PointState> pointStates)
 {
     /* Get the total weight of the total weight histogram; needed for normalization. */
     double totalWeight     = 0;
     int    numTargetPoints = 0;
-    for (auto& pointState : pointStates)
+    for (const auto& pointState : pointStates)
     {
         if (!pointState.inTargetRegion())
         {
@@ -177,7 +177,7 @@ bool histogramIsEquilibrated(const std::vector<PointState>& pointStates)
     /* Sum up weight of points that do or don't pass the check. */
     double equilibratedWeight    = 0;
     double notEquilibratedWeight = 0;
-    for (auto& pointState : pointStates)
+    for (const auto& pointState : pointStates)
     {
         double targetWeight  = pointState.target();
         double sampledWeight = pointState.weightSumTot() * inverseTotalWeight;
@@ -207,12 +207,12 @@ bool histogramIsEquilibrated(const std::vector<PointState>& pointStates)
 
 } // namespace
 
-double HistogramSize::newHistogramSize(const BiasParams&              params,
-                                       double                         t,
-                                       bool                           covered,
-                                       const std::vector<PointState>& pointStates,
-                                       ArrayRef<double>               weightsumCovering,
-                                       FILE*                          fplog)
+double HistogramSize::newHistogramSize(const BiasParams&          params,
+                                       double                     t,
+                                       bool                       covered,
+                                       ArrayRef<const PointState> pointStates,
+                                       ArrayRef<double>           weightsumCovering,
+                                       FILE*                      fplog)
 {
     double newHistogramSize;
     if (inInitialStage_)
@@ -232,8 +232,10 @@ double HistogramSize::newHistogramSize(const BiasParams&              params,
                 }
                 else if (!havePrintedAboutCovering_)
                 {
-                    fprintf(fplog, "%s covered but histogram not equilibrated at t = %g ps.\n",
-                            prefix.c_str(), t);
+                    fprintf(fplog,
+                            "%s covered but histogram not equilibrated at t = %g ps.\n",
+                            prefix.c_str(),
+                            t);
                     havePrintedAboutCovering_ = true; /* Just print once. */
                 }
             }

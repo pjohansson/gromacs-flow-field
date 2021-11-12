@@ -4,7 +4,7 @@
  * Copyright (c) 1991-2000, University of Groningen, The Netherlands.
  * Copyright (c) 2001-2004, The GROMACS development team.
  * Copyright (c) 2013,2014,2015,2016,2017 by the GROMACS development team.
- * Copyright (c) 2018,2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2018,2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -53,6 +53,7 @@
 #include <cstdlib>
 
 #include <algorithm>
+#include <optional>
 #include <vector>
 
 #include "gromacs/domdec/domdec.h"
@@ -68,6 +69,7 @@
 #include "gromacs/mdtypes/commrec.h"
 #include "gromacs/mdtypes/inputrec.h"
 #include "gromacs/mdtypes/md_enums.h"
+#include "gromacs/mdtypes/observablesreducer.h"
 #include "gromacs/pbcutil/pbc.h"
 #include "gromacs/pbcutil/pbc_simd.h"
 #include "gromacs/simd/simd.h"
@@ -84,8 +86,6 @@
 #include "gromacs/utility/gmxomp.h"
 #include "gromacs/utility/listoflists.h"
 #include "gromacs/utility/pleasecite.h"
-
-using namespace gmx; // TODO: Remove when this file is moved into gmx namespace
 
 namespace gmx
 {
@@ -115,10 +115,12 @@ struct Task
     std::vector<int> triangle;
     //! The bits tell if the matrix element should be used.
     std::vector<int> tri_bits;
-    //! Constraint index for updating atom data.
-    std::vector<int> ind;
-    //! Constraint index for updating atom data.
-    std::vector<int> ind_r;
+    //! Constraint indices for updating atom data.
+    std::vector<int> updateConstraintIndices1;
+    //! Constraint indices for updating atom data, second group.
+    std::vector<int> updateConstraintIndices2;
+    //! Temporay constraint indices for setting up updating of atom data.
+    std::vector<int> updateConstraintIndicesRest;
     //! Temporary variable for virial calculation.
     tensor vir_r_m_dr = { { 0 } };
     //! Temporary variable for lambda derivative.
@@ -198,6 +200,8 @@ public:
     bool bTaskDep = false;
     //! Are there triangle constraints that cross task borders?
     bool bTaskDepTri = false;
+    //! Whether any task has constraints in the second update list.
+    bool haveSecondUpdateTask = false;
     //! Arrays for temporary storage in the LINCS algorithm.
     /*! @{ */
     PaddedVector<gmx::RVec>                   tmpv;
@@ -209,8 +213,24 @@ public:
     /*! @} */
     //! The Lagrange multipliers times -1.
     std::vector<real, AlignedAllocator<real>> mlambda;
-    //! Storage for the constraint RMS relative deviation output.
-    std::array<real, 2> rmsdData = { { 0 } };
+    /*! \brief Callback used after constraining to require reduction
+     * of values later used to compute the constraint RMS relative
+     * deviation, so the latter can be output. */
+    std::optional<ObservablesReducerBuilder::CallbackToRequireReduction> callbackToRequireReduction;
+    /*! \brief View used for reducing the components of the global
+     * relative RMS constraint deviation.
+     *
+     * Can be written any time, but that is only useful when followed
+     * by a call of the callbackToRequireReduction. Useful to read
+     * only from the callback that the ObservablesReducer will later
+     * make after reduction. */
+    ArrayRef<double> rmsdReductionBuffer;
+    /*! \brief The value of the constraint RMS deviation after it has
+     * been computed.
+     *
+     * When DD is active, filled by the ObservablesReducer, otherwise
+     * filled directly here. */
+    std::optional<double> constraintRmsDeviation;
 };
 
 /*! \brief Define simd_width for memory allocation used for SIMD code */
@@ -220,16 +240,11 @@ static const int simd_width = GMX_SIMD_REAL_WIDTH;
 static const int simd_width = 1;
 #endif
 
-ArrayRef<real> lincs_rmsdData(Lincs* lincsd)
-{
-    return lincsd->rmsdData;
-}
-
 real lincs_rmsd(const Lincs* lincsd)
 {
-    if (lincsd->rmsdData[0] > 0)
+    if (lincsd->constraintRmsDeviation.has_value())
     {
-        return std::sqrt(lincsd->rmsdData[1] / lincsd->rmsdData[0]);
+        return real(lincsd->constraintRmsDeviation.value());
     }
     else
     {
@@ -349,10 +364,10 @@ static void lincs_update_atoms_noind(int                            ncons,
                                      real                           preFactor,
                                      gmx::ArrayRef<const real>      fac,
                                      gmx::ArrayRef<const gmx::RVec> r,
-                                     const real*                    invmass,
+                                     gmx::ArrayRef<const real>      invmass,
                                      rvec*                          x)
 {
-    if (invmass != nullptr)
+    if (!invmass.empty())
     {
         for (int b = 0; b < ncons; b++)
         {
@@ -398,10 +413,10 @@ static void lincs_update_atoms_ind(gmx::ArrayRef<const int>       ind,
                                    real                           preFactor,
                                    gmx::ArrayRef<const real>      fac,
                                    gmx::ArrayRef<const gmx::RVec> r,
-                                   const real*                    invmass,
+                                   gmx::ArrayRef<const real>      invmass,
                                    rvec*                          x)
 {
-    if (invmass != nullptr)
+    if (!invmass.empty())
     {
         for (int b : ind)
         {
@@ -447,7 +462,7 @@ static void lincs_update_atoms(Lincs*                         li,
                                real                           preFactor,
                                gmx::ArrayRef<const real>      fac,
                                gmx::ArrayRef<const gmx::RVec> r,
-                               const real*                    invmass,
+                               gmx::ArrayRef<const real>      invmass,
                                rvec*                          x)
 {
     if (li->ntask == 1)
@@ -461,9 +476,18 @@ static void lincs_update_atoms(Lincs*                         li,
          * constraints that only access our local atom range.
          * This can be done without a barrier.
          */
-        lincs_update_atoms_ind(li->task[th].ind, li->atoms, preFactor, fac, r, invmass, x);
+        lincs_update_atoms_ind(
+                li->task[th].updateConstraintIndices1, li->atoms, preFactor, fac, r, invmass, x);
 
-        if (!li->task[li->ntask].ind.empty())
+        if (li->haveSecondUpdateTask)
+        {
+            /* Second round of update, we need a barrier for cross-task access of x */
+#pragma omp barrier
+            lincs_update_atoms_ind(
+                    li->task[th].updateConstraintIndices2, li->atoms, preFactor, fac, r, invmass, x);
+        }
+
+        if (!li->task[li->ntask].updateConstraintIndices1.empty())
         {
             /* Update the constraints that operate on atoms
              * in multiple thread atom blocks on the master thread.
@@ -471,7 +495,8 @@ static void lincs_update_atoms(Lincs*                         li,
 #pragma omp barrier
 #pragma omp master
             {
-                lincs_update_atoms_ind(li->task[li->ntask].ind, li->atoms, preFactor, fac, r, invmass, x);
+                lincs_update_atoms_ind(
+                        li->task[li->ntask].updateConstraintIndices1, li->atoms, preFactor, fac, r, invmass, x);
             }
         }
     }
@@ -502,13 +527,13 @@ static inline void gmx_simdcall gatherLoadUTransposeTSANSafe(const real*        
 static void gmx_simdcall calc_dr_x_f_simd(int                           b0,
                                           int                           b1,
                                           gmx::ArrayRef<const AtomPair> atoms,
-                                          const rvec* gmx_restrict x,
-                                          const rvec* gmx_restrict f,
-                                          const real* gmx_restrict blc,
-                                          const real*              pbc_simd,
-                                          rvec* gmx_restrict r,
-                                          real* gmx_restrict rhs,
-                                          real* gmx_restrict sol)
+                                          const rvec* gmx_restrict      x,
+                                          const rvec* gmx_restrict      f,
+                                          const real* gmx_restrict      blc,
+                                          const real*                   pbc_simd,
+                                          rvec* gmx_restrict            r,
+                                          real* gmx_restrict            rhs,
+                                          real* gmx_restrict            sol)
 {
     assert(b0 % GMX_SIMD_REAL_WIDTH == 0);
 
@@ -574,7 +599,7 @@ static void do_lincsp(ArrayRefWithPadding<const RVec> xPadded,
                       t_pbc*                          pbc,
                       Lincs*                          lincsd,
                       int                             th,
-                      const real*                     invmass,
+                      ArrayRef<const real>            invmass,
                       ConstraintVariable              econq,
                       bool                            bCalcDHDL,
                       bool                            bCalcVir,
@@ -623,8 +648,8 @@ static void do_lincsp(ArrayRefWithPadding<const RVec> xPadded,
     /* Compute normalized x i-j vectors, store in r.
      * Compute the inner product of r and xp i-j and store in rhs1.
      */
-    calc_dr_x_f_simd(b0, b1, atoms, x, f, blc.data(), pbc_simd, as_rvec_array(r.data()),
-                     rhs1.data(), sol.data());
+    calc_dr_x_f_simd(
+            b0, b1, atoms, x, f, blc.data(), pbc_simd, as_rvec_array(r.data()), rhs1.data(), sol.data());
 
 #else // GMX_SIMD_HAVE_REAL
 
@@ -708,7 +733,12 @@ static void do_lincsp(ArrayRefWithPadding<const RVec> xPadded,
     /* When constraining forces, we should not use mass weighting,
      * so we pass invmass=NULL, which results in the use of 1 for all atoms.
      */
-    lincs_update_atoms(lincsd, th, 1.0, sol, r, (econq != ConstraintVariable::Force) ? invmass : nullptr,
+    lincs_update_atoms(lincsd,
+                       th,
+                       1.0,
+                       sol,
+                       r,
+                       (econq != ConstraintVariable::Force) ? invmass : gmx::ArrayRef<real>(),
                        as_rvec_array(fp.data()));
 
     if (bCalcDHDL)
@@ -752,14 +782,14 @@ static void do_lincsp(ArrayRefWithPadding<const RVec> xPadded,
 static void gmx_simdcall calc_dr_x_xp_simd(int                           b0,
                                            int                           b1,
                                            gmx::ArrayRef<const AtomPair> atoms,
-                                           const rvec* gmx_restrict x,
-                                           const rvec* gmx_restrict xp,
-                                           const real* gmx_restrict bllen,
-                                           const real* gmx_restrict blc,
-                                           const real*              pbc_simd,
-                                           rvec* gmx_restrict r,
-                                           real* gmx_restrict rhs,
-                                           real* gmx_restrict sol)
+                                           const rvec* gmx_restrict      x,
+                                           const rvec* gmx_restrict      xp,
+                                           const real* gmx_restrict      bllen,
+                                           const real* gmx_restrict      blc,
+                                           const real*                   pbc_simd,
+                                           rvec* gmx_restrict            r,
+                                           real* gmx_restrict            rhs,
+                                           real* gmx_restrict            sol)
 {
     assert(b0 % GMX_SIMD_REAL_WIDTH == 0);
     alignas(GMX_SIMD_ALIGNMENT) std::int32_t offset2[GMX_SIMD_REAL_WIDTH];
@@ -824,14 +854,14 @@ static void gmx_simdcall calc_dr_x_xp_simd(int                           b0,
 gmx_unused static void calc_dist_iter(int                           b0,
                                       int                           b1,
                                       gmx::ArrayRef<const AtomPair> atoms,
-                                      const rvec* gmx_restrict xp,
-                                      const real* gmx_restrict bllen,
-                                      const real* gmx_restrict blc,
-                                      const t_pbc*             pbc,
-                                      real                     wfac,
-                                      real* gmx_restrict rhs,
-                                      real* gmx_restrict sol,
-                                      bool*              bWarn)
+                                      const rvec* gmx_restrict      xp,
+                                      const real* gmx_restrict      bllen,
+                                      const real* gmx_restrict      blc,
+                                      const t_pbc*                  pbc,
+                                      real                          wfac,
+                                      real* gmx_restrict            rhs,
+                                      real* gmx_restrict            sol,
+                                      bool*                         bWarn)
 {
     for (int b = b0; b < b1; b++)
     {
@@ -871,14 +901,14 @@ gmx_unused static void calc_dist_iter(int                           b0,
 static void gmx_simdcall calc_dist_iter_simd(int                           b0,
                                              int                           b1,
                                              gmx::ArrayRef<const AtomPair> atoms,
-                                             const rvec* gmx_restrict x,
-                                             const real* gmx_restrict bllen,
-                                             const real* gmx_restrict blc,
-                                             const real*              pbc_simd,
-                                             real                     wfac,
-                                             real* gmx_restrict rhs,
-                                             real* gmx_restrict sol,
-                                             bool*              bWarn)
+                                             const rvec* gmx_restrict      x,
+                                             const real* gmx_restrict      bllen,
+                                             const real* gmx_restrict      blc,
+                                             const real*                   pbc_simd,
+                                             real                          wfac,
+                                             real* gmx_restrict            rhs,
+                                             real* gmx_restrict            sol,
+                                             bool*                         bWarn)
 {
     SimdReal min_S(GMX_REAL_MIN);
     SimdReal two_S(2.0);
@@ -953,7 +983,7 @@ static void do_lincs(ArrayRefWithPadding<const RVec> xPadded,
                      t_pbc*                          pbc,
                      Lincs*                          lincsd,
                      int                             th,
-                     const real*                     invmass,
+                     ArrayRef<const real>            invmass,
                      const t_commrec*                cr,
                      bool                            bCalcDHDL,
                      real                            wangle,
@@ -963,9 +993,9 @@ static void do_lincs(ArrayRefWithPadding<const RVec> xPadded,
                      bool                            bCalcVir,
                      tensor                          vir_r_m_dr)
 {
-    const rvec* x        = as_rvec_array(xPadded.paddedArrayRef().data());
-    rvec*       xp       = as_rvec_array(xpPadded.paddedArrayRef().data());
-    rvec* gmx_restrict v = as_rvec_array(vRef.data());
+    const rvec*        x  = as_rvec_array(xPadded.paddedArrayRef().data());
+    rvec*              xp = as_rvec_array(xpPadded.paddedArrayRef().data());
+    rvec* gmx_restrict v  = as_rvec_array(vRef.data());
 
     const int b0 = lincsd->task[th].b0;
     const int b1 = lincsd->task[th].b1;
@@ -999,8 +1029,8 @@ static void do_lincs(ArrayRefWithPadding<const RVec> xPadded,
     /* Compute normalized x i-j vectors, store in r.
      * Compute the inner product of r and xp i-j and store in rhs1.
      */
-    calc_dr_x_xp_simd(b0, b1, atoms, x, xp, bllen.data(), blc.data(), pbc_simd,
-                      as_rvec_array(r.data()), rhs1.data(), sol.data());
+    calc_dr_x_xp_simd(
+            b0, b1, atoms, x, xp, bllen.data(), blc.data(), pbc_simd, as_rvec_array(r.data()), rhs1.data(), sol.data());
 
 #else // GMX_SIMD_HAVE_REAL
 
@@ -1091,18 +1121,18 @@ static void do_lincs(ArrayRefWithPadding<const RVec> xPadded,
 
     real wfac;
 
-    wfac = std::cos(DEG2RAD * wangle);
+    wfac = std::cos(gmx::c_deg2Rad * wangle);
     wfac = wfac * wfac;
 
     for (int iter = 0; iter < lincsd->nIter; iter++)
     {
-        if ((lincsd->bCommIter && DOMAINDECOMP(cr) && cr->dd->constraints))
+        if ((lincsd->bCommIter && haveDDAtomOrdering(*cr) && cr->dd->constraints))
         {
 #pragma omp barrier
 #pragma omp master
             {
                 /* Communicate the corrected non-local coordinates */
-                if (DOMAINDECOMP(cr))
+                if (haveDDAtomOrdering(*cr))
                 {
                     dd_move_x_constraints(cr->dd, box, xpPadded.unpaddedArrayRef(), ArrayRef<RVec>(), FALSE);
                 }
@@ -1115,11 +1145,10 @@ static void do_lincs(ArrayRefWithPadding<const RVec> xPadded,
         }
 
 #if GMX_SIMD_HAVE_REAL
-        calc_dist_iter_simd(b0, b1, atoms, xp, bllen.data(), blc.data(), pbc_simd, wfac,
-                            rhs1.data(), sol.data(), bWarn);
+        calc_dist_iter_simd(
+                b0, b1, atoms, xp, bllen.data(), blc.data(), pbc_simd, wfac, rhs1.data(), sol.data(), bWarn);
 #else
-        calc_dist_iter(b0, b1, atoms, xp, bllen.data(), blc.data(), pbc, wfac, rhs1.data(),
-                       sol.data(), bWarn);
+        calc_dist_iter(b0, b1, atoms, xp, bllen.data(), blc.data(), pbc, wfac, rhs1.data(), sol.data(), bWarn);
         /* 20*ncons flops */
 #endif // GMX_SIMD_HAVE_REAL
 
@@ -1213,7 +1242,11 @@ static void do_lincs(ArrayRefWithPadding<const RVec> xPadded,
 }
 
 /*! \brief Sets the elements in the LINCS matrix for task task. */
-static void set_lincs_matrix_task(Lincs* li, Task* li_task, const real* invmass, int* ncc_triangle, int* nCrossTaskTriangles)
+static void set_lincs_matrix_task(Lincs*               li,
+                                  Task*                li_task,
+                                  ArrayRef<const real> invmass,
+                                  int*                 ncc_triangle,
+                                  int*                 nCrossTaskTriangles)
 {
     /* Construct the coupling coefficient matrix blmf */
     li_task->ntriangle   = 0;
@@ -1301,7 +1334,7 @@ static void set_lincs_matrix_task(Lincs* li, Task* li_task, const real* invmass,
 }
 
 /*! \brief Sets the elements in the LINCS matrix. */
-static void set_lincs_matrix(Lincs* li, const real* invmass, real lambda)
+static void set_lincs_matrix(Lincs* li, ArrayRef<const real> invmass, real lambda)
 {
     const real invsqrt2 = 0.7071067811865475244;
 
@@ -1332,8 +1365,7 @@ static void set_lincs_matrix(Lincs* li, const real* invmass, real lambda)
     if (debug)
     {
         fprintf(debug, "The %d constraints participate in %d triangles\n", li->nc, li->ntriangle);
-        fprintf(debug, "There are %d constraint couplings, of which %d in triangles\n", li->ncc,
-                li->ncc_triangle);
+        fprintf(debug, "There are %d constraint couplings, of which %d in triangles\n", li->ncc, li->ncc_triangle);
         if (li->ntriangle > 0 && li->ntask > 1)
         {
             fprintf(debug,
@@ -1434,7 +1466,8 @@ Lincs* init_lincs(FILE*                            fplog,
                   ArrayRef<const ListOfLists<int>> atomToConstraintsPerMolType,
                   bool                             bPLINCS,
                   int                              nIter,
-                  int                              nProjOrder)
+                  int                              nProjOrder,
+                  ObservablesReducerBuilder*       observablesReducerBuilder)
 {
     // TODO this should become a unique_ptr
     Lincs* li;
@@ -1498,12 +1531,11 @@ Lincs* init_lincs(FILE*                            fplog,
      * The current constraint to task assignment code can create independent
      * tasks only when not more than two constraints are connected sequentially.
      */
-    li->ntask    = gmx_omp_nthreads_get(emntLINCS);
+    li->ntask    = gmx_omp_nthreads_get(ModuleMultiThread::Lincs);
     li->bTaskDep = (li->ntask > 1 && bMoreThanTwoSeq);
     if (debug)
     {
-        fprintf(debug, "LINCS: using %d threads, tasks are %sdependent\n", li->ntask,
-                li->bTaskDep ? "" : "in");
+        fprintf(debug, "LINCS: using %d threads, tasks are %sdependent\n", li->ntask, li->bTaskDep ? "" : "in");
     }
     if (li->ntask == 1)
     {
@@ -1539,8 +1571,32 @@ Lincs* init_lincs(FILE*                            fplog,
                     "%d constraints are involved in constraint triangles,\n"
                     "will apply an additional matrix expansion of order %d for couplings\n"
                     "between constraints inside triangles\n",
-                    li->ncg_triangle, li->nOrder);
+                    li->ncg_triangle,
+                    li->nOrder);
         }
+    }
+
+    if (observablesReducerBuilder)
+    {
+        ObservablesReducerBuilder::CallbackFromBuilder callbackFromBuilder =
+                [li](ObservablesReducerBuilder::CallbackToRequireReduction c, gmx::ArrayRef<double> v) {
+                    li->callbackToRequireReduction = std::move(c);
+                    li->rmsdReductionBuffer        = v;
+                };
+
+        // Make the callback that runs afer reduction.
+        ObservablesReducerBuilder::CallbackAfterReduction callbackAfterReduction = [li](gmx::Step /*step*/) {
+            if (li->rmsdReductionBuffer[0] > 0)
+            {
+                li->constraintRmsDeviation =
+                        std::sqrt(li->rmsdReductionBuffer[1] / li->rmsdReductionBuffer[0]);
+            }
+        };
+
+        const int reductionValuesRequired = 2;
+        observablesReducerBuilder->addSubscriber(reductionValuesRequired,
+                                                 std::move(callbackFromBuilder),
+                                                 std::move(callbackAfterReduction));
     }
 
     return li;
@@ -1594,8 +1650,9 @@ static void lincs_thread_setup(Lincs* li, int natoms)
 
             bitmask_init_low_bits(&mask, th);
 
-            li_task->ind.clear();
-            li_task->ind_r.clear();
+            li_task->updateConstraintIndices1.clear();
+            li_task->updateConstraintIndices2.clear();
+            li_task->updateConstraintIndicesRest.clear();
             for (b = li_task->b0; b < li_task->b1; b++)
             {
                 /* We let the constraint with the lowest thread index
@@ -1605,42 +1662,104 @@ static void lincs_thread_setup(Lincs* li, int natoms)
                     && bitmask_is_disjoint(atf[li->atoms[b].index2], mask))
                 {
                     /* Add the constraint to the local atom update index */
-                    li_task->ind.push_back(b);
+                    li_task->updateConstraintIndices1.push_back(b);
                 }
                 else
                 {
-                    /* Add the constraint to the rest block */
-                    li_task->ind_r.push_back(b);
+                    /* Store the constraint to the rest block */
+                    li_task->updateConstraintIndicesRest.push_back(b);
                 }
             }
         }
         GMX_CATCH_ALL_AND_EXIT_WITH_FATAL_ERROR
     }
 
-    /* We need to copy all constraints which have not be assigned
-     * to a thread to a separate list which will be handled by one thread.
-     */
-    Task* li_m = &li->task[li->ntask];
-
-    li_m->ind.clear();
-    for (int th = 0; th < li->ntask; th++)
+    if (li->bTaskDep)
     {
-        const Task& li_task = li->task[th];
+        /* Assign the rest constraint to a second thread task or a master test task */
 
-        for (int ind_r : li_task.ind_r)
+        /* Clear the atom flags */
+        for (gmx_bitmask_t& mask : atf)
         {
-            li_m->ind.push_back(ind_r);
+            bitmask_clear(&mask);
+        }
+
+        for (int th = 0; th < li->ntask; th++)
+        {
+            const Task* li_task = &li->task[th];
+
+            /* For each atom set a flag for constraints from each */
+            for (int b : li_task->updateConstraintIndicesRest)
+            {
+                bitmask_set_bit(&atf[li->atoms[b].index1], th);
+                bitmask_set_bit(&atf[li->atoms[b].index2], th);
+            }
+        }
+
+#pragma omp parallel for num_threads(li->ntask) schedule(static)
+        for (int th = 0; th < li->ntask; th++)
+        {
+            try
+            {
+                Task& li_task = li->task[th];
+
+                gmx_bitmask_t mask;
+                bitmask_init_low_bits(&mask, th);
+
+                for (int& b : li_task.updateConstraintIndicesRest)
+                {
+                    /* We let the constraint with the highest thread index
+                     * operate on atoms with constraints from multiple threads.
+                     */
+                    if (bitmask_is_disjoint(atf[li->atoms[b].index1], mask)
+                        && bitmask_is_disjoint(atf[li->atoms[b].index2], mask))
+                    {
+                        li_task.updateConstraintIndices2.push_back(b);
+                        // mark the entry in updateConstraintIndicesRest as invalid, so we do not assign it again
+                        b = -1;
+                    }
+                }
+            }
+            GMX_CATCH_ALL_AND_EXIT_WITH_FATAL_ERROR
+        }
+
+        /* We need to copy all constraints which have not been assigned
+         * to a thread to a separate list which will be handled by one thread.
+         */
+        Task* li_m = &li->task[li->ntask];
+
+        li->haveSecondUpdateTask = false;
+        li_m->updateConstraintIndices1.clear();
+        for (int th = 0; th < li->ntask; th++)
+        {
+            const Task& li_task = li->task[th];
+
+            for (int constraint : li_task.updateConstraintIndicesRest)
+            {
+                if (constraint >= 0)
+                {
+                    li_m->updateConstraintIndices1.push_back(constraint);
+                }
+                else
+                {
+                    li->haveSecondUpdateTask = true;
+                }
+            }
+
+            if (debug)
+            {
+                fprintf(debug,
+                        "LINCS thread %d: %zu constraints, %zu constraints\n",
+                        th,
+                        li_task.updateConstraintIndices1.size(),
+                        li_task.updateConstraintIndices2.size());
+            }
         }
 
         if (debug)
         {
-            fprintf(debug, "LINCS thread %d: %zu constraints\n", th, li_task.ind.size());
+            fprintf(debug, "LINCS thread r: %zu constraints\n", li_m->updateConstraintIndices1.size());
         }
-    }
-
-    if (debug)
-    {
-        fprintf(debug, "LINCS thread r: %zu constraints\n", li_m->ind.size());
     }
 }
 
@@ -1851,7 +1970,7 @@ static void set_matrix_indices(Lincs* li, const Task& li_task, const ListOfLists
 
 void set_lincs(const InteractionDefinitions& idef,
                const int                     numAtoms,
-               const real*                   invmass,
+               ArrayRef<const real>          invmass,
                const real                    lambda,
                bool                          bDynamics,
                const t_commrec*              cr,
@@ -1867,11 +1986,11 @@ void set_lincs(const InteractionDefinitions& idef,
     {
         li->task[i].b0 = 0;
         li->task[i].b1 = 0;
-        li->task[i].ind.clear();
+        li->task[i].updateConstraintIndices1.clear();
     }
     if (li->ntask > 1)
     {
-        li->task[li->ntask].ind.clear();
+        li->task[li->ntask].updateConstraintIndices1.clear();
     }
 
     /* This is the local topology, so there are only F_CONSTR constraints */
@@ -1889,13 +2008,13 @@ void set_lincs(const InteractionDefinitions& idef,
     }
 
     int natoms;
-    if (DOMAINDECOMP(cr))
+    if (haveDDAtomOrdering(*cr))
     {
         if (cr->dd->constraints)
         {
             int start;
 
-            dd_get_constraint_range(cr->dd, &start, &natoms);
+            dd_get_constraint_range(*cr->dd, &start, &natoms);
         }
         else
         {
@@ -1923,7 +2042,7 @@ void set_lincs(const InteractionDefinitions& idef,
     li->blnr.resize(numEntries + 1);
     li->bllen.resize(numEntries);
     li->tmpv.resizeWithPadding(numEntries);
-    if (DOMAINDECOMP(cr))
+    if (haveDDAtomOrdering(*cr))
     {
         li->nlocat.resize(numEntries);
     }
@@ -2073,7 +2192,7 @@ void set_lincs(const InteractionDefinitions& idef,
     /* Without DD we order the blbnb matrix to optimize memory access.
      * With DD the overhead of sorting is more than the gain during access.
      */
-    bSortMatrix = !DOMAINDECOMP(cr);
+    bSortMatrix = !haveDDAtomOrdering(*cr);
 
     li->blbnb.resize(li->ncc);
 
@@ -2122,8 +2241,7 @@ void set_lincs(const InteractionDefinitions& idef,
 
     if (debug)
     {
-        fprintf(debug, "Number of constraints is %d, padded %d, couplings %d\n", li->nc_real,
-                li->nc, li->ncc);
+        fprintf(debug, "Number of constraints is %d, padded %d, couplings %d\n", li->nc_real, li->nc, li->ncc);
     }
 
     if (li->ntask > 1)
@@ -2132,9 +2250,6 @@ void set_lincs(const InteractionDefinitions& idef,
     }
 
     set_lincs_matrix(li, invmass, lambda);
-
-    li->rmsdData[0] = 0.0;
-    li->rmsdData[1] = 0.0;
 }
 
 //! Issues a warning when LINCS constraints cannot be satisfied.
@@ -2149,7 +2264,7 @@ static void lincs_warning(gmx_domdec_t*                 dd,
                           int                           maxwarn,
                           int*                          warncount)
 {
-    real wfac = std::cos(DEG2RAD * wangle);
+    real wfac = std::cos(gmx::c_deg2Rad * wangle);
 
     fprintf(stderr,
             "bonds that rotated more than %g degrees:\n"
@@ -2177,8 +2292,14 @@ static void lincs_warning(gmx_domdec_t*                 dd,
         real cosine = ::iprod(v0, v1) / (d0 * d1);
         if (cosine < wfac)
         {
-            fprintf(stderr, " %6d %6d  %5.1f  %8.4f %8.4f    %8.4f\n", ddglatnr(dd, i),
-                    ddglatnr(dd, j), RAD2DEG * std::acos(cosine), d0, d1, bllen[b]);
+            fprintf(stderr,
+                    " %6d %6d  %5.1f  %8.4f %8.4f    %8.4f\n",
+                    ddglatnr(dd, i),
+                    ddglatnr(dd, j),
+                    gmx::c_rad2Deg * std::acos(cosine),
+                    d0,
+                    d1,
+                    bllen[b]);
             if (!std::isfinite(d1))
             {
                 gmx_fatal(FARGS, "Bond length not finite.");
@@ -2189,7 +2310,7 @@ static void lincs_warning(gmx_domdec_t*                 dd,
     }
     if (*warncount > maxwarn)
     {
-        too_many_constraint_warnings(econtLINCS, *warncount);
+        too_many_constraint_warnings(ConstraintAlgorithm::Lincs, *warncount);
     }
 }
 
@@ -2260,7 +2381,7 @@ bool constrain_lincs(bool                            computeRmsd,
                      const t_inputrec&               ir,
                      int64_t                         step,
                      Lincs*                          lincsd,
-                     const real*                     invmass,
+                     ArrayRef<const real>            invmass,
                      const t_commrec*                cr,
                      const gmx_multisim_t*           ms,
                      ArrayRefWithPadding<const RVec> xPadded,
@@ -2286,15 +2407,10 @@ bool constrain_lincs(bool                            computeRmsd,
      * We can also easily check if any constraint length is changed,
      * if not dH/dlambda=0 and we can also set the boolean to FALSE.
      */
-    bool bCalcDHDL = (ir.efep != efepNO && dvdlambda != nullptr);
+    bool bCalcDHDL = (ir.efep != FreeEnergyPerturbationType::No && dvdlambda != nullptr);
 
     if (lincsd->nc == 0 && cr->dd == nullptr)
     {
-        if (computeRmsd)
-        {
-            lincsd->rmsdData = { { 0 } };
-        }
-
         return bOK;
     }
 
@@ -2306,7 +2422,7 @@ bool constrain_lincs(bool                            computeRmsd,
         /* We can't use bCalcDHDL here, since NULL can be passed for dvdlambda
          * also with efep!=fepNO.
          */
-        if (ir.efep != efepNO)
+        if (ir.efep != FreeEnergyPerturbationType::No)
         {
             if (hasMassPerturbed && lincsd->matlam != lambda)
             {
@@ -2352,7 +2468,8 @@ bool constrain_lincs(bool                            computeRmsd,
         {
             LincsDeviations deviations = makeLincsDeviations(*lincsd, xprime, pbc);
             fprintf(debug, "   Rel. Constraint Deviation:  RMS         MAX     between atoms\n");
-            fprintf(debug, "       Before LINCS          %.6f    %.6f %6d %6d\n",
+            fprintf(debug,
+                    "       Before LINCS          %.6f    %.6f %6d %6d\n",
                     std::sqrt(deviations.sumSquaredDeviation / deviations.numConstraints),
                     deviations.maxDeviation,
                     ddglatnr(cr->dd, lincsd->atoms[deviations.indexOfMaxDeviation].index1),
@@ -2374,8 +2491,20 @@ bool constrain_lincs(bool                            computeRmsd,
 
                 clear_mat(lincsd->task[th].vir_r_m_dr);
 
-                do_lincs(xPadded, xprimePadded, box, pbc, lincsd, th, invmass, cr, bCalcDHDL,
-                         ir.LincsWarnAngle, &bWarn, invdt, v, bCalcVir,
+                do_lincs(xPadded,
+                         xprimePadded,
+                         box,
+                         pbc,
+                         lincsd,
+                         th,
+                         invmass,
+                         cr,
+                         bCalcDHDL,
+                         ir.LincsWarnAngle,
+                         &bWarn,
+                         invdt,
+                         v,
+                         bCalcVir,
                          th == 0 ? vir_r_m_dr : lincsd->task[th].vir_r_m_dr);
             }
             GMX_CATCH_ALL_AND_EXIT_WITH_FATAL_ERROR
@@ -2387,19 +2516,32 @@ bool constrain_lincs(bool                            computeRmsd,
 
             if (computeRmsd)
             {
-                // This is reduced across domains in compute_globals and
-                // reported to the log file.
-                lincsd->rmsdData[0] = deviations.numConstraints;
-                lincsd->rmsdData[1] = deviations.sumSquaredDeviation;
-            }
-            else
-            {
-                // This is never read
-                lincsd->rmsdData = { { 0 } };
+                if (lincsd->callbackToRequireReduction.has_value())
+                {
+                    // This is reduced across domains in compute_globals and
+                    // reported to the log file.
+                    lincsd->rmsdReductionBuffer[0] = deviations.numConstraints;
+                    lincsd->rmsdReductionBuffer[1] = deviations.sumSquaredDeviation;
+
+                    // Call the ObservablesReducer via the callback it
+                    // gave us for the purpose.
+                    ObservablesReducerStatus status =
+                            lincsd->callbackToRequireReduction.value()(ReductionRequirement::Soon);
+                    GMX_RELEASE_ASSERT(status == ObservablesReducerStatus::ReadyToReduce,
+                                       "The LINCS RMSD is computed after observables have been "
+                                       "reduced, please reorder them.");
+                }
+                else
+                {
+                    // Compute the deviation directly
+                    lincsd->constraintRmsDeviation =
+                            std::sqrt(deviations.sumSquaredDeviation / deviations.numConstraints);
+                }
             }
             if (printDebugOutput)
             {
-                fprintf(debug, "        After LINCS          %.6f    %.6f %6d %6d\n\n",
+                fprintf(debug,
+                        "        After LINCS          %.6f    %.6f %6d %6d\n\n",
                         std::sqrt(deviations.sumSquaredDeviation / deviations.numConstraints),
                         deviations.maxDeviation,
                         ddglatnr(cr->dd, lincsd->atoms[deviations.indexOfMaxDeviation].index1),
@@ -2420,14 +2562,16 @@ bool constrain_lincs(bool                            computeRmsd,
                             ", time %g (ps)  LINCS WARNING%s\n"
                             "relative constraint deviation after LINCS:\n"
                             "rms %.6f, max %.6f (between atoms %d and %d)\n",
-                            step, ir.init_t + step * ir.delta_t, simMesg.c_str(),
+                            step,
+                            ir.init_t + step * ir.delta_t,
+                            simMesg.c_str(),
                             std::sqrt(deviations.sumSquaredDeviation / deviations.numConstraints),
                             deviations.maxDeviation,
                             ddglatnr(cr->dd, lincsd->atoms[deviations.indexOfMaxDeviation].index1),
                             ddglatnr(cr->dd, lincsd->atoms[deviations.indexOfMaxDeviation].index2));
 
-                    lincs_warning(cr->dd, x, xprime, pbc, lincsd->nc, lincsd->atoms, lincsd->bllen,
-                                  ir.LincsWarnAngle, maxwarn, warncount);
+                    lincs_warning(
+                            cr->dd, x, xprime, pbc, lincsd->nc, lincsd->atoms, lincsd->bllen, ir.LincsWarnAngle, maxwarn, warncount);
                 }
                 bOK = (deviations.maxDeviation < 0.5);
             }
@@ -2453,8 +2597,17 @@ bool constrain_lincs(bool                            computeRmsd,
             {
                 int th = gmx_omp_get_thread_num();
 
-                do_lincsp(xPadded, xprimePadded, min_proj, pbc, lincsd, th, invmass, econq,
-                          bCalcDHDL, bCalcVir, th == 0 ? vir_r_m_dr : lincsd->task[th].vir_r_m_dr);
+                do_lincsp(xPadded,
+                          xprimePadded,
+                          min_proj,
+                          pbc,
+                          lincsd,
+                          th,
+                          invmass,
+                          econq,
+                          bCalcDHDL,
+                          bCalcVir,
+                          th == 0 ? vir_r_m_dr : lincsd->task[th].vir_r_m_dr);
             }
             GMX_CATCH_ALL_AND_EXIT_WITH_FATAL_ERROR
         }

@@ -4,7 +4,7 @@
  * Copyright (c) 1991-2000, University of Groningen, The Netherlands.
  * Copyright (c) 2001-2004, The GROMACS development team.
  * Copyright (c) 2013,2014,2015,2016,2017 The GROMACS development team.
- * Copyright (c) 2018,2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2018,2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -38,11 +38,13 @@
 #ifndef GMX_MDLIB_MD_SUPPORT_H
 #define GMX_MDLIB_MD_SUPPORT_H
 
+#include <cstdint>
+
 #include "gromacs/mdlib/vcm.h"
 #include "gromacs/mdtypes/md_enums.h"
 #include "gromacs/timing/wallcycle.h"
 
-struct gmx_ekindata_t;
+class gmx_ekindata_t;
 struct gmx_enerdata_t;
 struct gmx_global_stat;
 struct gmx_signalling_t;
@@ -58,8 +60,8 @@ namespace gmx
 {
 template<typename T>
 class ArrayRef;
-class Constraints;
 class MDLogger;
+class ObservablesReducer;
 class SimulationSignaller;
 } // namespace gmx
 
@@ -85,16 +87,17 @@ class SimulationSignaller;
 #define CGLO_READEKIN (1u << 10u)
 /* we need to reset the ekin rescaling factor here */
 #define CGLO_SCALEEKIN (1u << 11u)
-/* After a new DD partitioning, we need to set a flag to schedule
- * global reduction of the total number of bonded interactions that
- * will be computed, to check none are missing. */
-#define CGLO_CHECK_NUMBER_OF_BONDED_INTERACTIONS (1u << 12u)
-
 
 /*! \brief Return the number of steps that will take place between
  * intra-simulation communications, given the constraints of the
  * inputrec. */
-int computeGlobalCommunicationPeriod(const gmx::MDLogger& mdlog, t_inputrec* ir, const t_commrec* cr);
+int computeGlobalCommunicationPeriod(const t_inputrec* ir);
+
+/*! \brief Return the number of steps that will take place between
+ * intra-simulation communications, given the constraints of the
+ * inputrec, and write information to log.
+ * Calls computeGlobalCommunicationPeriod(ir) internally. */
+int computeGlobalCommunicationPeriod(const gmx::MDLogger& mdlog, const t_inputrec* ir, const t_commrec* cr);
 
 void rerun_parallel_comm(t_commrec* cr, t_trxframe* fr, gmx_bool* bLastStep);
 
@@ -118,17 +121,17 @@ void compute_globals(gmx_global_stat*               gstat,
                      const t_mdatoms*               mdatoms,
                      t_nrnb*                        nrnb,
                      t_vcm*                         vcm,
-                     gmx_wallcycle_t                wcycle,
+                     gmx_wallcycle*                 wcycle,
                      gmx_enerdata_t*                enerd,
                      tensor                         force_vir,
                      tensor                         shake_vir,
                      tensor                         total_vir,
                      tensor                         pres,
-                     gmx::Constraints*              constr,
                      gmx::SimulationSignaller*      signalCoordinator,
                      const matrix                   lastbox,
-                     int*                           totalNumberOfBondedInteractions,
                      gmx_bool*                      bSumEkinhOld,
-                     int                            flags);
+                     int                            flags,
+                     int64_t                        step,
+                     gmx::ObservablesReducer*       observablesReducer);
 
 #endif

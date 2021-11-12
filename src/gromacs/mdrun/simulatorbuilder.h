@@ -1,7 +1,7 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2019-2020, by the GROMACS development team, led by
+ * Copyright (c) 2019-2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -45,9 +45,10 @@
 
 
 class energyhistory_t;
-struct gmx_ekindata_t;
+class gmx_ekindata_t;
 struct gmx_enerdata_t;
 struct gmx_enfrot;
+struct gmx_localtop_t;
 struct gmx_mtop_t;
 struct gmx_multisim_t;
 struct gmx_output_env_t;
@@ -75,8 +76,9 @@ class MdrunScheduleWorkload;
 class MembedHolder;
 class MDAtoms;
 class MDLogger;
-struct MdModulesNotifier;
+struct MDModulesNotifiers;
 struct MdrunOptions;
+class ObservablesReducerBuilder;
 class ReadCheckpointDataHolder;
 enum class StartingBehavior;
 class StopHandlerBuilder;
@@ -92,9 +94,7 @@ public:
     SimulatorConfig(const MdrunOptions&    mdrunOptions,
                     StartingBehavior       startingBehavior,
                     MdrunScheduleWorkload* runScheduleWork) :
-        mdrunOptions_(mdrunOptions),
-        startingBehavior_(startingBehavior),
-        runScheduleWork_(runScheduleWork)
+        mdrunOptions_(mdrunOptions), startingBehavior_(startingBehavior), runScheduleWork_(runScheduleWork)
     {
     }
     // TODO: Specify copy and move semantics.
@@ -118,10 +118,12 @@ struct SimulatorStateData
 {
     //! Build collection of current state data.
     SimulatorStateData(t_state*            globalState,
+                       t_state*            localState,
                        ObservablesHistory* observablesHistory,
                        gmx_enerdata_t*     enerdata,
                        gmx_ekindata_t*     ekindata) :
         globalState_p(globalState),
+        localState_p(localState),
         observablesHistory_p(observablesHistory),
         enerdata_p(enerdata),
         ekindata_p(ekindata)
@@ -133,6 +135,8 @@ struct SimulatorStateData
 
     //! Handle to global state of the simulation.
     t_state* globalState_p;
+    //! Handle to local state of the simulation.
+    t_state* localState_p;
     //! Handle to current simulation history.
     ObservablesHistory* observablesHistory_p;
     //! Handle to collected data for energy groups.
@@ -150,16 +154,13 @@ class SimulatorEnv
 {
 public:
     //! Build from current simulation environment.
-    SimulatorEnv(FILE*             fplog,
-                 t_commrec*        commRec,
-                 gmx_multisim_t*   multisimCommRec,
-                 const MDLogger&   logger,
-                 gmx_output_env_t* outputEnv) :
-        fplog_{ fplog },
-        commRec_{ commRec },
-        multisimCommRec_{ multisimCommRec },
-        logger_{ logger },
-        outputEnv_{ outputEnv }
+    SimulatorEnv(FILE*                      fplog,
+                 t_commrec*                 commRec,
+                 gmx_multisim_t*            multisimCommRec,
+                 const MDLogger&            logger,
+                 gmx_output_env_t*          outputEnv,
+                 ObservablesReducerBuilder* observablesReducerBuilder) :
+        fplog_{ fplog }, commRec_{ commRec }, multisimCommRec_{ multisimCommRec }, logger_{ logger }, outputEnv_{ outputEnv }, observablesReducerBuilder_{ observablesReducerBuilder }
     {
     }
 
@@ -173,6 +174,8 @@ public:
     const MDLogger& logger_;
     //! Handle to file output handling.
     const gmx_output_env_t* outputEnv_;
+    //! Builder for coordinator of reduction for observables
+    ObservablesReducerBuilder* observablesReducerBuilder_;
 };
 
 /*! \brief
@@ -183,9 +186,7 @@ class Profiling
 public:
     //! Build profiling information collection.
     Profiling(t_nrnb* nrnb, gmx_walltime_accounting* walltimeAccounting, gmx_wallcycle* wallCycle) :
-        nrnb(nrnb),
-        wallCycle(wallCycle),
-        walltimeAccounting(walltimeAccounting)
+        nrnb(nrnb), wallCycle(wallCycle), walltimeAccounting(walltimeAccounting)
     {
     }
 
@@ -205,9 +206,7 @@ class ConstraintsParam
 public:
     //! Build collection with handle to actual objects.
     ConstraintsParam(Constraints* constraints, gmx_enfrot* enforcedRotation, VirtualSitesHandler* vSite) :
-        constr(constraints),
-        enforcedRotation(enforcedRotation),
-        vsite(vSite)
+        constr(constraints), enforcedRotation(enforcedRotation), vsite(vSite)
     {
     }
 
@@ -227,10 +226,7 @@ class LegacyInput
 public:
     //! Build collection from legacy input data.
     LegacyInput(int filenamesSize, const t_filenm* filenamesData, t_inputrec* inputRec, t_forcerec* forceRec) :
-        numFile(filenamesSize),
-        filenames(filenamesData),
-        inputrec(inputRec),
-        forceRec(forceRec)
+        numFile(filenamesSize), filenames(filenamesData), inputrec(inputRec), forceRec(forceRec)
     {
     }
 
@@ -263,14 +259,13 @@ public:
 class SimulatorModules
 {
 public:
-    SimulatorModules(IMDOutputProvider* mdOutputProvider, const MdModulesNotifier& notifier) :
-        outputProvider(mdOutputProvider),
-        mdModulesNotifier(notifier)
+    SimulatorModules(IMDOutputProvider* mdOutputProvider, const MDModulesNotifiers& notifiers) :
+        outputProvider(mdOutputProvider), mdModulesNotifiers(notifiers)
     {
     }
 
-    IMDOutputProvider*       outputProvider;
-    const MdModulesNotifier& mdModulesNotifier;
+    IMDOutputProvider*        outputProvider;
+    const MDModulesNotifiers& mdModulesNotifiers;
 };
 
 class CenterOfMassPulling
@@ -305,14 +300,15 @@ class TopologyData
 {
 public:
     //! Build collection from simulation data.
-    TopologyData(gmx_mtop_t* globalTopology, MDAtoms* mdAtoms) :
-        top_global(globalTopology),
-        mdAtoms(mdAtoms)
+    TopologyData(const gmx_mtop_t& globalTopology, gmx_localtop_t* localTopology, MDAtoms* mdAtoms) :
+        top_global(globalTopology), localTopology(localTopology), mdAtoms(mdAtoms)
     {
     }
 
     //! Handle to global simulation topology.
-    gmx_mtop_t* top_global;
+    const gmx_mtop_t& top_global;
+    //! Handle to local simulation topology.
+    gmx_localtop_t* localTopology;
     //! Handle to information about MDAtoms.
     MDAtoms* mdAtoms;
 };

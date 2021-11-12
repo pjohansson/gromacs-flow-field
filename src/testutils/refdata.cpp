@@ -2,7 +2,7 @@
  * This file is part of the GROMACS molecular simulation package.
  *
  * Copyright (c) 2011-2018, The GROMACS development team.
- * Copyright (c) 2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -38,17 +38,19 @@
  * Implements classes and functions from refdata.h.
  *
  * \author Teemu Murtola <teemu.murtola@gmail.com>
+ * \author Mark Abraham <mark.j.abraham@gmail.com>
  * \ingroup module_testutils
  */
 #include "gmxpre.h"
 
-#include "refdata.h"
+#include "testutils/refdata.h"
 
 #include <cctype>
 #include <cstdlib>
 
 #include <algorithm>
 #include <limits>
+#include <optional>
 #include <string>
 
 #include <gtest/gtest.h>
@@ -64,12 +66,13 @@
 #include "gromacs/utility/real.h"
 #include "gromacs/utility/stringutil.h"
 
-#include "testutils/refdata_checkers.h"
-#include "testutils/refdata_impl.h"
-#include "testutils/refdata_xml.h"
 #include "testutils/testasserts.h"
 #include "testutils/testexceptions.h"
 #include "testutils/testfilemanager.h"
+
+#include "refdata_checkers.h"
+#include "refdata_impl.h"
+#include "refdata_xml.h"
 
 namespace gmx
 {
@@ -92,10 +95,10 @@ class TestReferenceDataImpl
 {
 public:
     //! Initializes a checker in the given mode.
-    TestReferenceDataImpl(ReferenceDataMode mode, bool bSelfTestMode);
+    TestReferenceDataImpl(ReferenceDataMode mode, bool bSelfTestMode, std::optional<std::string> testNameOverride);
 
     //! Performs final reference data processing when test ends.
-    void onTestEnd(bool testPassed);
+    void onTestEnd(bool testPassed) const;
 
     //! Full path of the reference data file.
     std::string fullFilename_;
@@ -164,10 +167,11 @@ ReferenceDataMode getReferenceDataMode()
 }
 
 //! Returns a reference to the global reference data object.
-TestReferenceDataImplPointer initReferenceDataInstance()
+TestReferenceDataImplPointer initReferenceDataInstance(std::optional<std::string> testNameOverride)
 {
     GMX_RELEASE_ASSERT(!g_referenceData, "Test cannot create multiple TestReferenceData instances");
-    g_referenceData.reset(new internal::TestReferenceDataImpl(getReferenceDataMode(), false));
+    g_referenceData.reset(new internal::TestReferenceDataImpl(
+            getReferenceDataMode(), false, std::move(testNameOverride)));
     return g_referenceData;
 }
 
@@ -181,7 +185,7 @@ TestReferenceDataImplPointer initReferenceDataInstanceForSelfTest(ReferenceDataM
         g_referenceData->onTestEnd(true);
         g_referenceData.reset();
     }
-    g_referenceData.reset(new internal::TestReferenceDataImpl(mode, true));
+    g_referenceData.reset(new internal::TestReferenceDataImpl(mode, true, std::nullopt));
     return g_referenceData;
 }
 
@@ -286,14 +290,16 @@ void initReferenceData(IOptionsContainer* options)
 namespace internal
 {
 
-TestReferenceDataImpl::TestReferenceDataImpl(ReferenceDataMode mode, bool bSelfTestMode) :
-    updateMismatchingEntries_(false),
-    bSelfTestMode_(bSelfTestMode),
-    bInUse_(false)
+TestReferenceDataImpl::TestReferenceDataImpl(ReferenceDataMode          mode,
+                                             bool                       bSelfTestMode,
+                                             std::optional<std::string> testNameOverride) :
+    updateMismatchingEntries_(false), bSelfTestMode_(bSelfTestMode), bInUse_(false)
 {
-    const std::string dirname = bSelfTestMode ? TestFileManager::getGlobalOutputTempDirectory()
-                                              : TestFileManager::getInputDataDirectory();
-    const std::string filename = TestFileManager::getTestSpecificFileName(".xml");
+    const std::string dirname  = bSelfTestMode ? TestFileManager::getGlobalOutputTempDirectory()
+                                               : TestFileManager::getInputDataDirectory();
+    const std::string filename = testNameOverride.has_value()
+                                         ? testNameOverride.value()
+                                         : TestFileManager::getTestSpecificFileName(".xml");
     fullFilename_              = Path::join(dirname, "refdata", filename);
 
     switch (mode)
@@ -335,7 +341,7 @@ TestReferenceDataImpl::TestReferenceDataImpl(ReferenceDataMode mode, bool bSelfT
     }
 }
 
-void TestReferenceDataImpl::onTestEnd(bool testPassed)
+void TestReferenceDataImpl::onTestEnd(bool testPassed) const
 {
     if (!bInUse_)
     {
@@ -679,8 +685,13 @@ ReferenceDataEntry* TestReferenceChecker::Impl::findOrCreateEntry(const char* ty
  * TestReferenceData
  */
 
-TestReferenceData::TestReferenceData() : impl_(initReferenceDataInstance()) {}
+TestReferenceData::TestReferenceData() : impl_(initReferenceDataInstance(std::nullopt)) {}
 
+
+TestReferenceData::TestReferenceData(std::string testNameOverride) :
+    impl_(initReferenceDataInstance(std::move(testNameOverride)))
+{
+}
 
 TestReferenceData::TestReferenceData(ReferenceDataMode mode) :
     impl_(initReferenceDataInstanceForSelfTest(mode))
@@ -703,9 +714,12 @@ TestReferenceChecker TestReferenceData::rootChecker()
         return TestReferenceChecker(new TestReferenceChecker::Impl(true));
     }
     impl_->compareRootEntry_->setChecked();
-    return TestReferenceChecker(new TestReferenceChecker::Impl(
-            "", impl_->compareRootEntry_.get(), impl_->outputRootEntry_.get(),
-            impl_->updateMismatchingEntries_, impl_->bSelfTestMode_, defaultRealTolerance()));
+    return TestReferenceChecker(new TestReferenceChecker::Impl("",
+                                                               impl_->compareRootEntry_.get(),
+                                                               impl_->outputRootEntry_.get(),
+                                                               impl_->updateMismatchingEntries_,
+                                                               impl_->bSelfTestMode_,
+                                                               defaultRealTolerance()));
 }
 
 
@@ -822,8 +836,11 @@ TestReferenceChecker TestReferenceChecker::checkCompound(const char* type, const
     {
         impl_->outputRootEntry_->addChild(entry->cloneToOutputEntry());
     }
-    return TestReferenceChecker(new Impl(fullId, entry, entry->correspondingOutputEntry(),
-                                         impl_->updateMismatchingEntries_, impl_->bSelfTestMode_,
+    return TestReferenceChecker(new Impl(fullId,
+                                         entry,
+                                         entry->correspondingOutputEntry(),
+                                         impl_->updateMismatchingEntries_,
+                                         impl_->bSelfTestMode_,
                                          impl_->defaultTolerance_));
 }
 
@@ -860,8 +877,8 @@ static void throwIfNonEmptyAndOnlyWhitespace(const std::string& s, const char* i
 
 void TestReferenceChecker::checkBoolean(bool value, const char* id)
 {
-    EXPECT_PLAIN(impl_->processItem(Impl::cBooleanNodeName, id,
-                                    ExactStringChecker(value ? "true" : "false")));
+    EXPECT_PLAIN(impl_->processItem(
+            Impl::cBooleanNodeName, id, ExactStringChecker(value ? "true" : "false")));
 }
 
 
@@ -887,38 +904,38 @@ void TestReferenceChecker::checkTextBlock(const std::string& value, const char* 
 
 void TestReferenceChecker::checkUChar(unsigned char value, const char* id)
 {
-    EXPECT_PLAIN(impl_->processItem(Impl::cUCharNodeName, id,
-                                    ExactStringChecker(formatString("%d", value))));
+    EXPECT_PLAIN(impl_->processItem(
+            Impl::cUCharNodeName, id, ExactStringChecker(formatString("%d", value))));
 }
 
 void TestReferenceChecker::checkInteger(int value, const char* id)
 {
-    EXPECT_PLAIN(impl_->processItem(Impl::cIntegerNodeName, id,
-                                    ExactStringChecker(formatString("%d", value))));
+    EXPECT_PLAIN(impl_->processItem(
+            Impl::cIntegerNodeName, id, ExactStringChecker(formatString("%d", value))));
 }
 
 void TestReferenceChecker::checkInt32(int32_t value, const char* id)
 {
-    EXPECT_PLAIN(impl_->processItem(Impl::cInt32NodeName, id,
-                                    ExactStringChecker(formatString("%" PRId32, value))));
+    EXPECT_PLAIN(impl_->processItem(
+            Impl::cInt32NodeName, id, ExactStringChecker(formatString("%" PRId32, value))));
 }
 
 void TestReferenceChecker::checkUInt32(uint32_t value, const char* id)
 {
-    EXPECT_PLAIN(impl_->processItem(Impl::cUInt32NodeName, id,
-                                    ExactStringChecker(formatString("%" PRIu32, value))));
+    EXPECT_PLAIN(impl_->processItem(
+            Impl::cUInt32NodeName, id, ExactStringChecker(formatString("%" PRIu32, value))));
 }
 
 void TestReferenceChecker::checkInt64(int64_t value, const char* id)
 {
-    EXPECT_PLAIN(impl_->processItem(Impl::cInt64NodeName, id,
-                                    ExactStringChecker(formatString("%" PRId64, value))));
+    EXPECT_PLAIN(impl_->processItem(
+            Impl::cInt64NodeName, id, ExactStringChecker(formatString("%" PRId64, value))));
 }
 
 void TestReferenceChecker::checkUInt64(uint64_t value, const char* id)
 {
-    EXPECT_PLAIN(impl_->processItem(Impl::cUInt64NodeName, id,
-                                    ExactStringChecker(formatString("%" PRIu64, value))));
+    EXPECT_PLAIN(impl_->processItem(
+            Impl::cUInt64NodeName, id, ExactStringChecker(formatString("%" PRIu64, value))));
 }
 
 void TestReferenceChecker::checkDouble(double value, const char* id)

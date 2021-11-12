@@ -1,7 +1,7 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2018,2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2018,2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -63,7 +63,6 @@ ConstraintsTestData::ConstraintsTestData(const std::string&       title,
                                          std::vector<int>         constraints,
                                          std::vector<real>        constraintsR0,
                                          bool                     computeVirial,
-                                         tensor                   virialScaledRef,
                                          bool                     compute_dHdLambda,
                                          float                    dHdLambdaRef,
                                          real                     initialTime,
@@ -96,10 +95,10 @@ ConstraintsTestData::ConstraintsTestData(const std::string&       title,
     invdt_ = 1.0 / timestep; // Inverse timestep
 
     // Input record - data that usually comes from configuration file (.mdp)
-    ir_.efep    = 0;
+    ir_.efep    = FreeEnergyPerturbationType::No;
     ir_.init_t  = initialTime;
     ir_.delta_t = timestep;
-    ir_.eI      = 0;
+    ir_.eI      = IntegrationAlgorithm::MD;
 
     // Virial evaluation
     computeVirial_ = computeVirial;
@@ -109,8 +108,7 @@ ConstraintsTestData::ConstraintsTestData(const std::string&       title,
         {
             for (int j = 0; j < DIM; j++)
             {
-                virialScaled_[i][j]    = 0;
-                virialScaledRef_[i][j] = virialScaledRef[i][j];
+                virialScaled_[i][j] = 0;
             }
         }
     }
@@ -122,12 +120,12 @@ ConstraintsTestData::ConstraintsTestData(const std::string&       title,
     dHdLambda_         = 0;
     if (compute_dHdLambda_)
     {
-        ir_.efep      = efepYES;
+        ir_.efep      = FreeEnergyPerturbationType::Yes;
         dHdLambdaRef_ = dHdLambdaRef;
     }
     else
     {
-        ir_.efep      = efepNO;
+        ir_.efep      = FreeEnergyPerturbationType::No;
         dHdLambdaRef_ = 0;
     }
 

@@ -1,7 +1,7 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2015,2016,2018,2019, by the GROMACS development team, led by
+ * Copyright (c) 2015,2016,2018,2019,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -49,6 +49,7 @@
 #define GMX_RANDOM_UNIFORMINTDISTRIBUTION_H
 
 #include <limits>
+#include <memory>
 
 #include "gromacs/math/functions.h"
 #include "gromacs/utility/basedefinitions.h"
@@ -93,8 +94,7 @@ public:
          * \param b   Upper end of range (inclusive)
          */
         explicit param_type(result_type a = 0, result_type b = std::numeric_limits<result_type>::max()) :
-            a_(a),
-            b_(b)
+            a_(a), b_(b)
         {
             GMX_RELEASE_ASSERT(a <= b, "The uniform integer distribution requires a<=b");
         }
@@ -121,7 +121,6 @@ public:
         bool operator!=(const param_type& x) const { return !operator==(x); }
     };
 
-public:
     /*! \brief Construct new distribution with given integer parameters.
      *
      * \param a   Lower end of range (inclusive)
@@ -129,9 +128,7 @@ public:
      */
     explicit UniformIntDistribution(result_type a = 0,
                                     result_type b = std::numeric_limits<result_type>::max()) :
-        param_(param_type(a, b)),
-        savedRandomBits_(0),
-        savedRandomBitsLeft_(0)
+        param_(param_type(a, b)), savedRandomBits_(0), savedRandomBitsLeft_(0)
     {
     }
 
@@ -140,9 +137,7 @@ public:
      * \param param  Parameter class as defined inside gmx::UniformIntDistribution.
      */
     explicit UniformIntDistribution(const param_type& param) :
-        param_(param),
-        savedRandomBits_(0),
-        savedRandomBitsLeft_(0)
+        param_(param), savedRandomBits_(0), savedRandomBitsLeft_(0)
     {
     }
 

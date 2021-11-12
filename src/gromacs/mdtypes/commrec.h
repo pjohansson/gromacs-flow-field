@@ -4,7 +4,7 @@
  * Copyright (c) 1991-2000, University of Groningen, The Netherlands.
  * Copyright (c) 2001-2004, The GROMACS development team.
  * Copyright (c) 2013,2014,2015,2017,2018 by the GROMACS development team.
- * Copyright (c) 2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -40,11 +40,9 @@
 
 #include <stddef.h>
 
-#include "gromacs/utility/basedefinitions.h"
 #include "gromacs/utility/gmxassert.h"
 #include "gromacs/utility/gmxmpi.h"
 
-struct mpi_in_place_buf_t;
 struct gmx_domdec_t;
 
 #define DUTY_PP (1U << 0U)
@@ -79,11 +77,14 @@ struct t_commrec
      * All communication within some simulation should happen
      * in mpi_comm_mysim, or its subset mpi_comm_mygroup.
      */
-    int sim_nodeid, nnodes, npmenodes;
+    //! The rank-id in mpi_comm_mysim;
+    int sim_nodeid;
+    //! The number of ranks in mpi_comm_mysim
+    int nnodes;
+    //! The number of separate PME ranks, 0 when no separate PME ranks are used
+    int npmenodes;
 
-    /* thread numbers: */
-    /* Not used yet: int threadid, nthreads; */
-    /* The nodeid in the PP/PME, PP or PME group */
+    //! The rank-id in mpi_comm_mygroup;
     int nodeid;
 
     /* MPI communicators within a single simulation
@@ -93,6 +94,9 @@ struct t_commrec
                                   a single simulation */
     MPI_Comm mpi_comm_mygroup; /* subset of mpi_comm_mysim including only
                                   the ranks in the same group (PP or PME) */
+    //! The number of ranks in mpi_comm_mygroup
+    int sizeOfMyGroupCommunicator;
+
     //! The communicator used before DD was initialized
     MPI_Comm mpiDefaultCommunicator;
     int      sizeOfDefaultCommunicator;
@@ -107,10 +111,6 @@ struct t_commrec
      * This should be read through thisRankHasDuty() or getThisRankDuties().
      */
     int duty;
-
-    /* these buffers are used as destination buffers if MPI_IN_PLACE isn't
-       supported.*/
-    mpi_in_place_buf_t* mpb;
 };
 
 /*! \brief
@@ -158,21 +158,22 @@ inline bool thisRankHasDuty(const t_commrec* cr, int duty)
 //! The node id for the master
 #define MASTERRANK(cr) (0)
 
-/*! \brief Do we decompose the work of this simulation?
+/*! \brief Returns whether the domain decomposition machinery is active and reorders atoms
  *
- * True if this simulation uses more than one PP rank, or if this simulation
- * uses at least one PME-only rank.
+ * This tells whether atoms are reordered at pair search steps. When the return value
+ * is true, atoms are not in the order of the input and mtop.
  *
- * PAR(cr) is true if this is true, but the converse does not apply (see docs
- * of PAR(cr)).
- *
- * This is true if havePPDomainDecomposition is true, but the converse does not
- * apply (see docs of havePpDomainDecomposition()).
- *
- * \todo As part of Issue #2395, replace calls to this with
- * havePPDomainDecomposition or a call of some other/new function, as
- * appropriate to each case. Then eliminate this macro. */
-#define DOMAINDECOMP(cr) (((cr)->dd != nullptr) && PAR(cr))
+ * Note that when the return value is true, there are not necessarily
+ * multiple domains. The domain decomposition machinery is also active and
+ * reorders the atoms also with a single MPI rank, or 1 PP and 1 PME rank,
+ * with most integrators. Only a few special non-integrator "integrators"
+ * do not (yet) support the domain decomposition machinery and therefore
+ * this function is still needed.
+ */
+static bool inline haveDDAtomOrdering(const t_commrec& cr)
+{
+    return cr.dd != nullptr;
+}
 
 /*! \brief Returns whether we have actual domain decomposition for the particle-particle interactions
  *

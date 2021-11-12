@@ -4,7 +4,7 @@
  * Copyright (c) 1991-2000, University of Groningen, The Netherlands.
  * Copyright (c) 2001-2004, The GROMACS development team.
  * Copyright (c) 2013,2014,2015,2016,2017 by the GROMACS development team.
- * Copyright (c) 2018,2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2018,2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -43,6 +43,7 @@
 #include "gromacs/fileio/confio.h"
 #include "gromacs/fileio/trxio.h"
 #include "gromacs/math/3dtransforms.h"
+#include "gromacs/math/units.h"
 #include "gromacs/math/utilities.h"
 #include "gromacs/math/vec.h"
 #include "gromacs/mdtypes/md_enums.h"
@@ -152,8 +153,8 @@ int gmx_genconf(int argc, char* argv[])
         { "-renumber", FALSE, etBOOL, { &bRenum }, "Renumber residues" }
     };
 
-    if (!parse_common_args(&argc, argv, 0, NFILE, fnm, asize(pa), pa, asize(desc), desc,
-                           asize(bugs), bugs, &oenv))
+    if (!parse_common_args(
+                &argc, argv, 0, NFILE, fnm, asize(pa), pa, asize(desc), desc, asize(bugs), bugs, &oenv))
     {
         return 0;
     }
@@ -179,7 +180,7 @@ int gmx_genconf(int argc, char* argv[])
     gmx_mtop_t mtop;
     bool       haveTop = false;
     readConfAndTopology(opt2fn("-f", NFILE, fnm), &haveTop, &mtop, &pbcType, &x, &v, box);
-    t_atoms atoms = gmx_mtop_global_atoms(&mtop);
+    t_atoms atoms = gmx_mtop_global_atoms(mtop);
     natoms        = atoms.nr;
     nres          = atoms.nres; /* nr of residues in one element? */
     /* make space for all the atoms */

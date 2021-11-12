@@ -34,9 +34,10 @@
 # To help us fund GROMACS development, we humbly ask that you cite
 # the research papers on the package. Check out http://www.gromacs.org.
 
-cmake_minimum_required(VERSION 3.13)
+cmake_minimum_required(VERSION 3.16.3)
 cmake_policy(SET CMP0074 NEW) # From CMake 3.12
 cmake_policy(SET CMP0068 NEW) # From CMake-3.9
+cmake_policy(SET CMP0048 NEW) # As of CMake 3.22, default is still "OLD"
 
 # CMake modules/macros are in a subdirectory to keep this file cleaner
 # This needs to be set before project() in order to pick up toolchain files
@@ -53,7 +54,9 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
         FORCE)
 endif()
 
-project(Gromacs)
+# The GROMACS convention is that these are the version number of the next
+# release that is going to be made from this branch.
+project(Gromacs VERSION 2022.0)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -172,24 +175,21 @@ gmx_detect_target_architecture()
 ########################################################################
 include(gmxOptionUtilities)
 
-set(CMAKE_PREFIX_PATH "${CMAKE_PREFIX_PATH}" CACHE STRING "Extra locations to search for external libraries and tools (give directory without lib, bin, or include)")
+set(CMAKE_PREFIX_PATH "" CACHE STRING "Extra locations to search for external libraries and tools (give directory without lib, bin, or include)")
 
-# Fujitsu only has SIMD in double precision, so this will be faster
-gmx_set_boolean(GMX_DOUBLE_DEFAULT GMX_TARGET_FUJITSU_SPARC64)
-option(GMX_DOUBLE "Use double precision (much slower, use only if you really need it)" ${GMX_DOUBLE_DEFAULT})
-option(GMX_RELAXED_DOUBLE_PRECISION "Accept single precision 1/sqrt(x) when using Fujitsu HPC-ACE SIMD" OFF)
-mark_as_advanced(GMX_RELAXED_DOUBLE_PRECISION)
+option(GMX_DOUBLE "Use double precision (much slower, use only if you really need it)" OFF)
 
 option(GMX_MPI    "Build a parallel (message-passing) version of GROMACS" OFF)
 option(GMX_THREAD_MPI  "Build a thread-MPI-based multithreaded version of GROMACS (not compatible with MPI)" ON)
-gmx_dependent_option(
-    GMX_MPI_IN_PLACE
-    "Enable MPI_IN_PLACE for MPIs that have it defined"
-    ON
-    GMX_MPI)
-mark_as_advanced(GMX_MPI_IN_PLACE)
 
 option(GMX_MIMIC "Enable MiMiC QM/MM interface (CPMD is required)" OFF)
+
+option(GMX_CP2K "Enable CP2K QM/MM interface (CP2K 8.1 or later is required)" OFF)
+
+# We need to enable Fortran, because CP2K will be linked
+if(GMX_CP2K)
+    enable_language(Fortran)
+endif()
 
 option(GMX_FAHCORE "Build a library with mdrun functionality" OFF)
 mark_as_advanced(GMX_FAHCORE)
@@ -210,9 +210,11 @@ gmx_option_multichoice(
     GMX_SIMD
     "SIMD instruction set for CPU kernels and compiler optimization"
     "AUTO"
-    AUTO None SSE2 SSE4.1 AVX_128_FMA AVX_256 AVX2_256 AVX2_128 AVX_512 AVX_512_KNL MIC ARM_NEON ARM_NEON_ASIMD ARM_SVE IBM_VMX IBM_VSX Sparc64_HPC_ACE Reference)
+    AUTO None SSE2 SSE4.1 AVX_128_FMA AVX_256 AVX2_256 AVX2_128 AVX_512 AVX_512_KNL ARM_NEON_ASIMD ARM_SVE IBM_VSX Reference)
 
-if(GMX_TARGET_MIC)
+include(gmxTestIntelLLVM)
+
+if (GMX_INTEL_LLVM)
     set(GMX_FFT_LIBRARY_DEFAULT "mkl")
 else()
     set(GMX_FFT_LIBRARY_DEFAULT "fftw3")
@@ -236,6 +238,12 @@ gmx_dependent_option(
 mark_as_advanced(GMX_BUILD_OWN_FFTW)
 mark_as_advanced(GMX_DISABLE_FFTW_MEASURE)
 
+gmx_dependent_option(
+    GMX_USE_HEFFTE
+    "Use HeFFTe for FFT support. Used with CUDA backend"
+    OFF
+    "GMX_GPU STREQUAL CUDA;GMX_MPI")
+
 gmx_dependent_cache_variable(GMX_SIMD_REF_FLOAT_WIDTH  "Reference SIMD single precision width" STRING "4" "GMX_SIMD STREQUAL REFERENCE")
 gmx_dependent_cache_variable(GMX_SIMD_REF_DOUBLE_WIDTH "Reference SIMD double precision width" STRING "2" "GMX_SIMD STREQUAL REFERENCE")
 
@@ -247,8 +255,6 @@ mark_as_advanced(GMX_BROKEN_CALLOC)
 option(GMX_OPENMP "Enable OpenMP-based multithreading" ON)
 
 option(GMX_USE_TNG "Use the TNG library for trajectory I/O" ON)
-
-option(GMX_BUILD_MDRUN_ONLY "Build and install only the mdrun binary" OFF)
 
 option(GMX_CYCLE_SUBCOUNTERS "Enable cycle subcounters to get a more detailed cycle timings" OFF)
 mark_as_advanced(GMX_CYCLE_SUBCOUNTERS)
@@ -298,7 +304,6 @@ include(gmxManageOpenMP)
 # These need to be done early (before further tests).
 #####################################################################
 
-include(gmxTestIntelLLVM)
 include(gmxCFlags)
 gmx_c_flags()
 
@@ -323,9 +328,6 @@ gmx_test_compiler_problems()
 # want such variables to always have a definition, because #if is more
 # robust than #ifdef. So, we put this value on the compiler command
 # line in all cases.
-#
-# GMX_RELAXED_DOUBLE_PRECISION does not need to be handled here,
-# because no installed header needs it
 if(GMX_DOUBLE)
     set(GMX_DOUBLE_VALUE 1)
 else()
@@ -402,17 +404,6 @@ test_big_endian(GMX_INTEGER_BIG_ENDIAN)
 
 gmx_set_boolean(GMX_USE_NICE "HAVE_UNISTD_H AND HAVE_NICE")
 
-# Management of GROMACS options for specific toolchains should go
-# here. Because the initial settings for some of the main options have
-# already happened, but things like library detection and MPI compiler
-# feature detection have not, the docstrings for any over-rides of
-# GROMACS defaults or user settings will make sense. Also, any
-# toolchain-related reasons for choosing whether to detect various
-# things can be sorted out now, before the detection takes place.
-if(GMX_TARGET_FUJITSU_SPARC64)
-    include(gmxManageFujitsuSparc64)
-endif()
-
 ########################################################################
 #Process MPI settings
 ########################################################################
@@ -422,6 +413,11 @@ include(gmxManageMPI)
 #Process MiMiC settings
 ########################################################################
 include(gmxManageMimic)
+
+########################################################################
+#Process CP2K settings
+########################################################################
+include(gmxManageCP2K)
 
 ########################################################################
 #Process shared/static library settings
@@ -561,7 +557,6 @@ tmpi_enable_core("${CMAKE_SOURCE_DIR}/src/external/thread_mpi/include")
 if(GMX_THREAD_MPI)
     # enable MPI functions
     tmpi_enable()
-    set(MPI_IN_PLACE_EXISTS 1)
 endif()
 # If atomics are manually disabled a define is needed because atomics.h doesn't depend on config.h
 if (TMPI_ATOMICS_DISABLED)
@@ -571,6 +566,20 @@ endif()
 include(gmxManageTNG)
 
 include(gmxManageLmfit)
+
+include(gmxManageMuparser)
+
+##################################################
+# Process SIMD instruction settings
+##################################################
+# This checks what flags to add in order to
+# support the SIMD instructions we need, it sets
+# correct defines for the SIMD instructions supported,
+# and adds advanced options to control accuracy
+# for SIMD math operations.
+include(gmxManageSimd)
+gmx_manage_simd()
+
 
 if(GMX_GPU)
 
@@ -589,10 +598,62 @@ if(GMX_GPU)
         message(WARNING "To use GPU acceleration efficiently, mdrun requires OpenMP multi-threading, which is currently not enabled.")
     endif()
 
+    if (GMX_OPENCL_NB_CLUSTER_SIZE)
+        message(WARNING "GMX_OPENCL_NB_CLUSTER_SIZE is deprecated, use GMX_GPU_NB_CLUSTER_SIZE instead")
+    endif()
+    if (GMX_OPENCL_NB_CLUSTER_SIZE AND GMX_GPU_NB_CLUSTER_SIZE)
+        if (NOT ${GMX_OPENCL_NB_CLUSTER_SIZE} EQUAL ${GMX_GPU_NB_CLUSTER_SIZE})
+            message(FATAL_ERROR "Mismatching values passed to GMX_OPENCL_NB_CLUSTER_SIZE and GMX_GPU_NB_CLUSTER_SIZE; the former is deprecated, use only the latter!")
+        endif()
+    endif()
+    # Only OpenCL and SYCL support changing the default cluster size
+    if (${_gmx_gpu_uppercase} STREQUAL "CUDA")
+        if (GMX_GPU_NB_CLUSTER_SIZE AND NOT "${GMX_GPU_NB_CLUSTER_SIZE}" EQUAL 8)
+            message(FATAL_ERROR "Setting GMX_GPU_NB_CLUSTER_SIZE is not supported in CUDA (the default GMX_GPU_NB_CLUSTER_SIZE=8 is used)")
+        endif()
+    else()
+        # use the legacy GMX_OPENCL_NB_CLUSTER_SIZE variable if set, otherwise set the defaults
+        if (GMX_OPENCL_NB_CLUSTER_SIZE)
+            set(_gmx_gpu_nb_cluster_size_value ${GMX_OPENCL_NB_CLUSTER_SIZE})
+        else()
+            # default cluster size is 8 with OpenCL and 4 with SYCL for now
+            if(${_gmx_gpu_uppercase} STREQUAL "OPENCL")
+                set(_gmx_gpu_nb_cluster_size_value 8)
+            elseif(GMX_GPU_SYCL)
+                if (GMX_SYCL_HIPSYCL AND NOT GMX_HIPSYCL_HAVE_LEVELZERO_TARGET)
+                    set(_gmx_gpu_nb_cluster_size_value 8)
+                else()
+                    # Either DPCPP or hipSYCL targeting Intel Level0
+                    set(_gmx_gpu_nb_cluster_size_value 4)
+                endif()
+            endif()
+        endif()
+        set(GMX_GPU_NB_CLUSTER_SIZE ${_gmx_gpu_nb_cluster_size_value} CACHE STRING "Cluster size used by the nonbonded kernel. Set to 4 for Intel GPUs.")
+        mark_as_advanced(GMX_GPU_NB_CLUSTER_SIZE)
+    endif()
+
+endif()
+
+# For build with CUDA and Lib-MPI, check if underlying MPI implementation is CUDA-aware
+# CUDA-aware MPI allows direct GPU communication without staging data through host
+if(GMX_GPU_CUDA AND GMX_LIB_MPI)
+    include(gmxManageCudaAwareMPI)
+else()
+    set(HAVE_CUDA_AWARE_MPI 0)
 endif()
 
 if(CYGWIN)
     set(GMX_CYGWIN 1)
+endif()
+
+if(GMX_USE_HEFFTE)
+    if(NOT GMX_GPU_CUDA)
+        message(FATAL_ERROR "HeFFTe support requires a CUDA build")
+    endif()
+    if(NOT GMX_LIB_MPI)
+        message(FATAL_ERROR "HeFFTe support requires a library MPI build")
+    endif()
+    find_package(Heffte 2.1.0 REQUIRED CUDA)
 endif()
 
 if(WIN32)
@@ -610,10 +671,7 @@ gmx_add_cache_dependency(GMX_BUILD_UNITTESTS BOOL BUILD_TESTING OFF)
 # Our own GROMACS tests
 ########################################################################
 
-include_directories(BEFORE ${CMAKE_SOURCE_DIR}/src)
 include_directories(SYSTEM ${CMAKE_SOURCE_DIR}/src/external)
-# Required for config.h, maybe should only be set in src/CMakeLists.txt
-include_directories(BEFORE ${CMAKE_BINARY_DIR}/src)
 
 include(gmxTestInlineASM)
 gmx_test_inline_asm_gcc_x86(GMX_X86_GCC_INLINE_ASM)
@@ -648,18 +706,6 @@ gmx_test_xdr(GMX_SYSTEM_XDR)
 if(NOT GMX_SYSTEM_XDR OR CMAKE_SYSTEM_NAME STREQUAL "Darwin")
     set(GMX_INTERNAL_XDR 1)
 endif()
-
-
-##################################################
-# Process SIMD instruction settings
-##################################################
-# This checks what flags to add in order to
-# support the SIMD instructions we need, it sets
-# correct defines for the SIMD instructions supported,
-# and adds advanced options to control accuracy
-# for SIMD math operations.
-include(gmxManageSimd)
-gmx_manage_simd()
 
 ##################################################
 # Process FFT library settings
@@ -720,11 +766,18 @@ if (GMX_BUILD_HELP AND SOURCE_IS_SOURCE_DISTRIBUTION AND BUILD_IS_INSOURCE)
         "Set GMX_BUILD_HELP=OFF or do an out-of-source build to proceed.")
 endif()
 
+if (GMX_BUILD_FOR_COVERAGE)
+    # Set flags for coverage build here instead having to do so manually
+    set(CMAKE_C_FLAGS "-g --coverage")
+    set(CMAKE_CXX_FLAGS "-g --coverage")
+endif()
+
 # # # # # # # # # # NO MORE TESTS AFTER THIS LINE! # # # # # # # # # # #
 # these are set after everything else
 if (NOT GMX_SKIP_DEFAULT_CFLAGS)
-    set(CMAKE_EXE_LINKER_FLAGS "${FFT_LINKER_FLAGS} ${MPI_LINKER_FLAGS} ${CMAKE_EXE_LINKER_FLAGS} ${DISABLE_SYCL_CXX_FLAGS}")
-    set(CMAKE_SHARED_LINKER_FLAGS "${FFT_LINKER_FLAGS} ${MPI_LINKER_FLAGS} ${CMAKE_SHARED_LINKER_FLAGS} ${DISABLE_SYCL_CXX_FLAGS}")
+    #TODO(#3672): Use target_link_libraries(... MPI::MPI_CXX) instead of ${MPI_CXX_LINK_FLAGS}
+    set(CMAKE_EXE_LINKER_FLAGS "${FFT_LINKER_FLAGS} ${MPI_CXX_LINK_FLAGS} ${CMAKE_EXE_LINKER_FLAGS} ${DISABLE_SYCL_CXX_FLAGS}")
+    set(CMAKE_SHARED_LINKER_FLAGS "${FFT_LINKER_FLAGS} ${MPI_CXX_LINK_FLAGS} ${CMAKE_SHARED_LINKER_FLAGS} ${DISABLE_SYCL_CXX_FLAGS}")
 else()
     message("Recommended flags which are not added because GMX_SKIP_DEFAULT_CFLAGS=yes:")
     message("CMAKE_C_FLAGS: ${SIMD_C_FLAGS};${MPI_COMPILE_FLAGS};${EXTRA_C_FLAGS};${GMXC_CFLAGS}")
@@ -735,8 +788,8 @@ else()
     foreach(build_type ${build_types_with_explicit_flags})
         message("CMAKE_CXX_FLAGS_${build_type}: ${GMXC_CXXFLAGS_${build_type}}")
     endforeach()
-    message("CMAKE_EXE_LINKER_FLAGS: ${FFT_LINKER_FLAGS} ${MPI_LINKER_FLAGS}")
-    message("CMAKE_SHARED_LINKER_FLAGS: ${FFT_LINKER_FLAGS} ${MPI_LINKER_FLAGS}")
+    message("CMAKE_EXE_LINKER_FLAGS: ${FFT_LINKER_FLAGS} ${MPI_CXX_LINK_FLAGS}")
+    message("CMAKE_SHARED_LINKER_FLAGS: ${FFT_LINKER_FLAGS} ${MPI_CXX_LINK_FLAGS}")
 endif()
 # Allow `admin` directory to be easily conveyed to nested CMake commands.
 set(GMX_ADMIN_DIR ${CMAKE_SOURCE_DIR}/admin)
@@ -774,33 +827,22 @@ endif()
 #Simpler to always install.
 install(FILES COPYING DESTINATION ${GMX_INSTALL_GMXDATADIR} COMPONENT data)
 
-if (GMX_BUILD_FOR_COVERAGE)
-    # Code heavy with asserts makes conditional coverage close to useless metric,
-    # as by design most of the false branches are impossible to trigger in
-    # correctly functioning code.  And the benefit of testing those that could
-    # be triggered by using an API against its specification isn't usually
-    # worth the effort.
-    add_definitions(-DNDEBUG -DGMX_DISABLE_ASSERTS)
-endif()
-
 if (BUILD_TESTING)
     include(tests/CheckTarget.cmake)
 endif()
 
-# TODO: Determine control flow and defaults for package installation and testing use cases.
-# Ref: https://gitlab.com/gromacs/gromacs/-/issues/2896
-option(GMX_PYTHON_PACKAGE "Configure gmxapi Python package" OFF)
+option(GMX_PYTHON_PACKAGE
+       "Configure gmxapi Python package for use in build tree. Requires pybind11 installed for project Python interpreter."
+       OFF)
 mark_as_advanced(GMX_PYTHON_PACKAGE)
 
-if (NOT GMX_BUILD_MDRUN_ONLY)
-    find_package(ImageMagick QUIET COMPONENTS convert)
-    include(gmxTestImageMagick)
-    GMX_TEST_IMAGEMAGICK(IMAGE_CONVERT_POSSIBLE)
-    # TODO: Resolve circular dependency between docs, gromacs, and python_packaging
-    add_subdirectory(docs)
-    add_subdirectory(share)
-    add_subdirectory(scripts)
-endif()
+find_package(ImageMagick QUIET COMPONENTS convert)
+include(gmxTestImageMagick)
+GMX_TEST_IMAGEMAGICK(IMAGE_CONVERT_POSSIBLE)
+# TODO: Resolve circular dependency between docs, gromacs, and python_packaging
+add_subdirectory(docs)
+add_subdirectory(share)
+add_subdirectory(scripts)
 add_subdirectory(api)
 add_subdirectory(src)
 
@@ -808,7 +850,7 @@ if (BUILD_TESTING)
     add_subdirectory(tests)
 endif()
 
-if(GMX_PYTHON_PACKAGE AND NOT GMX_BUILD_MDRUN_ONLY)
+if(GMX_PYTHON_PACKAGE)
     add_subdirectory(python_packaging)
 endif()
 

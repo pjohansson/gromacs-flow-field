@@ -2,7 +2,7 @@
  * This file is part of the GROMACS molecular simulation package.
  *
  * Copyright (c) 2012,2013,2014,2015,2016 by the GROMACS development team.
- * Copyright (c) 2017,2018,2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2017,2018,2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -52,6 +52,7 @@
 #include <vector>
 
 #include "gromacs/onlinehelp/helpformat.h"
+#include "gromacs/utility/classhelpers.h"
 #include "gromacs/utility/exceptions.h"
 #include "gromacs/utility/gmxassert.h"
 #include "gromacs/utility/programcontext.h"
@@ -205,19 +206,6 @@ private:
     std::vector<std::string> result_;
 };
 
-/*! \brief
- * Makes the string uppercase.
- *
- * \param[in] text  Input text.
- * \returns   \p text with all characters transformed to uppercase.
- * \throws    std::bad_alloc if out of memory.
- */
-std::string toUpperCase(const std::string& text)
-{
-    std::string result(text);
-    std::transform(result.begin(), result.end(), result.begin(), toupper);
-    return result;
-}
 
 /*! \brief
  * Removes extra newlines from reStructuredText.
@@ -276,8 +264,7 @@ public:
     struct LinkItem
     {
         LinkItem(const std::string& linkName, const std::string& replacement) :
-            linkName(linkName),
-            replacement(replacement)
+            linkName(linkName), replacement(replacement)
         {
         }
         std::string linkName;
@@ -342,9 +329,7 @@ public:
     public:
         //! Initializes the state with the given parameters.
         SharedState(TextWriter* writer, HelpOutputFormat format, const HelpLinks* links) :
-            file_(*writer),
-            format_(format),
-            links_(links)
+            file_(*writer), format_(format), links_(links)
         {
         }
 
@@ -388,8 +373,7 @@ public:
     struct ReplaceItem
     {
         ReplaceItem(const std::string& search, const std::string& replace) :
-            search(search),
-            replace(replace)
+            search(search), replace(replace)
         {
         }
         std::string search;
@@ -445,8 +429,7 @@ std::string HelpWriterContext::Impl::replaceLinks(const std::string& input) cons
     if (state_->links_ != nullptr)
     {
         HelpLinks::Impl::LinkList::const_iterator link;
-        for (link = state_->links_->impl_->links_.begin();
-             link != state_->links_->impl_->links_.end(); ++link)
+        for (link = state_->links_->impl_->links_.begin(); link != state_->links_->impl_->links_.end(); ++link)
         {
             result = replaceAllWords(result, link->linkName, link->replacement);
         }

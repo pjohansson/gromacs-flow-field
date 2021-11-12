@@ -46,10 +46,12 @@
 #include <vector>
 
 #include "gromacs/pbcutil/pbc.h"
+#include "gromacs/utility/arrayref.h"
 #include "nblib/exception.h"
 #include "nblib/simulationstate.h"
 #include "nblib/simulationstateimpl.h"
 #include "nblib/util/setup.h"
+#include "nblib/vector.h"
 
 namespace nblib
 {
@@ -68,8 +70,7 @@ SimulationState::Impl::Impl(const std::vector<Vec3>& coordinates,
                             const std::vector<Vec3>& forces,
                             const Box&               box,
                             Topology                 topology) :
-    box_(box),
-    topology_(std::move(topology))
+    box_(box), topology_(std::move(topology))
 {
     auto numParticles = topology_.numParticles();
 

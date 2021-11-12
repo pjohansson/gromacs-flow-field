@@ -3,7 +3,7 @@
  *
  * Copyright (c) 1991-2000, University of Groningen, The Netherlands.
  * Copyright (c) 2001-2004, The GROMACS development team.
- * Copyright (c) 2013,2014,2015,2018,2019, by the GROMACS development team, led by
+ * Copyright (c) 2013,2014,2015,2018,2019,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -35,8 +35,8 @@
  * the research papers on the package. Check out http://www.gromacs.org.
  */
 
-#ifndef _cmat_h
-#define _cmat_h
+#ifndef GMX_GMXANA_CMAT_H
+#define GMX_GMXANA_CMAT_H
 
 #include "gromacs/utility/basedefinitions.h"
 #include "gromacs/utility/real.h"
@@ -54,7 +54,7 @@ typedef struct
     int conf, clust;
 } t_clustid;
 
-typedef struct
+struct t_mat
 {
     int      n1, nn;
     int*     m_ind;
@@ -62,7 +62,7 @@ typedef struct
     real     minrms, maxrms, sumrms;
     real*    erow;
     real**   mat;
-} t_mat;
+};
 
 /* The matrix is indexed using the matrix index */
 #define EROW(m, i) m->erow[i]

@@ -1,7 +1,7 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2015,2016,2017,2018,2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2015,2016,2017,2018,2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -65,7 +65,6 @@
 #include "biaswriter.h"
 #include "dimparams.h"
 
-struct gmx_multisim_t;
 struct t_commrec;
 struct t_enxsubblock;
 
@@ -73,12 +72,13 @@ namespace gmx
 {
 
 struct AwhBiasHistory;
-struct AwhBiasParams;
+class AwhBiasParams;
 struct AwhHistory;
-struct AwhParams;
+class AwhParams;
 struct AwhPointStateHistory;
 class CorrelationGrid;
 class BiasGrid;
+class BiasSharing;
 class GridAxis;
 class PointState;
 
@@ -157,7 +157,7 @@ public:
      * \param[in] dimParams              Bias dimension parameters.
      * \param[in] beta                   1/(k_B T).
      * \param[in] mdTimeStep             The MD time step.
-     * \param[in] numSharingSimulations  The number of simulations to share the bias across.
+     * \param[in] biasSharing            Pointer to object for sharing bias over simulations, can be nullptr
      * \param[in] biasInitFilename       Name of file to read PMF and target from.
      * \param[in] thisRankWillDoIO       Tells whether this MPI rank will do I/O (checkpointing, AWH output),
      * normally (only) the master rank does I/O.
@@ -166,10 +166,10 @@ public:
     Bias(int                            biasIndexInCollection,
          const AwhParams&               awhParams,
          const AwhBiasParams&           awhBiasParams,
-         const std::vector<DimParams>&  dimParams,
+         ArrayRef<const DimParams>      dimParams,
          double                         beta,
          double                         mdTimeStep,
-         int                            numSharingSimulations,
+         const BiasSharing*             biasSharing,
          const std::string&             biasInitFilename,
          ThisRankWillDoIO               thisRankWillDoIO,
          BiasParams::DisableUpdateSkips disableUpdateSkips = BiasParams::DisableUpdateSkips::no);
@@ -207,8 +207,6 @@ public:
      * energy lambda state dimensions this can be empty.
      * \param[out]    awhPotential   Bias potential.
      * \param[out]    potentialJump  Change in bias potential for this bias.
-     * \param[in]     commRecord     Struct for intra-simulation communication.
-     * \param[in]     ms             Struct for multi-simulation communication.
      * \param[in]     t              Time.
      * \param[in]     step           Time step.
      * \param[in]     seed           Random seed.
@@ -220,8 +218,6 @@ public:
                                                        ArrayRef<const double> neighborLambdaDhdl,
                                                        double*                awhPotential,
                                                        double*                potentialJump,
-                                                       const t_commrec*       commRecord,
-                                                       const gmx_multisim_t*  ms,
                                                        double                 t,
                                                        int64_t                step,
                                                        int64_t                seed,
@@ -279,7 +275,7 @@ public:
 
     /*! \brief Returns the dimension parameters.
      */
-    inline const std::vector<DimParams>& dimParams() const { return dimParams_; }
+    inline ArrayRef<const DimParams> dimParams() const { return dimParams_; }
 
     //! Returns the bias parameters
     inline const BiasParams& params() const { return params_; }
@@ -355,8 +351,9 @@ public:
      */
     bool hasFepLambdaDimension() const
     {
-        return std::any_of(std::begin(dimParams_), std::end(dimParams_),
-                           [](const auto& dimParam) { return dimParam.isFepLambdaDimension(); });
+        return std::any_of(std::begin(dimParams_), std::end(dimParams_), [](const auto& dimParam) {
+            return dimParam.isFepLambdaDimension();
+        });
     }
 
     /*! \brief

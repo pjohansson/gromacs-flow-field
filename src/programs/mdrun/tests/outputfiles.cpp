@@ -1,7 +1,7 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -81,7 +81,8 @@ TEST_P(OutputFiles, FilesArePresent)
     SCOPED_TRACE(
             formatString("Checking for presence of expected output files using "
                          "simulation '%s' with integrator '%s'",
-                         simulationName.c_str(), integrator.c_str()));
+                         simulationName.c_str(),
+                         integrator.c_str()));
 
     // Prepare the .tpr file
     {
@@ -98,9 +99,11 @@ TEST_P(OutputFiles, FilesArePresent)
     }
     // Check if expected files are present
     {
-        for (const auto& file : { runner_.fullPrecisionTrajectoryFileName_, runner_.logFileName_,
-                                  runner_.edrFileName_, fileManager_.getTemporaryFilePath("state.gro"),
-                                  fileManager_.getTemporaryFilePath("state.cpt") })
+        for (const auto& file : { runner_.fullPrecisionTrajectoryFileName_,
+                                  runner_.logFileName_,
+                                  runner_.edrFileName_,
+                                  runner_.groOutputFileName_,
+                                  runner_.cptOutputFileName_ })
         {
             EXPECT_TRUE(File::exists(file, File::returnFalseOnError))
                     << "File " << file << " was not found.";
@@ -108,10 +111,10 @@ TEST_P(OutputFiles, FilesArePresent)
     }
 }
 
-INSTANTIATE_TEST_CASE_P(Argon12,
-                        OutputFiles,
-                        ::testing::Combine(::testing::Values("argon12"),
-                                           ::testing::Values("md", "md-vv")));
+INSTANTIATE_TEST_SUITE_P(Argon12,
+                         OutputFiles,
+                         ::testing::Combine(::testing::Values("argon12"),
+                                            ::testing::Values("md", "md-vv")));
 
 } // namespace
 } // namespace test

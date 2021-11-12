@@ -96,8 +96,10 @@ std::vector<gmx::ExclusionBlock> offsetGmxBlock(std::vector<gmx::ExclusionBlock>
     // shift particle numbers by offset
     for (auto& localBlock : inBlock)
     {
-        std::transform(std::begin(localBlock.atomNumber), std::end(localBlock.atomNumber),
-                       std::begin(localBlock.atomNumber), [offset](auto i) { return i + offset; });
+        std::transform(std::begin(localBlock.atomNumber),
+                       std::end(localBlock.atomNumber),
+                       std::begin(localBlock.atomNumber),
+                       [offset](auto i) { return i + offset; });
     }
 
     return inBlock;

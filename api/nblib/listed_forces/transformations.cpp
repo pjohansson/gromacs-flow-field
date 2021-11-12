@@ -57,7 +57,8 @@ void sortInteractions(ListedInteractionData& interactions)
         using InteractionContainerType = std::decay_t<decltype(interactionElement)>;
         using InteractionType          = typename InteractionContainerType::type;
 
-        std::sort(begin(interactionElement.indices), end(interactionElement.indices),
+        std::sort(begin(interactionElement.indices),
+                  end(interactionElement.indices),
                   interactionSortKey<InteractionType>);
     };
 

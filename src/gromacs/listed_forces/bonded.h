@@ -4,7 +4,7 @@
  * Copyright (c) 1991-2000, University of Groningen, The Netherlands.
  * Copyright (c) 2001-2004, The GROMACS development team.
  * Copyright (c) 2013,2014,2015,2016,2017 by the GROMACS development team.
- * Copyright (c) 2018,2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2018,2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -56,14 +56,17 @@
 
 struct gmx_cmap_t;
 struct t_fcdata;
-struct t_mdatom;
 struct t_nrnb;
 struct t_pbc;
+struct t_disresdata;
+struct t_oriresdata;
 
 namespace gmx
 {
 template<typename EnumType, typename DataType, EnumType ArraySize>
 struct EnumerationArray;
+template<typename>
+class ArrayRef;
 } // namespace gmx
 
 /*! \brief Calculate bond-angle. No PBC is taken into account (use mol-shift) */
@@ -123,10 +126,12 @@ real cmap_dihs(int                 nbonds,
                rvec4               f[],
                rvec                fshift[],
                const struct t_pbc* pbc,
-               real gmx_unused lambda,
+               real gmx_unused     lambda,
                real gmx_unused* dvdlambda,
-               const t_mdatoms gmx_unused* md,
+               gmx::ArrayRef<const real> /*charge*/,
                t_fcdata gmx_unused* fcd,
+               t_disresdata gmx_unused* disresdata,
+               t_oriresdata gmx_unused* oriresdata,
                int gmx_unused* global_atom_index);
 
 /*! \brief For selecting which flavor of bonded kernel is used for simple bonded types */
@@ -168,18 +173,20 @@ static constexpr inline bool computeEnergyOrVirial(const BondedKernelFlavor flav
  * All pointers should be non-null, except for pbc and g which can be nullptr.
  * \returns the energy or 0 when \p bondedKernelFlavor did not request the energy.
  */
-real calculateSimpleBond(int                 ftype,
-                         int                 numForceatoms,
-                         const t_iatom       forceatoms[],
-                         const t_iparams     forceparams[],
-                         const rvec          x[],
-                         rvec4               f[],
-                         rvec                fshift[],
-                         const struct t_pbc* pbc,
-                         real                lambda,
-                         real*               dvdlambda,
-                         const t_mdatoms*    md,
-                         t_fcdata*           fcd,
+real calculateSimpleBond(int                       ftype,
+                         int                       numForceatoms,
+                         const t_iatom             forceatoms[],
+                         const t_iparams           forceparams[],
+                         const rvec                x[],
+                         rvec4                     f[],
+                         rvec                      fshift[],
+                         const struct t_pbc*       pbc,
+                         real                      lambda,
+                         real*                     dvdlambda,
+                         gmx::ArrayRef<const real> charge,
+                         t_fcdata*                 fcd,
+                         t_disresdata*             disresdata,
+                         t_oriresdata*             oriresdata,
                          int gmx_unused*    global_atom_index,
                          BondedKernelFlavor bondedKernelFlavor);
 

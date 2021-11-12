@@ -1,7 +1,7 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2012,2013,2014,2017,2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2012,2013,2014,2017,2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -46,6 +46,7 @@
 #include <vector>
 
 #include "gromacs/utility/arrayref.h"
+#include "gromacs/utility/basedefinitions.h"
 #include "gromacs/utility/flags.h"
 #include "gromacs/utility/gmxassert.h"
 #include "gromacs/utility/real.h"
@@ -289,10 +290,7 @@ class AnalysisDataPointSetInfo
 public:
     //! Construct point set data object with the given values.
     AnalysisDataPointSetInfo(int valueOffset, int valueCount, int dataSetIndex, int firstColumn) :
-        valueOffset_(valueOffset),
-        valueCount_(valueCount),
-        dataSetIndex_(dataSetIndex),
-        firstColumn_(firstColumn)
+        valueOffset_(valueOffset), valueCount_(valueCount), dataSetIndex_(dataSetIndex), firstColumn_(firstColumn)
     {
         GMX_ASSERT(valueOffset >= 0, "Negative value offsets are invalid");
         GMX_ASSERT(valueCount >= 0, "Negative value counts are invalid");

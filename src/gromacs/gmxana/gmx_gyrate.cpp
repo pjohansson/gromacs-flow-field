@@ -4,7 +4,7 @@
  * Copyright (c) 1991-2000, University of Groningen, The Netherlands.
  * Copyright (c) 2001-2004, The GROMACS development team.
  * Copyright (c) 2013,2014,2015,2016,2017 by the GROMACS development team.
- * Copyright (c) 2018,2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2018,2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -39,6 +39,7 @@
 
 #include <cmath>
 #include <cstring>
+#include <vector>
 
 #include "gromacs/commandline/pargs.h"
 #include "gromacs/commandline/viewit.h"
@@ -50,6 +51,7 @@
 #include "gromacs/gmxana/gstat.h"
 #include "gromacs/gmxana/princ.h"
 #include "gromacs/math/functions.h"
+#include "gromacs/math/units.h"
 #include "gromacs/math/utilities.h"
 #include "gromacs/math/vec.h"
 #include "gromacs/pbcutil/rmpbc.h"
@@ -120,15 +122,15 @@ static real calc_gyro(rvec     x[],
 
 static void calc_gyro_z(rvec x[], matrix box, int gnx, const int index[], t_atom atom[], int nz, real time, FILE* out)
 {
-    static dvec*   inertia = nullptr;
-    static double* tm      = nullptr;
-    int            i, ii, j, zi;
-    real           zf, w, sdet, e1, e2;
+    static std::vector<gmx::DVec> inertia;
+    static std::vector<double>    tm;
+    int                           i, ii, j, zi;
+    real                          zf, w, sdet, e1, e2;
 
-    if (inertia == nullptr)
+    if (inertia.empty())
     {
-        snew(inertia, nz);
-        snew(tm, nz);
+        inertia.resize(nz);
+        tm.resize(nz);
     }
 
     for (i = 0; i < nz; i++)
@@ -252,8 +254,8 @@ int gmx_gyrate(int argc, char* argv[])
     npargs = asize(pa);
     ppa    = add_acf_pargs(&npargs, pa);
 
-    if (!parse_common_args(&argc, argv, PCA_CAN_TIME | PCA_CAN_VIEW, NFILE, fnm, npargs, ppa,
-                           asize(desc), desc, 0, nullptr, &oenv))
+    if (!parse_common_args(
+                &argc, argv, PCA_CAN_TIME | PCA_CAN_VIEW, NFILE, fnm, npargs, ppa, asize(desc), desc, 0, nullptr, &oenv))
     {
         sfree(ppa);
         return 0;
@@ -299,18 +301,27 @@ int gmx_gyrate(int argc, char* argv[])
     t0 = t;
     if (bQ)
     {
-        out = xvgropen(ftp2fn(efXVG, NFILE, fnm), "Radius of Charge (total and around axes)",
-                       "Time (ps)", "Rg (nm)", oenv);
+        out = xvgropen(ftp2fn(efXVG, NFILE, fnm),
+                       "Radius of Charge (total and around axes)",
+                       "Time (ps)",
+                       "Rg (nm)",
+                       oenv);
     }
     else if (bMOI)
     {
-        out = xvgropen(ftp2fn(efXVG, NFILE, fnm), "Moments of inertia (total and around axes)",
-                       "Time (ps)", "I (a.m.u. nm\\S2\\N)", oenv);
+        out = xvgropen(ftp2fn(efXVG, NFILE, fnm),
+                       "Moments of inertia (total and around axes)",
+                       "Time (ps)",
+                       "I (a.m.u. nm\\S2\\N)",
+                       oenv);
     }
     else
     {
-        out = xvgropen(ftp2fn(efXVG, NFILE, fnm), "Radius of gyration (total and around axes)",
-                       "Time (ps)", "Rg (nm)", oenv);
+        out = xvgropen(ftp2fn(efXVG, NFILE, fnm),
+                       "Radius of gyration (total and around axes)",
+                       "Time (ps)",
+                       "Rg (nm)",
+                       oenv);
     }
     if (bMOI)
     {
@@ -347,8 +358,8 @@ int gmx_gyrate(int argc, char* argv[])
             tm = sub_xcm(nz == 0 ? x_s : x, nam, index + mol * nam, top.atoms.atom, xcm, bQ);
             if (nz == 0)
             {
-                gyro += calc_gyro(x_s, nam, index + mol * nam, top.atoms.atom, tm, gvec1, d1, bQ,
-                                  bRot, bMOI, trans);
+                gyro += calc_gyro(
+                        x_s, nam, index + mol * nam, top.atoms.atom, tm, gvec1, d1, bQ, bRot, bMOI, trans);
             }
             else
             {
@@ -401,8 +412,15 @@ int gmx_gyrate(int argc, char* argv[])
     {
         int mode = eacVector;
 
-        do_autocorr(opt2fn("-acf", NFILE, fnm), oenv, "Moment of inertia vector ACF", j, 3,
-                    moi_trans, (t - t0) / j, mode, FALSE);
+        do_autocorr(opt2fn("-acf", NFILE, fnm),
+                    oenv,
+                    "Moment of inertia vector ACF",
+                    j,
+                    3,
+                    moi_trans,
+                    (t - t0) / j,
+                    mode,
+                    FALSE);
         do_view(oenv, opt2fn("-acf", NFILE, fnm), "-nxy");
     }
 

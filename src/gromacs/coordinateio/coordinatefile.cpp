@@ -1,7 +1,7 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -346,16 +346,24 @@ static t_trxstatus* openTNG(const std::string& name, const Selection& sel, const
     if (sel.isValid())
     {
         GMX_ASSERT(sel.hasOnlyAtoms(), "Can only work with selections consisting out of atoms");
-        return trjtools_gmx_prepare_tng_writing(name.c_str(), filemode[0],
+        return trjtools_gmx_prepare_tng_writing(name.c_str(),
+                                                filemode[0],
                                                 nullptr, // infile_, //how to get the input file here?
-                                                nullptr, sel.atomCount(), mtop, sel.atomIndices(),
+                                                nullptr,
+                                                sel.atomCount(),
+                                                mtop,
+                                                sel.atomIndices(),
                                                 sel.name());
     }
     else
     {
-        return trjtools_gmx_prepare_tng_writing(name.c_str(), filemode[0],
+        return trjtools_gmx_prepare_tng_writing(name.c_str(),
+                                                filemode[0],
                                                 nullptr, // infile_, //how to get the input file here?
-                                                nullptr, mtop->natoms, mtop, get_atom_index(mtop),
+                                                nullptr,
+                                                mtop->natoms,
+                                                mtop,
+                                                get_atom_index(*mtop),
                                                 "System");
     }
 }
@@ -400,8 +408,8 @@ void TrajectoryFrameWriter::prepareAndWriteFrame(const int framenumber, const t_
         {
             localF_.resize(input.natoms);
         }
-        deepCopy_t_trxframe(input, &local, localX_.data(), localV_.data(), localF_.data(),
-                            localIndex_.data());
+        deepCopy_t_trxframe(
+                input, &local, localX_.data(), localV_.data(), localF_.data(), localIndex_.data());
         for (const auto& outputAdapter : outputAdapters_.getAdapters())
         {
             if (outputAdapter)

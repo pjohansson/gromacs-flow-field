@@ -1,7 +1,7 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2015,2016,2017,2018,2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2015,2016,2017,2018,2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -76,10 +76,7 @@ class SelectionOptionBehavior::Impl
 {
 public:
     Impl(SelectionCollection* selections, ITopologyProvider* topologyProvider) :
-        selections_(*selections),
-        topologyProvider_(*topologyProvider),
-        manager_(selections),
-        grps_(nullptr)
+        selections_(*selections), topologyProvider_(*topologyProvider), manager_(selections), grps_(nullptr)
     {
     }
     ~Impl()
@@ -148,7 +145,7 @@ public:
         getMassesIfRequired(top);
     }
 
-    void getMassesIfRequired(gmx_mtop_t* top)
+    void getMassesIfRequired(gmx_mtop_t* top) const
     {
         const bool massRequired = selections_.requiredTopologyProperties().needsMasses;
         if (!massRequired)
@@ -193,7 +190,7 @@ SelectionOptionBehavior::~SelectionOptionBehavior() {}
 void SelectionOptionBehavior::initOptions(IOptionsContainer* options)
 {
     options->addOption(FileNameOption("n")
-                               .filetype(eftIndex)
+                               .filetype(OptionFileType::Index)
                                .inputFile()
                                .store(&impl_->ndxfile_)
                                .defaultBasename("index")

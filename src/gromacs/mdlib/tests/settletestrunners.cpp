@@ -1,7 +1,7 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2018,2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2018,2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -65,31 +65,25 @@ void SettleHostTestRunner::applySettle(SettleTestData*    testData,
 {
     SettleData settled(testData->mtop_);
 
-    settled.setConstraints(testData->idef_->il[F_SETTLE], testData->numAtoms_,
-                           testData->masses_.data(), testData->inverseMasses_.data());
+    settled.setConstraints(
+            testData->idef_->il[F_SETTLE], testData->numAtoms_, testData->masses_, testData->inverseMasses_);
 
     bool errorOccured;
     int  numThreads  = 1;
     int  threadIndex = 0;
-    csettle(settled, numThreads, threadIndex, &pbc, testData->x_.arrayRefWithPadding(),
-            testData->xPrime_.arrayRefWithPadding(), testData->reciprocalTimeStep_,
+    csettle(settled,
+            numThreads,
+            threadIndex,
+            &pbc,
+            testData->x_.arrayRefWithPadding(),
+            testData->xPrime_.arrayRefWithPadding(),
+            testData->reciprocalTimeStep_,
             updateVelocities ? testData->v_.arrayRefWithPadding() : ArrayRefWithPadding<RVec>(),
-            calcVirial, testData->virial_, &errorOccured);
+            calcVirial,
+            testData->virial_,
+            &errorOccured);
     EXPECT_FALSE(errorOccured) << testDescription;
 }
 
-#if !GMX_GPU_CUDA
-
-void SettleDeviceTestRunner::applySettle(SettleTestData* /* testData */,
-                                         const t_pbc /* pbc */,
-                                         const bool /* updateVelocities */,
-                                         const bool /* calcVirial */,
-                                         const std::string& /* testDescription */)
-{
-    GMX_UNUSED_VALUE(testDevice_);
-    FAIL() << "Dummy SETTLE GPU function was called instead of the real one in the SETTLE test.";
-}
-
-#endif
 } // namespace test
 } // namespace gmx

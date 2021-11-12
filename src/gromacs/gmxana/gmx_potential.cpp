@@ -4,7 +4,7 @@
  * Copyright (c) 1991-2000, University of Groningen, The Netherlands.
  * Copyright (c) 2001-2004, The GROMACS development team.
  * Copyright (c) 2013,2014,2015,2016,2017 by the GROMACS development team.
- * Copyright (c) 2018,2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2018,2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -48,6 +48,7 @@
 #include "gromacs/gmxana/gmx_ana.h"
 #include "gromacs/gmxana/princ.h"
 #include "gromacs/math/functions.h"
+#include "gromacs/math/units.h"
 #include "gromacs/math/utilities.h"
 #include "gromacs/math/vec.h"
 #include "gromacs/pbcutil/rmpbc.h"
@@ -72,11 +73,9 @@
 /* This probably sucks but it seems to work.                                */
 /****************************************************************************/
 
-static int ce = 0, cb = 0;
-
 /* this routine integrates the array data and returns the resulting array */
 /* routine uses simple trapezoid rule                                     */
-static void p_integrate(double* result, const double data[], int ndata, double slWidth)
+static void p_integrate(double* result, const double data[], int ndata, double slWidth, int cb, int ce)
 {
     int    i, slice;
     double sum;
@@ -116,6 +115,8 @@ static void calc_potential(const char*             fn,
                            double                  fudge_z,
                            gmx_bool                bSpherical,
                            gmx_bool                bCorrect,
+                           int                     cb,
+                           int                     ce,
                            const gmx_output_env_t* oenv)
 {
     rvec*        x0;     /* coordinates without pbc */
@@ -194,7 +195,8 @@ static void calc_potential(const char*             fn,
                 gmx_fatal(FARGS,
                           "You selected a group with %d atoms, but only %d atoms\n"
                           "were found in the trajectory.\n",
-                          gnx[n], natoms);
+                          gnx[n],
+                          natoms);
             }
             for (i = 0; i < gnx[n]; i++) /* loop over all atoms in index file */
             {
@@ -315,7 +317,7 @@ static void calc_potential(const char*             fn,
     for (n = 0; n < nr_grps; n++)
     {
         /* integrate twice to get field and potential */
-        p_integrate((*slField)[n], (*slCharge)[n], *nslices, *slWidth);
+        p_integrate((*slField)[n], (*slCharge)[n], *nslices, *slWidth, cb, ce);
     }
 
 
@@ -346,7 +348,7 @@ static void calc_potential(const char*             fn,
 
     for (n = 0; n < nr_grps; n++)
     {
-        p_integrate((*slPotential)[n], (*slField)[n], *nslices, *slWidth);
+        p_integrate((*slPotential)[n], (*slField)[n], *nslices, *slWidth, cb, ce);
     }
 
     /* Now correct for eps0 and in spherical case for r*/
@@ -380,6 +382,8 @@ static void plot_potential(double*                 potential[],
                            int                     nr_grps,
                            const char* const       grpname[],
                            double                  slWidth,
+                           int                     cb,
+                           int                     ce,
                            const gmx_output_env_t* oenv)
 {
     FILE *pot,     /* xvgr file with potential */
@@ -441,6 +445,8 @@ int gmx_potential(int argc, char* argv[])
     static gmx_bool    bSpherical = FALSE; /* default is bilayer types   */
     static real        fudge_z    = 0;     /* translate coordinates      */
     static gmx_bool    bCorrect   = false;
+    int                cb         = 0;
+    int                ce         = 0;
     t_pargs            pa[]       = {
         { "-d",
           FALSE,
@@ -499,8 +505,8 @@ int gmx_potential(int argc, char* argv[])
 
 #define NFILE asize(fnm)
 
-    if (!parse_common_args(&argc, argv, PCA_CAN_VIEW | PCA_CAN_TIME, NFILE, fnm, asize(pa), pa,
-                           asize(desc), desc, asize(bugs), bugs, &oenv))
+    if (!parse_common_args(
+                &argc, argv, PCA_CAN_VIEW | PCA_CAN_TIME, NFILE, fnm, asize(pa), pa, asize(desc), desc, asize(bugs), bugs, &oenv))
     {
         return 0;
     }
@@ -517,11 +523,38 @@ int gmx_potential(int argc, char* argv[])
     rd_index(ftp2fn(efNDX, NFILE, fnm), ngrps, ngx, index, grpname);
 
 
-    calc_potential(ftp2fn(efTRX, NFILE, fnm), index, ngx, &potential, &charge, &field, &nslices,
-                   top, pbcType, axis, ngrps, &slWidth, fudge_z, bSpherical, bCorrect, oenv);
+    calc_potential(ftp2fn(efTRX, NFILE, fnm),
+                   index,
+                   ngx,
+                   &potential,
+                   &charge,
+                   &field,
+                   &nslices,
+                   top,
+                   pbcType,
+                   axis,
+                   ngrps,
+                   &slWidth,
+                   fudge_z,
+                   bSpherical,
+                   bCorrect,
+                   cb,
+                   ce,
+                   oenv);
 
-    plot_potential(potential, charge, field, opt2fn("-o", NFILE, fnm), opt2fn("-oc", NFILE, fnm),
-                   opt2fn("-of", NFILE, fnm), nslices, ngrps, grpname, slWidth, oenv);
+    plot_potential(potential,
+                   charge,
+                   field,
+                   opt2fn("-o", NFILE, fnm),
+                   opt2fn("-oc", NFILE, fnm),
+                   opt2fn("-of", NFILE, fnm),
+                   nslices,
+                   ngrps,
+                   grpname,
+                   slWidth,
+                   cb,
+                   ce,
+                   oenv);
 
     do_view(oenv, opt2fn("-o", NFILE, fnm), nullptr);  /* view xvgr file */
     do_view(oenv, opt2fn("-oc", NFILE, fnm), nullptr); /* view xvgr file */

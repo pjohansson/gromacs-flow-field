@@ -1,7 +1,7 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2016,2017,2018,2019, by the GROMACS development team, led by
+ * Copyright (c) 2016,2017,2018,2019,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -46,15 +46,15 @@
 #ifndef GMX_MDTYPES_IFORCEPROVIDER_H
 #define GMX_MDTYPES_IFORCEPROVIDER_H
 
+#include <memory>
+
 #include "gromacs/math/vec.h"
 #include "gromacs/utility/arrayref.h"
-#include "gromacs/utility/classhelpers.h"
 #include "gromacs/utility/gmxassert.h"
 
 struct gmx_enerdata_t;
 struct t_commrec;
 struct t_forcerec;
-struct t_mdatoms;
 
 namespace gmx
 {
@@ -81,28 +81,31 @@ class ForceProviderInput
 public:
     /*! \brief Constructor assembles all necessary force provider input data
      *
-     * \param[in]  x        Atomic positions
-     * \param[in]  cr       Communication record structure
-     * \param[in]  box      The simulation box
-     * \param[in]  time     The current time in the simulation
-     * \param[in]  mdatoms  The atomic data
+     * \param[in]  x        Atomic positions.
+     * \param[in]  homenr   Number of atoms on the domain.
+     * \param[in]  chargeA  Atomic charges for atoms on the domain.
+     * \param[in]  massT    Atomic masses for atoms on the domain.
+     * \param[in]  time     The current time in the simulation.
+     * \param[in]  box      The simulation box.
+     * \param[in]  cr       Communication record structure.
      */
     ForceProviderInput(ArrayRef<const RVec> x,
-                       const t_mdatoms&     mdatoms,
+                       int                  homenr,
+                       ArrayRef<const real> chargeA,
+                       ArrayRef<const real> massT,
                        double               time,
                        const matrix         box,
                        const t_commrec&     cr) :
-        x_(x),
-        mdatoms_(mdatoms),
-        t_(time),
-        cr_(cr)
+        x_(x), homenr_(homenr), chargeA_(chargeA), massT_(massT), t_(time), cr_(cr)
     {
         copy_mat(box, box_);
     }
 
-    ArrayRef<const RVec> x_;       //!< The atomic positions
-    const t_mdatoms&     mdatoms_; //!< Atomic data
-    double               t_;       //!< The current time in the simulation
+    ArrayRef<const RVec> x_; //!< The atomic positions
+    int                  homenr_;
+    ArrayRef<const real> chargeA_;
+    ArrayRef<const real> massT_;
+    double               t_; //!< The current time in the simulation
     matrix               box_ = { { 0, 0, 0 }, { 0, 0, 0 }, { 0, 0, 0 } }; //!< The simulation box
     const t_commrec&     cr_; //!< Communication record structure
 };
@@ -130,8 +133,7 @@ public:
      * \param[in,out]  enerd            Structure containing energy data
      */
     ForceProviderOutput(ForceWithVirial* forceWithVirial, gmx_enerdata_t* enerd) :
-        forceWithVirial_(makeRefFromPointer(forceWithVirial)),
-        enerd_(makeRefFromPointer(enerd))
+        forceWithVirial_(makeRefFromPointer(forceWithVirial)), enerd_(makeRefFromPointer(enerd))
     {
     }
 
@@ -200,7 +202,7 @@ public:
 private:
     class Impl;
 
-    gmx::PrivateImplPointer<Impl> impl_;
+    std::unique_ptr<Impl> impl_;
 };
 
 } // namespace gmx

@@ -4,7 +4,7 @@
  * Copyright (c) 1991-2000, University of Groningen, The Netherlands.
  * Copyright (c) 2001-2004, The GROMACS development team.
  * Copyright (c) 2013,2014,2015,2016,2017 by the GROMACS development team.
- * Copyright (c) 2018,2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2018,2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -119,8 +119,7 @@ static void low_warning(warninp_t wi, const char* wtype, int n, const char* s)
     {
         if (wi->lineno != -1)
         {
-            fprintf(stderr, "\n%s %d [file %s, line %d]:\n%s\n\n", wtype, n, wi->filenm.c_str(),
-                    wi->lineno, temp2);
+            fprintf(stderr, "\n%s %d [file %s, line %d]:\n%s\n\n", wtype, n, wi->filenm.c_str(), wi->lineno, temp2);
         }
         else
         {
@@ -189,8 +188,13 @@ static void print_warn_count(const char* type, int n)
     print_warn_count("note", wi->nwarn_note);
     print_warn_count("warning", wi->nwarn_warn);
 
-    gmx_fatal(f_errno, file, line, "There %s %d error%s in input file(s)",
-              (wi->nwarn_error == 1) ? "was" : "were", wi->nwarn_error, (wi->nwarn_error == 1) ? "" : "s");
+    gmx_fatal(f_errno,
+              file,
+              line,
+              "There %s %d error%s in input file(s)",
+              (wi->nwarn_error == 1) ? "was" : "were",
+              wi->nwarn_error,
+              (wi->nwarn_error == 1) ? "" : "s");
 }
 
 void check_warning_error(warninp_t wi, int f_errno, const char* file, int line)
@@ -229,7 +233,9 @@ void done_warning(warninp_t wi, int f_errno, const char* file, int line)
 
     if (wi->maxwarn >= 0 && wi->nwarn_warn > wi->maxwarn)
     {
-        gmx_fatal(f_errno, file, line,
+        gmx_fatal(f_errno,
+                  file,
+                  line,
                   "Too many warnings (%d).\n"
                   "If you are sure all warnings are harmless, use the -maxwarn option.",
                   wi->nwarn_warn);
@@ -243,7 +249,7 @@ void free_warning(warninp_t wi)
     delete wi;
 }
 
-void _too_few(warninp_t wi, const char* fn, int line)
+void too_few_function(warninp_t wi, const char* fn, int line)
 {
     char buf[STRLEN];
 
@@ -251,7 +257,7 @@ void _too_few(warninp_t wi, const char* fn, int line)
     warning(wi, buf);
 }
 
-void _incorrect_n_param(warninp_t wi, const char* fn, int line)
+void incorrect_n_param_function(warninp_t wi, const char* fn, int line)
 {
     char buf[STRLEN];
 

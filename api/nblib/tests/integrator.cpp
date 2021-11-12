@@ -42,12 +42,14 @@
  * \author Sebastian Keller <keller@cscs.ch>
  * \author Artem Zhmurov <zhmurov@gmail.com>
  */
-#include "nblib/integrator.h"
 #include "gromacs/pbcutil/pbc.h"
+#include "gromacs/utility/arrayref.h"
+#include "nblib/integrator.h"
 #include "nblib/molecules.h"
 #include "nblib/particletype.h"
 #include "nblib/simulationstate.h"
 #include "nblib/topology.h"
+#include "nblib/vector.h"
 
 #include "testutils/testasserts.h"
 
@@ -113,15 +115,21 @@ TEST(NBlibTest, IntegratorWorks)
                         << formatString(
                                    "Coordinate {} of atom {} is different from analytical solution "
                                    "at step {}.",
-                                   d, i, step);
+                                   d,
+                                   i,
+                                   step);
 
                 EXPECT_REAL_EQ_TOL(vAnalytical[d], simulationState.velocities()[i][d], tolerance)
                         << formatString(
                                    "Velocity component {} of atom {} is different from analytical "
                                    "solution at step {}.",
-                                   d, i, step);
+                                   d,
+                                   i,
+                                   step);
             }
-            integrator.integrate(dt, simulationState.coordinates(), simulationState.velocities(),
+            integrator.integrate(dt,
+                                 simulationState.coordinates(),
+                                 simulationState.velocities(),
                                  simulationState.forces());
         }
     }

@@ -50,9 +50,6 @@
 // can be included via their respective headers.
 #include "nblib/nblib.h"
 
-// Main function to write the MD program.
-int main(); // Keep the compiler happy
-
 int main()
 {
     // Create an argon particle with a name and a mass.
@@ -110,26 +107,34 @@ int main()
     // Some performance flags can be set a run time
     options.nbnxmSimd = nblib::SimdKernels::SimdNo;
     // The force calculator contains all the data needed to compute forces.
-    nblib::ForceCalculator forceCalculator(simState, options);
+    auto forceCalculator = nblib::setupGmxForceCalculatorCpu(simState.topology(), options);
+    // build the pairlist
+    forceCalculator->updatePairlist(simState.coordinates(), simState.box());
     // Integration requires masses, positions, and forces
     nblib::LeapFrog integrator(simState.topology(), simState.box());
     // Print some diagnostic info
     printf("initial forces on particle 0: x %4f y %4f z %4f\n", forces[0][0], forces[0][1], forces[0][2]);
     // The forces are computed for the user
     gmx::ArrayRef<nblib::Vec3> userForces(simState.forces());
-    forceCalculator.compute(simState.coordinates(), userForces);
+    forceCalculator->compute(simState.coordinates(), simState.box(), userForces);
     // Print some diagnostic info
-    printf("  final forces on particle 0: x %4f y %4f z %4f\n", userForces[0][0], userForces[0][1],
+    printf("  final forces on particle 0: x %4f y %4f z %4f\n",
+           userForces[0][0],
+           userForces[0][1],
            userForces[0][2]);
     // User may modify forces stored in simState.forces() if needed
     // Print some diagnostic info
-    printf("initial position of particle 0: x %4f y %4f z %4f\n", simState.coordinates()[0][0],
-           simState.coordinates()[0][1], simState.coordinates()[0][2]);
+    printf("initial position of particle 0: x %4f y %4f z %4f\n",
+           simState.coordinates()[0][0],
+           simState.coordinates()[0][1],
+           simState.coordinates()[0][2]);
     // Integrate with a time step of 1 fs
     integrator.integrate(1.0, simState.coordinates(), simState.velocities(), simState.forces());
     // Print some diagnostic info
 
-    printf("  final position of particle 0: x %4f y %4f z %4f\n", simState.coordinates()[0][0],
-           simState.coordinates()[0][1], simState.coordinates()[0][2]);
+    printf("  final position of particle 0: x %4f y %4f z %4f\n",
+           simState.coordinates()[0][0],
+           simState.coordinates()[0][1],
+           simState.coordinates()[0][2]);
     return 0;
 }

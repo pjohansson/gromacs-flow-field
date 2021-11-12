@@ -1,7 +1,7 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -58,7 +58,7 @@
 #include "gromacs/options/treesupport.h"
 #include "gromacs/utility/keyvaluetreebuilder.h"
 #include "gromacs/utility/keyvaluetreetransform.h"
-#include "gromacs/utility/mdmodulenotification.h"
+#include "gromacs/utility/mdmodulesnotifiers.h"
 #include "gromacs/utility/real.h"
 #include "gromacs/utility/smalloc.h"
 #include "gromacs/utility/stringcompare.h"
@@ -78,8 +78,7 @@ class DensityFittingTest : public ::testing::Test
 public:
     void addMdpOptionDensityFittingActive()
     {
-        mdpValueBuilder_.rootObject().addValue("density-guided-simulation-active",
-                                               std::string("yes"));
+        mdpValueBuilder_.rootObject().addValue("density-guided-simulation-active", std::string("yes"));
     }
 
     void addMdpOptionReferenceDensity()

@@ -4,7 +4,7 @@
  * Copyright (c) 1991-2000, University of Groningen, The Netherlands.
  * Copyright (c) 2001-2004, The GROMACS development team.
  * Copyright (c) 2013,2014,2015,2016,2018 by the GROMACS development team.
- * Copyright (c) 2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -37,15 +37,14 @@
  */
 #include "gmxpre.h"
 
-#include "utilities.h"
+#include "gromacs/math/utilities.h"
+#include "gromacs/utility/real.h"
 
 #include "config.h"
 
-#include <cassert>
-#include <climits>
+#include <cstdint>
 #include <cmath>
 
-#include <algorithm>
 #include <cfenv>
 
 //! Floating point exception set that we use and care about
@@ -63,13 +62,13 @@ bool gmx_numzero(double a)
 }
 
 
-gmx_bool check_int_multiply_for_overflow(int64_t a, int64_t b, int64_t* result)
+bool check_int_multiply_for_overflow(int64_t a, int64_t b, int64_t* result)
 {
     int64_t sign = 1;
     if ((0 == a) || (0 == b))
     {
         *result = 0;
-        return TRUE;
+        return true;
     }
     if (a < 0)
     {
@@ -84,10 +83,10 @@ gmx_bool check_int_multiply_for_overflow(int64_t a, int64_t b, int64_t* result)
     if (INT64_MAX / b < a)
     {
         *result = (sign > 0) ? INT64_MAX : INT64_MIN;
-        return FALSE;
+        return false;
     }
     *result = sign * a * b;
-    return TRUE;
+    return true;
 }
 
 int gmx_feenableexcept()
@@ -138,5 +137,18 @@ int gmx_fedisableexcept()
     return fesetenv(&fenv);
 #else
     return -1;
+#endif
+}
+
+bool gmxShouldEnableFPExceptions()
+{
+#if defined(NDEBUG)
+    return false; // Release build
+#elif ((defined __clang__ || (defined(__GNUC__) && __GNUC__ == 7)) && defined __OPTIMIZE__)
+    return false; // Buggy compiler
+#elif GMX_GPU_SYCL
+    return false; // avoid spurious FPE during SYCL JIT
+#else
+    return true;
 #endif
 }

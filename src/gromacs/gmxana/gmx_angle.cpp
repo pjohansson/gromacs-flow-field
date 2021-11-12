@@ -4,7 +4,7 @@
  * Copyright (c) 1991-2000, University of Groningen, The Netherlands.
  * Copyright (c) 2001-2004, The GROMACS development team.
  * Copyright (c) 2013,2014,2015,2016,2017 by the GROMACS development team.
- * Copyright (c) 2018,2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2018,2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -52,6 +52,7 @@
 #include "gromacs/gmxana/gstat.h"
 #include "gromacs/math/functions.h"
 #include "gromacs/math/units.h"
+#include "gromacs/math/utilities.h"
 #include "gromacs/math/vec.h"
 #include "gromacs/topology/index.h"
 #include "gromacs/utility/arraysize.h"
@@ -192,8 +193,8 @@ int gmx_g_angle(int argc, char* argv[])
 
     npargs = asize(pa);
     ppa    = add_acf_pargs(&npargs, pa);
-    if (!parse_common_args(&argc, argv, PCA_CAN_VIEW | PCA_CAN_TIME, NFILE, fnm, npargs, ppa,
-                           asize(desc), desc, asize(bugs), bugs, &oenv))
+    if (!parse_common_args(
+                &argc, argv, PCA_CAN_VIEW | PCA_CAN_TIME, NFILE, fnm, npargs, ppa, asize(desc), desc, asize(bugs), bugs, &oenv))
     {
         sfree(ppa);
         return 0;
@@ -240,7 +241,8 @@ int gmx_g_angle(int argc, char* argv[])
         gmx_fatal(FARGS,
                   "number of index elements not multiple of %d, "
                   "these can not be %s\n",
-                  mult, (mult == 3) ? "angle triplets" : "dihedral quadruplets");
+                  mult,
+                  (mult == 3) ? "angle triplets" : "dihedral quadruplets");
     }
 
 
@@ -287,9 +289,21 @@ int gmx_g_angle(int argc, char* argv[])
 
     snew(angstat, maxangstat);
 
-    read_ang_dih(ftp2fn(efTRX, NFILE, fnm), (mult == 3),
-                 bALL || bCorr || bTrans || opt2bSet("-or", NFILE, fnm), bRb, bPBC, maxangstat,
-                 angstat, &nframes, &time, isize, index, &trans_frac, &aver_angle, dih, oenv);
+    read_ang_dih(ftp2fn(efTRX, NFILE, fnm),
+                 (mult == 3),
+                 bALL || bCorr || bTrans || opt2bSet("-or", NFILE, fnm),
+                 bRb,
+                 bPBC,
+                 maxangstat,
+                 angstat,
+                 &nframes,
+                 &time,
+                 isize,
+                 index,
+                 &trans_frac,
+                 &aver_angle,
+                 dih,
+                 oenv);
 
     dt = (time[nframes - 1] - time[0]) / (nframes - 1);
 
@@ -299,7 +313,7 @@ int gmx_g_angle(int argc, char* argv[])
         out = xvgropen(opt2fn("-ov", NFILE, fnm), title, "Time (ps)", "Angle (degrees)", oenv);
         for (i = 0; (i < nframes); i++)
         {
-            fprintf(out, "%10.5f  %8.3f", time[i], aver_angle[i] * RAD2DEG);
+            fprintf(out, "%10.5f  %8.3f", time[i], aver_angle[i] * gmx::c_rad2Deg);
             if (bALL)
             {
                 for (j = 0; (j < nangles); j++)
@@ -307,11 +321,11 @@ int gmx_g_angle(int argc, char* argv[])
                     if (bPBC)
                     {
                         real dd = dih[j][i];
-                        fprintf(out, "  %8.3f", std::atan2(std::sin(dd), std::cos(dd)) * RAD2DEG);
+                        fprintf(out, "  %8.3f", std::atan2(std::sin(dd), std::cos(dd)) * gmx::c_rad2Deg);
                     }
                     else
                     {
-                        fprintf(out, "  %8.3f", dih[j][i] * RAD2DEG);
+                        fprintf(out, "  %8.3f", dih[j][i] * gmx::c_rad2Deg);
                     }
                 }
             }
@@ -343,8 +357,8 @@ int gmx_g_angle(int argc, char* argv[])
 
     if (bTrans)
     {
-        ana_dih_trans(opt2fn("-ot", NFILE, fnm), opt2fn("-oh", NFILE, fnm), dih, nframes, nangles,
-                      grpname, time, bRb, oenv);
+        ana_dih_trans(
+                opt2fn("-ot", NFILE, fnm), opt2fn("-oh", NFILE, fnm), dih, nframes, nangles, grpname, time, bRb, oenv);
     }
 
     if (bCorr)
@@ -359,7 +373,7 @@ int gmx_g_angle(int argc, char* argv[])
 
             if (bChandler)
             {
-                real     dval, sixty = DEG2RAD * 60;
+                real     dval, sixty = gmx::c_deg2Rad * 60;
                 gmx_bool bTest;
 
                 for (i = 0; (i < nangles); i++)
@@ -394,8 +408,15 @@ int gmx_g_angle(int argc, char* argv[])
             {
                 mode = eacCos;
             }
-            do_autocorr(opt2fn("-oc", NFILE, fnm), oenv, "Dihedral Autocorrelation Function",
-                        nframes, nangles, dih, dt, mode, bAverCorr);
+            do_autocorr(opt2fn("-oc", NFILE, fnm),
+                        oenv,
+                        "Dihedral Autocorrelation Function",
+                        nframes,
+                        nangles,
+                        dih,
+                        dt,
+                        mode,
+                        bAverCorr);
         }
     }
 
@@ -435,8 +456,8 @@ int gmx_g_angle(int argc, char* argv[])
     }
     aver /= nframes;
     double aversig = correctRadianAngleRange(aver);
-    aversig *= RAD2DEG;
-    aver *= RAD2DEG;
+    aversig *= gmx::c_rad2Deg;
+    aver *= gmx::c_rad2Deg;
     printf(" < angle >  = %g\n", aversig);
 
     if (mult == 3)

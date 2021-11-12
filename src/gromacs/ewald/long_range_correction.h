@@ -4,7 +4,7 @@
  * Copyright (c) 1991-2000, University of Groningen, The Netherlands.
  * Copyright (c) 2001-2004, The GROMACS development team.
  * Copyright (c) 2013,2014,2015,2016,2017 by the GROMACS development team.
- * Copyright (c) 2018,2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2018,2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -52,33 +52,42 @@
 #define GMX_EWALD_LONG_RANGE_CORRECTION_H
 
 #include "gromacs/math/vectypes.h"
-#include "gromacs/topology/block.h"
-#include "gromacs/utility/basedefinitions.h"
 #include "gromacs/utility/real.h"
 
 struct t_commrec;
 struct t_forcerec;
 struct t_inputrec;
+enum class EwaldGeometry : int;
+
+namespace gmx
+{
+template<typename>
+class ArrayRef;
+}
 
 /*! \brief Calculate long-range Ewald correction terms.
  *
  * Calculate correction for electrostatic surface dipole terms.
  */
-void ewald_LRcorrection(int               numAtomsLocal,
-                        const t_commrec*  cr,
-                        int               numThreads,
-                        int               thread,
-                        const t_forcerec& fr,
-                        const t_inputrec& ir,
-                        const real*       chargeA,
-                        const real*       chargeB,
-                        gmx_bool          bHaveChargePerturbed,
-                        const rvec        x[],
-                        const matrix      box,
-                        const rvec        mu_tot[],
-                        rvec*             f,
-                        real*             Vcorr_q,
-                        real              lambda_q,
-                        real*             dvdlambda_q);
+void ewald_LRcorrection(int                            numAtomsLocal,
+                        const t_commrec*               commrec,
+                        int                            numThreads,
+                        int                            thread,
+                        real                           epsilonR,
+                        gmx::ArrayRef<const double>    qsum,
+                        EwaldGeometry                  ewaldGeometry,
+                        real                           epsilonSurface,
+                        bool                           havePbcXY2Walls,
+                        real                           wallEwaldZfac,
+                        gmx::ArrayRef<const real>      chargeA,
+                        gmx::ArrayRef<const real>      chargeB,
+                        bool                           bHaveChargePerturbed,
+                        gmx::ArrayRef<const gmx::RVec> coords,
+                        const matrix                   box,
+                        gmx::ArrayRef<const gmx::RVec> mu_tot,
+                        gmx::ArrayRef<gmx::RVec>       forces,
+                        real*                          Vcorr_q,
+                        real                           lambda_q,
+                        real*                          dvdlambda_q);
 
 #endif

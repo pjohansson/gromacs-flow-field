@@ -1,7 +1,7 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2020, by the GROMACS development team, led by
+ * Copyright (c) 2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -104,7 +104,8 @@ TEST_P(FreeEnergyReferenceTest, WithinTolerances)
         fprintf(stdout,
                 "The FEP tests cannot run with %d ranks.\n"
                 "The maximum number of ranks supported is %d.",
-                numRanksAvailable, maxNumRanks);
+                numRanksAvailable,
+                maxNumRanks);
         return;
     }
 
@@ -173,18 +174,18 @@ TEST_P(FreeEnergyReferenceTest, WithinTolerances)
     // Check that the trajectories agree with the refdata within tolerance.
     if (testTwoTrajectoryFrames)
     {
-        checkTrajectoryAgainstReferenceData(simulationTrajectoryFileName, trajectoryComparison,
-                                            &rootChecker, MaxNumFrames(2));
+        checkTrajectoryAgainstReferenceData(
+                simulationTrajectoryFileName, trajectoryComparison, &rootChecker, MaxNumFrames(2));
     }
     else if (testOneTrajectoryFrame)
     {
-        checkTrajectoryAgainstReferenceData(simulationTrajectoryFileName, trajectoryComparison,
-                                            &rootChecker, MaxNumFrames(1));
+        checkTrajectoryAgainstReferenceData(
+                simulationTrajectoryFileName, trajectoryComparison, &rootChecker, MaxNumFrames(1));
     }
     else
     {
-        checkTrajectoryAgainstReferenceData(simulationTrajectoryFileName, trajectoryComparison,
-                                            &rootChecker, MaxNumFrames(0));
+        checkTrajectoryAgainstReferenceData(
+                simulationTrajectoryFileName, trajectoryComparison, &rootChecker, MaxNumFrames(0));
     }
     if (File::exists(simulationDhdlFileName, File::returnFalseOnError))
     {
@@ -199,7 +200,7 @@ TEST_P(FreeEnergyReferenceTest, WithinTolerances)
 //       out. Once that compilation is cached for the whole process, these
 //       tests can run in such configurations.
 #if !GMX_GPU_OPENCL
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
         FreeEnergyCalculationsAreEquivalentToReference,
         FreeEnergyReferenceTest,
         ::testing::Values(
@@ -226,7 +227,7 @@ INSTANTIATE_TEST_CASE_P(
                 FreeEnergyReferenceTestParams{ "vdwalone", MaxNumWarnings(0), { F_DVDL } }),
         FreeEnergyReferenceTest::PrintParametersToString());
 #else
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
         DISABLED_FreeEnergyCalculationsAreEquivalentToReference,
         FreeEnergyReferenceTest,
         ::testing::Values(

@@ -3,7 +3,7 @@
  *
  * Copyright (c) 1991-2000, University of Groningen, The Netherlands.
  * Copyright (c) 2001-2004, The GROMACS development team.
- * Copyright (c) 2013,2014,2015,2018,2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2013,2014,2015,2018,2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -49,6 +49,7 @@
 #include "gromacs/gmxpreprocess/toppush.h"
 #include "gromacs/gmxpreprocess/toputil.h"
 #include "gromacs/math/units.h"
+#include "gromacs/math/utilities.h"
 #include "gromacs/topology/ifunc.h"
 #include "gromacs/utility/fatalerror.h"
 #include "gromacs/utility/logger.h"
@@ -130,8 +131,8 @@ void make_shake(gmx::ArrayRef<InteractionsOfType> plist, t_atoms* atoms, int nsh
 #ifdef DEBUG
                                 GMX_LOG(logger.info)
                                         .asParagraph()
-                                        .appendTextFormatted("Angle: %d-%d-%d", ang->ai(),
-                                                             ang->aj(), ang->ak());
+                                        .appendTextFormatted(
+                                                "Angle: %d-%d-%d", ang->ai(), ang->aj(), ang->ak());
 #endif
                                 int numhydrogens = count_hydrogens(info, 3, ang->atoms());
                                 if ((nshake == eshALLANGLES) || (numhydrogens > 1)
@@ -162,9 +163,9 @@ void make_shake(gmx::ArrayRef<InteractionsOfType> plist, t_atoms* atoms, int nsh
                                     }
                                     if (bFound)
                                     {
-                                        real param = std::sqrt(b_ij * b_ij + b_jk * b_jk
-                                                               - 2.0 * b_ij * b_jk
-                                                                         * cos(DEG2RAD * ang->c0()));
+                                        real param = std::sqrt(
+                                                b_ij * b_ij + b_jk * b_jk
+                                                - 2.0 * b_ij * b_jk * cos(gmx::c_deg2Rad * ang->c0()));
                                         std::vector<real> forceParm = { param, param };
                                         if (ftype == F_CONNBONDS || ftype_a == F_CONNBONDS)
                                         {
@@ -178,7 +179,8 @@ void make_shake(gmx::ArrayRef<InteractionsOfType> plist, t_atoms* atoms, int nsh
                                         GMX_LOG(logger.info)
                                                 .asParagraph()
                                                 .appendTextFormatted("p: %d, q: %d, dist: %12.5e",
-                                                                     atomNumbers[0], atomNumbers[1],
+                                                                     atomNumbers[0],
+                                                                     atomNumbers[1],
                                                                      forceParm[0]);
 #endif
                                         add_param_to_list(&(plist[F_CONSTR]),

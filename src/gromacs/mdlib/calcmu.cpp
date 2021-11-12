@@ -4,7 +4,7 @@
  * Copyright (c) 1991-2000, University of Groningen, The Netherlands.
  * Copyright (c) 2001-2004, The GROMACS development team.
  * Copyright (c) 2012,2014,2015,2017,2018 by the GROMACS development team.
- * Copyright (c) 2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -52,9 +52,9 @@
 void calc_mu(int                            start,
              int                            homenr,
              gmx::ArrayRef<const gmx::RVec> x,
-             const real                     q[],
-             const real                     qB[],
-             int                            nChargePerturbed,
+             gmx::ArrayRef<const real>      q,
+             gmx::ArrayRef<const real>      qB,
+             bool                           havePerturbedCharges,
              dvec                           mu,
              dvec                           mu_B)
 {
@@ -65,7 +65,7 @@ void calc_mu(int                            start,
 
     mu_x = mu_y = mu_z = 0.0;
 #pragma omp parallel for reduction(+: mu_x, mu_y, mu_z) schedule(static) \
-    num_threads(gmx_omp_nthreads_get(emntDefault))
+    num_threads(gmx_omp_nthreads_get(ModuleMultiThread::Default))
     for (int i = start; i < end; i++)
     {
         // Trivial OpenMP region that cannot throw
@@ -79,14 +79,14 @@ void calc_mu(int                            start,
 
     for (m = 0; (m < DIM); m++)
     {
-        mu[m] *= ENM2DEBYE;
+        mu[m] *= gmx::c_enm2Debye;
     }
 
-    if (nChargePerturbed)
+    if (havePerturbedCharges)
     {
         mu_x = mu_y = mu_z = 0.0;
 #pragma omp parallel for reduction(+: mu_x, mu_y, mu_z) schedule(static) \
-        num_threads(gmx_omp_nthreads_get(emntDefault))
+        num_threads(gmx_omp_nthreads_get(ModuleMultiThread::Default))
         for (int i = start; i < end; i++)
         {
             // Trivial OpenMP region that cannot throw
@@ -94,9 +94,9 @@ void calc_mu(int                            start,
             mu_y += qB[i] * x[i][YY];
             mu_z += qB[i] * x[i][ZZ];
         }
-        mu_B[XX] = mu_x * ENM2DEBYE;
-        mu_B[YY] = mu_y * ENM2DEBYE;
-        mu_B[ZZ] = mu_z * ENM2DEBYE;
+        mu_B[XX] = mu_x * gmx::c_enm2Debye;
+        mu_B[YY] = mu_y * gmx::c_enm2Debye;
+        mu_B[ZZ] = mu_z * gmx::c_enm2Debye;
     }
     else
     {

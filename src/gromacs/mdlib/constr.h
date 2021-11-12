@@ -4,7 +4,7 @@
  * Copyright (c) 1991-2000, University of Groningen, The Netherlands.
  * Copyright (c) 2001-2004, The GROMACS development team.
  * Copyright (c) 2013,2014,2015,2016,2017 by the GROMACS development team.
- * Copyright (c) 2018,2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2018,2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -49,12 +49,11 @@
 
 #include <cstdio>
 
+#include <memory>
+
 #include "gromacs/math/vectypes.h"
 #include "gromacs/topology/idef.h"
 #include "gromacs/utility/arrayref.h"
-#include "gromacs/utility/basedefinitions.h"
-#include "gromacs/utility/classhelpers.h"
-#include "gromacs/utility/gmxassert.h"
 #include "gromacs/utility/real.h"
 
 struct gmx_edsam;
@@ -70,13 +69,14 @@ struct t_inputrec;
 struct t_nrnb;
 struct t_pbc;
 class t_state;
-
+enum class ConstraintAlgorithm : int;
 namespace gmx
 {
 template<typename T>
 class ArrayRefWithPadding;
 template<typename>
 class ListOfLists;
+class ObservablesReducerBuilder;
 
 //! Describes supported flavours of constrained updates.
 enum class ConstraintVariable : int
@@ -102,17 +102,19 @@ private:
      *
      * Private to enforce use of makeConstraints() factory
      * function. */
-    Constraints(const gmx_mtop_t&     mtop,
-                const t_inputrec&     ir,
-                pull_t*               pull_work,
-                FILE*                 log,
-                const t_commrec*      cr,
-                const gmx_multisim_t* ms,
-                t_nrnb*               nrnb,
-                gmx_wallcycle*        wcycle,
-                bool                  pbcHandlingRequired,
-                int                   numConstraints,
-                int                   numSettles);
+    Constraints(const gmx_mtop_t&          mtop,
+                const t_inputrec&          ir,
+                pull_t*                    pull_work,
+                FILE*                      log,
+                const t_commrec*           cr,
+                bool                       useUpdateGroups,
+                const gmx_multisim_t*      ms,
+                t_nrnb*                    nrnb,
+                gmx_wallcycle*             wcycle,
+                bool                       pbcHandlingRequired,
+                ObservablesReducerBuilder* observablesReducerBuilder,
+                int                        numConstraints,
+                int                        numSettles);
 
 public:
     /*! \brief This member type helps implement a factory
@@ -132,14 +134,14 @@ public:
      *
      * \todo Make this a callback that is called automatically
      * once a new domain has been made. */
-    void setConstraints(gmx_localtop_t* top,
-                        int             numAtoms,
-                        int             numHomeAtoms,
-                        real*           masses,
-                        real*           inverseMasses,
-                        bool            hasMassPerturbedAtoms,
-                        real            lambda,
-                        unsigned short* cFREEZE);
+    void setConstraints(gmx_localtop_t*                     top,
+                        int                                 numAtoms,
+                        int                                 numHomeAtoms,
+                        gmx::ArrayRef<const real>           masses,
+                        gmx::ArrayRef<const real>           inverseMasses,
+                        bool                                hasMassPerturbedAtoms,
+                        real                                lambda,
+                        gmx::ArrayRef<const unsigned short> cFREEZE);
 
     /*! \brief Applies constraints to coordinates.
      *
@@ -197,10 +199,6 @@ public:
     //! Getter for use by domain decomposition.
     ArrayRef<const std::vector<int>> atom2settle_moltype() const;
 
-    /*! \brief Return the data for reduction for determining
-     * constraint RMS relative deviations, or an empty ArrayRef
-     * when not supported for any active constraints. */
-    ArrayRef<real> rmsdData() const;
     /*! \brief Return the RMSD of the constraints when available. */
     real rmsd() const;
 
@@ -214,11 +212,11 @@ private:
     //! Implementation type.
     class Impl;
     //! Implementation object.
-    PrivateImplPointer<Impl> impl_;
+    std::unique_ptr<Impl> impl_;
 };
 
 /*! \brief Generate a fatal error because of too many LINCS/SETTLE warnings. */
-[[noreturn]] void too_many_constraint_warnings(int eConstrAlg, int warncount);
+[[noreturn]] void too_many_constraint_warnings(ConstraintAlgorithm eConstrAlg, int warncount);
 
 /*! \brief Returns whether constraint with parameter \p iparamsIndex is a flexible constraint */
 static inline bool isConstraintFlexible(ArrayRef<const t_iparams> iparams, int iparamsIndex)
@@ -327,7 +325,7 @@ void constrain_velocities(gmx::Constraints* constr,
                           int64_t           step,
                           t_state*          state,
                           real*             dvdlambda,
-                          gmx_bool          computeVirial,
+                          bool              computeVirial,
                           tensor            constraintsVirial);
 
 /*! \brief Constraint coordinates.
@@ -341,7 +339,7 @@ void constrain_coordinates(gmx::Constraints*         constr,
                            t_state*                  state,
                            ArrayRefWithPadding<RVec> xp,
                            real*                     dvdlambda,
-                           gmx_bool                  computeVirial,
+                           bool                      computeVirial,
                            tensor                    constraintsVirial);
 
 } // namespace gmx

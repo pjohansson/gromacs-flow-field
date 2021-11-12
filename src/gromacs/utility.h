@@ -2,7 +2,7 @@
  * This file is part of the GROMACS molecular simulation package.
  *
  * Copyright (c) 2010-2018, The GROMACS development team.
- * Copyright (c) 2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -111,10 +111,9 @@
  * compiler-specific attributes, and ::GMX_UNUSED_VALUE and ::GMX_IGNORE_RETURN_VALUE
  * for handling warnings about unused values.
  *
- * The header classhelpers.h implements a gmx::PrivateImplPointer template for easily
- * writing classes that use the private implementation idiom.  This header also
- * declares ::GMX_DISALLOW_COPY_AND_ASSIGN and ::GMX_DISALLOW_ASSIGN macros for
- * class declarations.
+ * The header classhelpers.h declares ::GMX_DISALLOW_COPY_AND_ASSIGN,
+ * ::GMX_DISALLOW_COPY_MOVE_AND_ASSIGN, ::GMX_DISALLOW_ASSIGN, and
+ * ::GMX_DEFAULT_CONSTRUCTORS macros for class declarations.
  *
  * The header flags.h implements a gmx::FlagsTemplate template for better type
  * safety when using bit flag fields.
@@ -140,7 +139,7 @@
  * Similarly, gmxomp.h removes the need to use conditional compilation for code
  * that needs to include omp.h for OpenMP functions.
  *
- * The header messagestringcollector.h declares a gmx::MessageStringCollector
+ * The header message_string_collector.h declares a gmx::MessageStringCollector
  * class for composing messages with context information.
  *
  * The header sysinfo.h declares gmx_getpid() for getting the current process

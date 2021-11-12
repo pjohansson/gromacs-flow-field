@@ -4,7 +4,7 @@
  * Copyright (c) 1991-2000, University of Groningen, The Netherlands.
  * Copyright (c) 2001-2010, The GROMACS development team.
  * Copyright (c) 2012,2013,2014,2015,2016 by the GROMACS development team.
- * Copyright (c) 2017,2018,2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2017,2018,2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -60,11 +60,18 @@ class MDLogger;
 }
 
 //! Enum which is only used to describe transfer calls at the moment
-enum class GpuApiCallBehavior
+enum class GpuApiCallBehavior : int
 {
+    //! Synchronous
     Sync,
-    Async
+    //! Asynchronous
+    Async,
+    //! Size of the enumeration
+    Count
 };
+
+//! String corresponding to GPU API call behavior
+const char* enumValueToString(GpuApiCallBehavior enumValue);
 
 //! Types of actions associated to waiting or checking the completion of GPU tasks
 enum class GpuTaskCompletion
@@ -72,13 +79,6 @@ enum class GpuTaskCompletion
     Wait, /*<< Issue a blocking wait for the task */
     Check /*<< Only check whether the task has completed */
 };
-
-/*! \brief Check if GROMACS has been built with GPU support.
- *
- * \param[in] error Pointer to error string or nullptr.
- * \todo Move this to NB module once it exists.
- */
-bool buildSupportsNonbondedOnGpu(std::string* error);
 
 /*! \brief Starts the GPU profiler if mdrun is being profiled.
  *
@@ -128,5 +128,13 @@ bool isHostMemoryPinned(const void* CUDA_FUNC_ARGUMENT(h_ptr)) CUDA_FUNC_TERM_WI
 CUDA_FUNC_QUALIFIER
 void setupGpuDevicePeerAccess(const std::vector<int>& CUDA_FUNC_ARGUMENT(gpuIdsToUse),
                               const gmx::MDLogger&    CUDA_FUNC_ARGUMENT(mdlog)) CUDA_FUNC_TERM;
+
+/*! \brief Check the platform-defaults and environment variable to decide whether GPU timings
+ * should be enabled.
+ *
+ * Currently, timings are enabled for OpenCL, but disabled for CUDA and SYCL. This can be overridden
+ * by \c GMX_ENABLE_GPU_TIMING and \c GMX_DISABLE_GPU_TIMING environment variables.
+ */
+bool decideGpuTimingsUsage();
 
 #endif

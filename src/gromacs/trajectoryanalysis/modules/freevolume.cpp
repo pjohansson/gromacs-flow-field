@@ -2,7 +2,7 @@
  * This file is part of the GROMACS molecular simulation package.
  *
  * Copyright (c) 2013,2014,2015,2016,2017 by the GROMACS development team.
- * Copyright (c) 2018,2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2018,2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -175,7 +175,7 @@ void FreeVolume::initOptions(IOptionsContainer* options, TrajectoryAnalysisSetti
 
     // Add option for optional output file
     options->addOption(FileNameOption("o")
-                               .filetype(eftPlot)
+                               .filetype(OptionFileType::Plot)
                                .outputFile()
                                .store(&fnFreevol_)
                                .defaultBasename("freevolume")
@@ -247,8 +247,8 @@ void FreeVolume::initAnalysis(const TrajectoryAnalysisSettings& settings, const 
     for (ArrayRef<const int>::iterator ai = atomind.begin(); (ai < atomind.end()); ++ai)
     {
         // Dereference the iterator to obtain an atom number
-        int  i = *ai;
-        real value;
+        int  i     = *ai;
+        real value = 0;
 
         // Lookup the Van der Waals radius of this atom
         int resnr = atoms->atom[i].resind;
@@ -265,8 +265,10 @@ void FreeVolume::initAnalysis(const TrajectoryAnalysisSettings& settings, const 
             nnovdw++;
             if (nnovdw < maxnovdw)
             {
-                fprintf(stderr, "Could not determine VDW radius for %s-%s. Set to zero.\n",
-                        *(atoms->resinfo[resnr].name), *(atoms->atomname[i]));
+                fprintf(stderr,
+                        "Could not determine VDW radius for %s-%s. Set to zero.\n",
+                        *(atoms->resinfo[resnr].name),
+                        *(atoms->atomname[i]));
             }
             vdw_radius_.push_back(0.0);
         }
@@ -303,7 +305,7 @@ void FreeVolume::initAnalysis(const TrajectoryAnalysisSettings& settings, const 
 void FreeVolume::analyzeFrame(int frnr, const t_trxframe& fr, t_pbc* pbc, TrajectoryAnalysisModuleData* pdata)
 {
     AnalysisDataHandle                 dh  = pdata->dataHandle(data_);
-    const Selection&                   sel = TrajectoryAnalysisModuleData::parallelSelection(sel_);
+    const Selection&                   sel = pdata->parallelSelection(sel_);
     gmx::UniformRealDistribution<real> dist;
 
     GMX_RELEASE_ASSERT(nullptr != pbc, "You have no periodic boundary conditions");
@@ -386,7 +388,7 @@ void FreeVolume::writeOutput()
     printf("Total volume %.2f +/- %.2f nm^3\n", Vaver, Verror);
 
     printf("Number of molecules %d total mass %.2f Dalton\n", nmol_, mtot_);
-    double RhoAver  = mtot_ / (Vaver * 1e-24 * AVOGADRO);
+    double RhoAver  = mtot_ / (Vaver * 1e-24 * gmx::c_avogadro);
     double RhoError = gmx::square(RhoAver / Vaver) * Verror;
     printf("Average molar mass: %.2f Dalton\n", mtot_ / nmol_);
 

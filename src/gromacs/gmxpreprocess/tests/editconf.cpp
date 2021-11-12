@@ -1,7 +1,7 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2019, by the GROMACS development team, led by
+ * Copyright (c) 2019,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -94,7 +94,7 @@ public:
         ASSERT_EQ(0, gmx_editconf(cmdline.argc(), cmdline.argv()));
 
         // Check the output
-        auto                 extension = ftp2ext(std::get<1>(GetParam()));
+        const auto*          extension = ftp2ext(std::get<1>(GetParam()));
         TestReferenceChecker rootChecker(this->rootChecker());
         rootChecker.checkString(extension, testName);
         checkOutputFiles();
@@ -117,11 +117,13 @@ TEST_P(EditconfTest, ProducesMatchingOutputStructureFileUsingIndexGroup)
 // coordinates. It's better to run the tests only in single than not
 // have the tests.
 #if !GMX_DOUBLE
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
         SinglePeptideFragments,
         EditconfTest,
         ::testing::Combine(::testing::Values("fragment1.pdb", "fragment1.gro", "fragment1.g96"),
                            ::testing::Values(efPDB, efGRO, efG96)));
+#else
+GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(EditconfTest);
 #endif
 
 } // namespace

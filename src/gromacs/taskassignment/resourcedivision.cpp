@@ -346,7 +346,7 @@ int get_nthreads_mpi(const gmx_hw_info_t* hwinfo,
                      bool                 nonbondedOnGpu,
                      bool                 pmeOnGpu,
                      const t_inputrec*    inputrec,
-                     const gmx_mtop_t*    mtop,
+                     const gmx_mtop_t&    mtop,
                      const gmx::MDLogger& mdlog,
                      bool                 doMembed)
 {
@@ -378,8 +378,9 @@ int get_nthreads_mpi(const gmx_hw_info_t* hwinfo,
         // had to define a function that returns such requirements,
         // and a description string.
         SingleRankChecker checker;
-        checker.applyConstraint(inputrec->eI == eiLBFGS, "L-BFGS minimization");
-        checker.applyConstraint(inputrec->coulombtype == eelEWALD, "Plain Ewald electrostatics");
+        checker.applyConstraint(inputrec->eI == IntegrationAlgorithm::LBFGS, "L-BFGS minimization");
+        checker.applyConstraint(inputrec->coulombtype == CoulombInteractionType::Ewald,
+                                "Plain Ewald electrostatics");
         checker.applyConstraint(doMembed, "Membrane embedding");
         bool useOrientationRestraints = (gmx_mtop_ftype_count(mtop, F_ORIRES) > 0);
         checker.applyConstraint(useOrientationRestraints, "Orientation restraints");
@@ -437,7 +438,7 @@ int get_nthreads_mpi(const gmx_hw_info_t* hwinfo,
 
     nrank = get_tmpi_omp_thread_division(hwinfo, *hw_opt, nthreads_tot_max, ngpu);
 
-    if (inputrec->eI == eiNM || EI_TPI(inputrec->eI))
+    if (inputrec->eI == IntegrationAlgorithm::NM || EI_TPI(inputrec->eI))
     {
         /* Dims/steps are divided over the nodes iso splitting the atoms.
          * With NM we can't have more ranks than #atoms*#dim. With TPI it's
@@ -458,13 +459,13 @@ int get_nthreads_mpi(const gmx_hw_info_t* hwinfo,
         }
     }
 
-    if (mtop->natoms / nrank < min_atoms_per_mpi_rank)
+    if (mtop.natoms / nrank < min_atoms_per_mpi_rank)
     {
         int nrank_new;
 
         /* the rank number was chosen automatically, but there are too few
            atoms per rank, so we need to reduce the rank count */
-        nrank_new = std::max(1, mtop->natoms / min_atoms_per_mpi_rank);
+        nrank_new = std::max(1, mtop.natoms / min_atoms_per_mpi_rank);
 
         /* Avoid partial use of Hyper-Threading */
         if (gmxSmtIsEnabled(hwTop) && nrank_new > nthreads_hw / 2 && nrank_new < nthreads_hw)
@@ -581,10 +582,10 @@ void check_resource_division_efficiency(const gmx_hw_info_t* hwinfo,
         GMX_RELEASE_ASSERT(nthreads_omp_faster_default >= nthreads_omp_mpi_ok_max,
                            "Inconsistent OpenMP thread count default values");
     }
-    GMX_RELEASE_ASSERT(gmx_omp_nthreads_get(emntDefault) >= 1,
+    GMX_RELEASE_ASSERT(gmx_omp_nthreads_get(ModuleMultiThread::Default) >= 1,
                        "Must have at least one OpenMP thread");
 
-    nth_omp_max = gmx_omp_nthreads_get(emntDefault);
+    nth_omp_max = gmx_omp_nthreads_get(ModuleMultiThread::Default);
 
     bool anyRankIsUsingGpus = willUsePhysicalGpu;
     /* Thread-MPI seems to have a bug with reduce on 1 node, so use a cond. */
@@ -616,7 +617,7 @@ void check_resource_division_efficiency(const gmx_hw_info_t* hwinfo,
         nthreads_omp_mpi_ok_min = nthreads_omp_mpi_ok_min_gpu;
     }
 
-    if (DOMAINDECOMP(cr))
+    if (cr && cr->nnodes > 1)
     {
         if (nth_omp_max < nthreads_omp_mpi_ok_min || nth_omp_max > nthreads_omp_mpi_ok_max)
         {
@@ -627,7 +628,9 @@ void check_resource_division_efficiency(const gmx_hw_info_t* hwinfo,
                     "threads per rank, which is most likely inefficient. The optimum is usually "
                     "between %d and"
                     " %d threads per rank.",
-                    nth_omp_max, nthreads_omp_mpi_ok_min, nthreads_omp_mpi_target_max);
+                    nth_omp_max,
+                    nthreads_omp_mpi_ok_min,
+                    nthreads_omp_mpi_target_max);
 
             if (bNtOmpOptionSet)
             {
@@ -643,7 +646,8 @@ void check_resource_division_efficiency(const gmx_hw_info_t* hwinfo,
                           "%s If you want to run with this setup, specify the -ntomp option. But "
                           "we suggest to "
                           "change the number of MPI ranks%s.",
-                          buf, mpi_option);
+                          buf,
+                          mpi_option);
             }
         }
     }
@@ -671,9 +675,14 @@ void check_resource_division_efficiency(const gmx_hw_info_t* hwinfo,
 //! Dump a \c hw_opt to \c fp.
 static void print_hw_opt(FILE* fp, const gmx_hw_opt_t* hw_opt)
 {
-    fprintf(fp, "hw_opt: nt %d ntmpi %d ntomp %d ntomp_pme %d gpu_id '%s' gputasks '%s'\n",
-            hw_opt->nthreads_tot, hw_opt->nthreads_tmpi, hw_opt->nthreads_omp, hw_opt->nthreads_omp_pme,
-            hw_opt->gpuIdsAvailable.c_str(), hw_opt->userGpuTaskAssignment.c_str());
+    fprintf(fp,
+            "hw_opt: nt %d ntmpi %d ntomp %d ntomp_pme %d gpu_id '%s' gputasks '%s'\n",
+            hw_opt->nthreads_tot,
+            hw_opt->nthreads_tmpi,
+            hw_opt->nthreads_omp,
+            hw_opt->nthreads_omp_pme,
+            hw_opt->devicesSelectedByUser.c_str(),
+            hw_opt->userGpuTaskAssignment.c_str());
 }
 
 void checkAndUpdateHardwareOptions(const gmx::MDLogger& mdlog,
@@ -790,7 +799,9 @@ void checkAndUpdateHardwareOptions(const gmx::MDLogger& mdlog,
                       "The total number of threads requested (%d) does not match the thread-MPI "
                       "ranks (%d) "
                       "times the OpenMP threads (%d) requested",
-                      hw_opt->nthreads_tot, hw_opt->nthreads_tmpi, hw_opt->nthreads_omp);
+                      hw_opt->nthreads_tot,
+                      hw_opt->nthreads_tmpi,
+                      hw_opt->nthreads_omp);
         }
 
         if (hw_opt->nthreads_tmpi > 0 && hw_opt->nthreads_tot % hw_opt->nthreads_tmpi != 0)
@@ -799,7 +810,8 @@ void checkAndUpdateHardwareOptions(const gmx::MDLogger& mdlog,
                       "The total number of threads requested (%d) is not divisible by the number "
                       "of thread-MPI "
                       "ranks requested (%d)",
-                      hw_opt->nthreads_tot, hw_opt->nthreads_tmpi);
+                      hw_opt->nthreads_tot,
+                      hw_opt->nthreads_tmpi);
         }
 
         if (hw_opt->nthreads_omp > 0 && hw_opt->nthreads_tot % hw_opt->nthreads_omp != 0)
@@ -808,7 +820,8 @@ void checkAndUpdateHardwareOptions(const gmx::MDLogger& mdlog,
                       "The total number of threads requested (%d) is not divisible by the number "
                       "of OpenMP "
                       "threads requested (%d)",
-                      hw_opt->nthreads_tot, hw_opt->nthreads_omp);
+                      hw_opt->nthreads_tot,
+                      hw_opt->nthreads_omp);
         }
     }
 
@@ -820,7 +833,8 @@ void checkAndUpdateHardwareOptions(const gmx::MDLogger& mdlog,
                       "You requested %d OpenMP threads with %d total threads. Choose a total "
                       "number of threads "
                       "that is a multiple of the number of OpenMP threads.",
-                      hw_opt->nthreads_omp, hw_opt->nthreads_tot);
+                      hw_opt->nthreads_omp,
+                      hw_opt->nthreads_tot);
         }
 
         if (hw_opt->nthreads_tmpi > hw_opt->nthreads_tot)
@@ -829,7 +843,8 @@ void checkAndUpdateHardwareOptions(const gmx::MDLogger& mdlog,
                       "You requested %d thread-MPI ranks with %d total threads. Choose a total "
                       "number of "
                       "threads that is a multiple of the number of thread-MPI ranks.",
-                      hw_opt->nthreads_tmpi, hw_opt->nthreads_tot);
+                      hw_opt->nthreads_tmpi,
+                      hw_opt->nthreads_tot);
         }
     }
 

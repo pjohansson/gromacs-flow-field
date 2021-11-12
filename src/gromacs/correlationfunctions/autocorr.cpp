@@ -4,7 +4,7 @@
  * Copyright (c) 1991-2000, University of Groningen, The Netherlands.
  * Copyright (c) 2001-2004, The GROMACS development team.
  * Copyright (c) 2013,2014,2015,2016,2017 by the GROMACS development team.
- * Copyright (c) 2018,2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2018,2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -78,9 +78,11 @@ typedef struct
 } t_acf;
 
 /*! \brief Global variable set true if initialization routines are called. */
+// NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
 static gmx_bool bACFinit = FALSE;
 
 /*! \brief Data structure for storing command line variables. */
+// NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
 static t_acf acf;
 
 enum
@@ -141,8 +143,7 @@ static void do_ac_core(int nframes, int nout, real corr[], real c1[], int nresta
     }
     if (debug)
     {
-        fprintf(debug, "Starting do_ac_core: nframes=%d, nout=%d, nrestart=%d,mode=%lu\n", nframes,
-                nout, nrestart, mode);
+        fprintf(debug, "Starting do_ac_core: nframes=%d, nout=%d, nrestart=%d,mode=%lu\n", nframes, nout, nrestart, mode);
     }
 
     for (j = 0; (j < nout); j++)
@@ -191,8 +192,15 @@ static void do_ac_core(int nframes, int nout, real corr[], real c1[], int nresta
 
                 if (cth - 1.0 > 1.0e-15)
                 {
-                    printf("j: %d, k: %d, xj:(%g,%g,%g), xk:(%g,%g,%g)\n", j, k, xj[XX], xj[YY],
-                           xj[ZZ], xk[XX], xk[YY], xk[ZZ]);
+                    printf("j: %d, k: %d, xj:(%g,%g,%g), xk:(%g,%g,%g)\n",
+                           j,
+                           k,
+                           xj[XX],
+                           xj[YY],
+                           xj[ZZ],
+                           xk[XX],
+                           xk[YY],
+                           xk[ZZ]);
                 }
                 mmm = 1;
                 if (MODE(eacP2))
@@ -582,10 +590,11 @@ void low_do_autocorr(const char*             fn,
     /* Print flags and parameters */
     if (bVerbose)
     {
-        printf("Will calculate %s of %d thingies for %d frames\n",
-               title ? title : "autocorrelation", nitem, nframes);
-        printf("bAver = %s, bFour = %s bNormalize= %s\n", gmx::boolToString(bAver),
-               gmx::boolToString(bFour), gmx::boolToString(bNormalize));
+        printf("Will calculate %s of %d thingies for %d frames\n", title ? title : "autocorrelation", nitem, nframes);
+        printf("bAver = %s, bFour = %s bNormalize= %s\n",
+               gmx::boolToString(bAver),
+               gmx::boolToString(bFour),
+               gmx::boolToString(bNormalize));
         printf("mode = %lu, dt = %g, nrestart = %d\n", mode, dt, nrestart);
     }
     /* Allocate temp arrays */
@@ -698,7 +707,8 @@ void low_do_autocorr(const char*             fn,
         {
             Ctav /= nitem;
             Ct2av /= nitem;
-            printf("Average correlation time %.3f Std. Dev. %.3f Error %.3f (ps)\n", Ctav,
+            printf("Average correlation time %.3f Std. Dev. %.3f Error %.3f (ps)\n",
+                   Ctav,
                    std::sqrt((Ct2av - gmx::square(Ctav))),
                    std::sqrt((Ct2av - gmx::square(Ctav)) / (nitem - 1)));
         }
@@ -711,6 +721,7 @@ void low_do_autocorr(const char*             fn,
 }
 
 /*! \brief Legend for selecting Legendre polynomials. */
+// NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
 static const char* Leg[] = { nullptr, "0", "1", "2", "3", nullptr };
 
 t_pargs* add_acf_pargs(int* npargs, t_pargs* pa)
@@ -803,8 +814,22 @@ void do_autocorr(const char*             fn,
         default: break;
     }
 
-    low_do_autocorr(fn, oenv, title, nframes, nitem, acf.nout, c1, dt, mode, acf.nrestart, bAver,
-                    acf.bNormalize, bDebugMode(), acf.tbeginfit, acf.tendfit, acf.fitfn);
+    low_do_autocorr(fn,
+                    oenv,
+                    title,
+                    nframes,
+                    nitem,
+                    acf.nout,
+                    c1,
+                    dt,
+                    mode,
+                    acf.nrestart,
+                    bAver,
+                    acf.bNormalize,
+                    bDebugMode(),
+                    acf.tbeginfit,
+                    acf.tendfit,
+                    acf.fitfn);
 }
 
 int get_acfnout()

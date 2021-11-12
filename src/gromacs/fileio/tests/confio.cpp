@@ -1,7 +1,7 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2015,2016,2017,2018,2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2015,2016,2017,2018,2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -103,8 +103,13 @@ public:
 
     void writeReferenceFile()
     {
-        write_sto_conf(referenceFilename_.c_str(), *refTop_->name, &refTop_->atoms,
-                       as_rvec_array(refX_.data()), nullptr, PbcType::Unset, refBox_);
+        write_sto_conf(referenceFilename_.c_str(),
+                       *refTop_->name,
+                       &refTop_->atoms,
+                       as_rvec_array(refX_.data()),
+                       nullptr,
+                       PbcType::Unset,
+                       refBox_);
     }
 
     void readReferenceFileTps()
@@ -121,13 +126,13 @@ public:
 
     void writeTestFileAndTest()
     {
-        write_sto_conf(testFilename_.c_str(), *testTop_->name, &testTop_->atoms, testX_, nullptr,
-                       PbcType::Unset, testBox_);
+        write_sto_conf(
+                testFilename_.c_str(), *testTop_->name, &testTop_->atoms, testX_, nullptr, PbcType::Unset, testBox_);
         testFilesEqual(referenceFilename_, testFilename_);
     }
 
 private:
-    std::string getFileSuffix(const char* type)
+    static std::string getFileSuffix(const char* type)
     {
         return std::string(type) + "." + ftp2ext(GetParam());
     }
@@ -201,8 +206,8 @@ TEST_P(StructureIORoundtripTest, ReadWriteTpsConf)
     writeTestFileAndTest();
 }
 
-INSTANTIATE_TEST_CASE_P(WithDifferentFormats,
-                        StructureIORoundtripTest,
-                        ::testing::Values(efGRO, efG96, efPDB, efESP));
+INSTANTIATE_TEST_SUITE_P(WithDifferentFormats,
+                         StructureIORoundtripTest,
+                         ::testing::Values(efGRO, efG96, efPDB, efESP));
 
 } // namespace

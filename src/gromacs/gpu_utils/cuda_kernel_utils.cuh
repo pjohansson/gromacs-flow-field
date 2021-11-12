@@ -1,7 +1,7 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2017,2018,2019, by the GROMACS development team, led by
+ * Copyright (c) 2017,2018,2019,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -58,7 +58,7 @@ __device__ __forceinline__ T LDG(const T* ptr)
 
 /*! \brief Fetch the value by \p index from the texture object.
  *
- * \tparam[in] T        Raw data type
+ * \tparam T            Raw data type
  * \param[in] texObj    Table texture object
  * \param[in] index     Non-negative element index
  * \returns             The value from the table at \p index
@@ -67,6 +67,7 @@ template<typename T>
 static __forceinline__ __device__ T fetchFromTexture(const cudaTextureObject_t texObj, int index)
 {
     assert(index >= 0);
+    // NOLINTNEXTLINE(misc-static-assert)
     assert(!c_disableCudaTextures);
     return tex1Dfetch<T>(texObj, index);
 }
@@ -76,7 +77,7 @@ static __forceinline__ __device__ T fetchFromTexture(const cudaTextureObject_t t
  *  Depending on what is supported, it fetches parameters either
  *  using direct load or texture objects.
  *
- * \tparam[in] T        Raw data type
+ * \tparam T            Raw data type
  * \param[in] d_ptr     Device pointer to the raw table memory
  * \param[in] texObj    Table texture object
  * \param[in] index     Non-negative element index

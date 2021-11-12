@@ -35,11 +35,12 @@
 gmx_add_unit_test(MdlibUnitTest mdlib-test HARDWARE_DETECTION
     CPP_SOURCE_FILES
         calc_verletbuf.cpp
+        calcvir.cpp
         constr.cpp
         constrtestdata.cpp
         constrtestrunners.cpp
         ebin.cpp
-	energydrifttracker.cpp
+        energydrifttracker.cpp
         energyoutput.cpp
         expanded.cpp
         freeenergyparameters.cpp
@@ -54,8 +55,8 @@ gmx_add_unit_test(MdlibUnitTest mdlib-test HARDWARE_DETECTION
         updategroups.cpp
         updategroupscog.cpp
     GPU_CPP_SOURCE_FILES
+        constrtestrunners_gpu.cpp
         leapfrogtestrunners_gpu.cpp
-    CUDA_CU_SOURCE_FILES
-        constrtestrunners.cu
-        settletestrunners.cu
+        settletestrunners_gpu.cpp
+	wholemoleculetransform.cpp
         )

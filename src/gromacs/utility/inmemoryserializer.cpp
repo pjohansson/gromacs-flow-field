@@ -1,7 +1,7 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2016,2017,2018,2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2016,2017,2018,2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -71,7 +71,8 @@ public:
     }
 
 private:
-    union {
+    union
+    {
         char c[ValueSize];
         T    v;
     } u;
@@ -81,7 +82,8 @@ private:
 template<typename T>
 T swapEndian(const T& value)
 {
-    union {
+    union
+    {
         T                           value_;
         std::array<char, sizeof(T)> valueAsCharArray_;
     } endianessSwappedValue;
@@ -276,7 +278,7 @@ public:
     }
     void doString(std::string* value)
     {
-        uint64_t size;
+        uint64_t size = 0;
         doValue<uint64_t>(&size);
         *value = std::string(&buffer_[pos_], size);
         pos_ += size;

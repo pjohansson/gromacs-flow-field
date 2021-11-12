@@ -4,7 +4,7 @@
  * Copyright (c) 1991-2000, University of Groningen, The Netherlands.
  * Copyright (c) 2001-2004, The GROMACS development team.
  * Copyright (c) 2013,2014,2015,2016,2017 by the GROMACS development team.
- * Copyright (c) 2018,2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2018,2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -52,6 +52,7 @@
 #define GMX_PULLING_PULL_H
 
 #include <cstdio>
+#include <optional>
 
 #include "gromacs/math/vectypes.h"
 #include "gromacs/mdtypes/pull_params.h"
@@ -69,49 +70,45 @@ struct t_filenm;
 struct t_inputrec;
 struct t_pbc;
 class t_state;
+enum class PbcType;
 
 namespace gmx
 {
+template<typename>
+class ArrayRef;
 class ForceWithVirial;
 class LocalAtomSetManager;
 } // namespace gmx
-
-/*! \brief Returns if the pull coordinate is an angle
- *
- * \param[in] pcrd The pull coordinate to query the type for.
- * \returns a boolean telling if the coordinate is of angle type.
- */
-bool pull_coordinate_is_angletype(const t_pull_coord* pcrd);
 
 /*! \brief Returns the units of the pull coordinate.
  *
  * \param[in] pcrd The pull coordinate to query the units for.
  * \returns a string with the units of the coordinate.
  */
-const char* pull_coordinate_units(const t_pull_coord* pcrd);
+const char* pull_coordinate_units(const t_pull_coord& pcrd);
 
 /*! \brief Returns the conversion factor from the pull coord init/rate unit to internal value unit.
  *
  * \param[in] pcrd The pull coordinate to get the conversion factor for.
  * \returns the conversion factor.
  */
-double pull_conversion_factor_userinput2internal(const t_pull_coord* pcrd);
+double pull_conversion_factor_userinput2internal(const t_pull_coord& pcrd);
 
 /*! \brief Returns the conversion factor from the pull coord internal value unit to the init/rate unit.
  *
  * \param[in] pcrd The pull coordinate to get the conversion factor for.
  * \returns the conversion factor.
  */
-double pull_conversion_factor_internal2userinput(const t_pull_coord* pcrd);
+double pull_conversion_factor_internal2userinput(const t_pull_coord& pcrd);
 
 /*! \brief Get the value for pull coord coord_ind.
  *
- * \param[in,out] pull      The pull struct.
- * \param[in]     coord_ind Number of the pull coordinate.
- * \param[in]     pbc       Information structure about periodicity.
+ * \param[in,out] pull        The pull struct.
+ * \param[in]     coordIndex  Index of the pull coordinate in the list of coordinates
+ * \param[in]     pbc         Information structure about periodicity.
  * \returns the value of the pull coordinate.
  */
-double get_pull_coord_value(struct pull_t* pull, int coord_ind, const struct t_pbc* pbc);
+double get_pull_coord_value(pull_t* pull, int coordIndex, const t_pbc& pbc);
 
 /*! \brief Registers the provider of an external potential for a coordinate.
  *
@@ -155,18 +152,17 @@ void register_external_pull_potential(struct pull_t* pull, int coord_index, cons
  * \param[in]     masses           Atoms masses.
  * \param[in,out] forceWithVirial  Force and virial buffers.
  */
-void apply_external_pull_coord_force(struct pull_t*        pull,
-                                     int                   coord_index,
-                                     double                coord_force,
-                                     const real*           masses,
-                                     gmx::ForceWithVirial* forceWithVirial);
-
+void apply_external_pull_coord_force(struct pull_t*            pull,
+                                     int                       coord_index,
+                                     double                    coord_force,
+                                     gmx::ArrayRef<const real> masses,
+                                     gmx::ForceWithVirial*     forceWithVirial);
 
 /*! \brief Set the all the pull forces to zero.
  *
  * \param pull              The pull group.
  */
-void clear_pull_forces(struct pull_t* pull);
+void clear_pull_forces(pull_t* pull);
 
 
 /*! \brief Determine the COM pull forces and add them to f, return the potential
@@ -183,15 +179,15 @@ void clear_pull_forces(struct pull_t* pull);
  *
  * \returns The pull potential energy.
  */
-real pull_potential(struct pull_t*        pull,
-                    const real*           masses,
-                    struct t_pbc*         pbc,
-                    const t_commrec*      cr,
-                    double                t,
-                    real                  lambda,
-                    const rvec*           x,
-                    gmx::ForceWithVirial* force,
-                    real*                 dvdlambda);
+real pull_potential(pull_t*                        pull,
+                    gmx::ArrayRef<const real>      masses,
+                    const t_pbc&                   pbc,
+                    const t_commrec*               cr,
+                    double                         t,
+                    real                           lambda,
+                    gmx::ArrayRef<const gmx::RVec> x,
+                    gmx::ForceWithVirial*          force,
+                    real*                          dvdlambda);
 
 
 /*! \brief Constrain the coordinates xp in the directions in x
@@ -208,16 +204,16 @@ real pull_potential(struct pull_t*        pull,
  * \param[in,out] v      Velocities, which may get a pull correction.
  * \param[in,out] vir    The virial, which, if != NULL, gets a pull correction.
  */
-void pull_constraint(struct pull_t*   pull,
-                     const real*      masses,
-                     struct t_pbc*    pbc,
-                     const t_commrec* cr,
-                     double           dt,
-                     double           t,
-                     rvec*            x,
-                     rvec*            xp,
-                     rvec*            v,
-                     tensor           vir);
+void pull_constraint(struct pull_t*            pull,
+                     gmx::ArrayRef<const real> masses,
+                     const t_pbc&              pbc,
+                     const t_commrec*          cr,
+                     double                    dt,
+                     double                    t,
+                     gmx::ArrayRef<gmx::RVec>  x,
+                     gmx::ArrayRef<gmx::RVec>  xp,
+                     gmx::ArrayRef<gmx::RVec>  v,
+                     tensor                    vir);
 
 
 /*! \brief Make a selection of the home atoms for all pull groups.
@@ -226,7 +222,7 @@ void pull_constraint(struct pull_t*   pull,
  * \param cr             Structure for communication info.
  * \param pull           The pull group.
  */
-void dd_make_local_pull_groups(const t_commrec* cr, struct pull_t* pull);
+void dd_make_local_pull_groups(const t_commrec* cr, pull_t* pull);
 
 
 /*! \brief Allocate, initialize and return a pull work struct.
@@ -242,7 +238,7 @@ void dd_make_local_pull_groups(const t_commrec* cr, struct pull_t* pull);
 struct pull_t* init_pull(FILE*                     fplog,
                          const pull_params_t*      pull_params,
                          const t_inputrec*         ir,
-                         const gmx_mtop_t*         mtop,
+                         const gmx_mtop_t&         mtop,
                          const t_commrec*          cr,
                          gmx::LocalAtomSetManager* atomSets,
                          real                      lambda);
@@ -266,13 +262,13 @@ void finish_pull(struct pull_t* pull);
  * \param[in,out] xp   Updated x, can be NULL.
  *
  */
-void pull_calc_coms(const t_commrec* cr,
-                    pull_t*          pull,
-                    const real*      masses,
-                    t_pbc*           pbc,
-                    double           t,
-                    const rvec       x[],
-                    rvec*            xp);
+void pull_calc_coms(const t_commrec*               cr,
+                    pull_t*                        pull,
+                    gmx::ArrayRef<const real>      masses,
+                    const t_pbc&                   pbc,
+                    double                         t,
+                    gmx::ArrayRef<const gmx::RVec> x,
+                    gmx::ArrayRef<gmx::RVec>       xp);
 
 /*! \brief Margin for checking pull group PBC distances compared to half the box size */
 static constexpr real c_pullGroupPbcMargin = 0.9;
@@ -297,7 +293,7 @@ static constexpr real c_pullGroupSmallGroupThreshold = 0.5;
  * \param[in] pbcMargin  The minimum margin (as a fraction) to half the box size
  * \returns -1 when all groups obey PBC or the first group index that fails PBC
  */
-int pullCheckPbcWithinGroups(const pull_t& pull, const rvec* x, const t_pbc& pbc, real pbcMargin);
+int pullCheckPbcWithinGroups(const pull_t& pull, gmx::ArrayRef<const gmx::RVec> x, const t_pbc& pbc, real pbcMargin);
 
 /*! \brief Checks whether a specific group that uses a reference atom is within PBC restrictions
  *
@@ -355,14 +351,35 @@ bool pull_have_constraint(const pull_params_t& pullParameters);
  * \param[in] pbc  Information on periodic boundary conditions
  * \returns The maximume distance
  */
-real max_pull_distance2(const pull_coord_work_t* pcrd, const t_pbc* pbc);
+real max_pull_distance2(const pull_coord_work_t& pcrd, const t_pbc& pbc);
 
-/*! \brief Sets the previous step COM in pull to the current COM and updates the pull_com_prev_step in the state
+/*! \brief Sets the previous step COM in pull to the current COM, and optionally
+ *         updates it in the provided ArrayRef
  *
- * \param[in]   pull  The COM pull force calculation data structure
- * \param[in]   state The local (to this rank) state.
+ * \param[in] pull  The COM pull force calculation data structure
+ * \param[in] comPreviousStep  The COM of the previous step of each pull group
  */
-void updatePrevStepPullCom(struct pull_t* pull, t_state* state);
+void updatePrevStepPullCom(pull_t* pull, std::optional<gmx::ArrayRef<double>> comPreviousStep);
+
+/*! \brief Returns a copy of the previous step pull COM as flat vector
+ *
+ * Used for modular simulator checkpointing. Allows to keep the
+ * implementation details of pull_t hidden from its users.
+ *
+ * \param[in] pull  The COM pull force calculation data structure
+ * \return A copy of the previous step COM
+ */
+std::vector<double> prevStepPullCom(const pull_t* pull);
+
+/*! \brief Set the previous step pull COM from a flat vector
+ *
+ * Used to restore modular simulator checkpoints. Allows to keep the
+ * implementation details of pull_t hidden from its users.
+ *
+ * \param[in] pull  The COM pull force calculation data structure
+ * \param[in] prevStepPullCom  The previous step COM to set
+ */
+void setPrevStepPullCom(pull_t* pull, gmx::ArrayRef<const double> prevStepPullCom);
 
 /*! \brief Allocates, initializes and communicates the previous step pull COM (if that option is set to true).
  *
@@ -376,13 +393,13 @@ void updatePrevStepPullCom(struct pull_t* pull, t_state* state);
  * \param[in] cr                     Struct for communication info.
  * \param[in] startingFromCheckpoint Is the simulation starting from a checkpoint?
  */
-void preparePrevStepPullCom(const t_inputrec* ir,
-                            pull_t*           pull_work,
-                            const real*       masses,
-                            t_state*          state,
-                            const t_state*    state_global,
-                            const t_commrec*  cr,
-                            bool              startingFromCheckpoint);
+void preparePrevStepPullCom(const t_inputrec*         ir,
+                            pull_t*                   pull_work,
+                            gmx::ArrayRef<const real> masses,
+                            t_state*                  state,
+                            const t_state*            state_global,
+                            const t_commrec*          cr,
+                            bool                      startingFromCheckpoint);
 
 /*! \brief Initializes the COM of the previous step (set to initial COM)
  *
@@ -392,6 +409,28 @@ void preparePrevStepPullCom(const t_inputrec* ir,
  * \param[in] pbc      Information struct about periodicity.
  * \param[in] x        The local positions.
  */
-void initPullComFromPrevStep(const t_commrec* cr, pull_t* pull, const real* masses, t_pbc* pbc, const rvec x[]);
+void initPullComFromPrevStep(const t_commrec*               cr,
+                             pull_t*                        pull,
+                             gmx::ArrayRef<const real>      masses,
+                             const t_pbc&                   pbc,
+                             gmx::ArrayRef<const gmx::RVec> x);
+
+/*! \brief Initializes the previous step pull COM for new simulations (no reading from checkpoint).
+ *
+ * \param[in] cr               Struct for communication info.
+ * \param[in] pull_work        The COM pull force calculation data structure.
+ * \param[in] masses           Atoms masses.
+ * \param[in] x                The local positions.
+ * \param[in] box              The current box matrix.
+ * \param[in] pbcType          The type of periodic boundary conditions.
+ * \param[in] comPreviousStep  The COM of the previous step of each pull group.
+ */
+void preparePrevStepPullComNewSimulation(const t_commrec*                       cr,
+                                         pull_t*                                pull_work,
+                                         gmx::ArrayRef<const real>              masses,
+                                         gmx::ArrayRef<const gmx::RVec>         x,
+                                         const matrix                           box,
+                                         PbcType                                pbcType,
+                                         std::optional<gmx::ArrayRef<double>>&& comPreviousStep);
 
 #endif

@@ -2,7 +2,7 @@
  * This file is part of the GROMACS molecular simulation package.
  *
  * Copyright (c) 2012,2013,2014,2015,2016 by the GROMACS development team.
- * Copyright (c) 2017,2018,2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2017,2018,2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -82,6 +82,7 @@ public:
 };
 
 //! Global instance of DefaultThreadAffinityAccess
+// NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
 DefaultThreadAffinityAccess g_defaultAffinityAccess;
 
 } // namespace
@@ -138,11 +139,11 @@ static bool get_thread_affinity_layout(const gmx::MDLogger&         mdlog,
         hwThreadsPerCore = hwTop.machine().sockets[0].cores[0].hwThreads.size();
         snew(*localityOrder, hwThreads);
         int i = 0;
-        for (auto& s : hwTop.machine().sockets)
+        for (const auto& s : hwTop.machine().sockets)
         {
-            for (auto& c : s.cores)
+            for (const auto& c : s.cores)
             {
-                for (auto& t : c.hwThreads)
+                for (const auto& t : c.hwThreads)
                 {
                     (*localityOrder)[i++] = t.logicalProcessorId;
                 }
@@ -262,7 +263,8 @@ static bool get_thread_affinity_layout(const gmx::MDLogger&         mdlog,
     {
         GMX_LOG(mdlog.info)
                 .appendTextFormatted("Pinning threads with a%s logical core stride of %d",
-                                     bPickPinStride ? "n auto-selected" : " user-specified", *pin_stride);
+                                     bPickPinStride ? "n auto-selected" : " user-specified",
+                                     *pin_stride);
     }
 
     *issuedWarning = alreadyWarned;
@@ -317,7 +319,11 @@ static bool set_affinity(const t_commrec*            cr,
                 fprintf(debug,
                         "On rank %2d, thread %2d, index %2d, core %2d the affinity setting "
                         "returned %d\n",
-                        cr->nodeid, gmx_omp_get_thread_num(), index, core, ret ? 1 : 0);
+                        cr->nodeid,
+                        gmx_omp_get_thread_num(),
+                        index,
+                        core,
+                        ret ? 1 : 0);
             }
         }
         GMX_CATCH_ALL_AND_EXIT_WITH_FATAL_ERROR
@@ -330,7 +336,8 @@ static bool set_affinity(const t_commrec*            cr,
         sprintf(msg,
                 "Looks like we have set affinity for more threads than "
                 "we have (%d > %d)!\n",
-                nth_affinity_set, nthread_local);
+                nth_affinity_set,
+                nthread_local);
         gmx_incons(msg);
     }
 
@@ -356,7 +363,10 @@ static bool set_affinity(const t_commrec*            cr,
 
         if (nthread_local > 1)
         {
-            sprintf(sbuf2, "for %d/%d thread%s ", nthread_local - nth_affinity_set, nthread_local,
+            sprintf(sbuf2,
+                    "for %d/%d thread%s ",
+                    nthread_local - nth_affinity_set,
+                    nthread_local,
                     nthread_local > 1 ? "s" : "");
         }
 
@@ -382,8 +392,8 @@ void analyzeThreadsOnThisNode(const gmx::PhysicalNodeCommunicator& physicalNodeC
         /* MPI_Scan is inclusive, but here we need exclusive */
         *intraNodeThreadOffset -= numThreadsOnThisRank;
         /* Get the total number of threads on this physical node */
-        MPI_Allreduce(&numThreadsOnThisRank, numThreadsOnThisNode, 1, MPI_INT, MPI_SUM,
-                      physicalNodeComm.comm_);
+        MPI_Allreduce(
+                &numThreadsOnThisRank, numThreadsOnThisNode, 1, MPI_INT, MPI_SUM, physicalNodeComm.comm_);
     }
 #else
     GMX_UNUSED_VALUE(physicalNodeComm);
@@ -446,17 +456,23 @@ void gmx_set_thread_affinity(const gmx::MDLogger&         mdlog,
 
     bool affinityIsAutoAndNumThreadsIsNotAuto =
             (hw_opt->threadAffinity == ThreadAffinity::Auto && !hw_opt->totNumThreadsIsAuto);
-    bool issuedWarning;
-    bool validLayout = get_thread_affinity_layout(
-            mdlog, cr, hwTop, numThreadsOnThisNode, affinityIsAutoAndNumThreadsIsNotAuto, offset,
-            &core_pinning_stride, &localityOrder, &issuedWarning);
+    bool                   issuedWarning;
+    bool                   validLayout = get_thread_affinity_layout(mdlog,
+                                                  cr,
+                                                  hwTop,
+                                                  numThreadsOnThisNode,
+                                                  affinityIsAutoAndNumThreadsIsNotAuto,
+                                                  offset,
+                                                  &core_pinning_stride,
+                                                  &localityOrder,
+                                                  &issuedWarning);
     const gmx::sfree_guard localityOrderGuard(localityOrder);
 
     bool allAffinitiesSet;
     if (validLayout)
     {
-        allAffinitiesSet = set_affinity(cr, numThreadsOnThisRank, intraNodeThreadOffset, offset,
-                                        core_pinning_stride, localityOrder, affinityAccess);
+        allAffinitiesSet = set_affinity(
+                cr, numThreadsOnThisRank, intraNodeThreadOffset, offset, core_pinning_stride, localityOrder, affinityAccess);
     }
     else
     {
@@ -502,8 +518,10 @@ static bool detectDefaultAffinityMask(const int nthreads_hw_avail)
     {
         if (debug)
         {
-            fprintf(debug, "%d hardware threads detected, but %d was returned by CPU_COUNT",
-                    nthreads_hw_avail, CPU_COUNT(&mask_current));
+            fprintf(debug,
+                    "%d hardware threads detected, but %d was returned by CPU_COUNT",
+                    nthreads_hw_avail,
+                    CPU_COUNT(&mask_current));
         }
         detectedDefaultAffinityMask = false;
     }
@@ -555,8 +573,8 @@ static bool detectDefaultAffinityMask(const int nthreads_hw_avail)
  */
 void gmx_check_thread_affinity_set(const gmx::MDLogger& mdlog,
                                    gmx_hw_opt_t*        hw_opt,
-                                   int gmx_unused nthreads_hw_avail,
-                                   gmx_bool       bAfterOpenmpInit)
+                                   int gmx_unused       nthreads_hw_avail,
+                                   gmx_bool             bAfterOpenmpInit)
 {
     GMX_RELEASE_ASSERT(hw_opt, "hw_opt must be a non-NULL pointer");
 

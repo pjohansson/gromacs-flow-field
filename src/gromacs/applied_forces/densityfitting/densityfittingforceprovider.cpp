@@ -1,7 +1,7 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -79,8 +79,7 @@ GaussianSpreadKernelParameters::Shape makeSpreadKernel(real sigma, real nSigma, 
 {
     RVec sigmaInLatticeCoordinates{ sigma, sigma, sigma };
     scaleToLattice(&sigmaInLatticeCoordinates);
-    return { DVec{ sigmaInLatticeCoordinates[XX], sigmaInLatticeCoordinates[YY],
-                   sigmaInLatticeCoordinates[ZZ] },
+    return { DVec{ sigmaInLatticeCoordinates[XX], sigmaInLatticeCoordinates[YY], sigmaInLatticeCoordinates[ZZ] },
              nSigma };
 }
 
@@ -102,10 +101,10 @@ const std::string DensityFittingForceProviderState::stepsSinceLastCalculationNam
 void DensityFittingForceProviderState::writeState(KeyValueTreeObjectBuilder kvtBuilder,
                                                   const std::string&        identifier) const
 {
-    writeKvtCheckpointValue(stepsSinceLastCalculation_, stepsSinceLastCalculationName_, identifier,
-                            kvtBuilder);
-    writeKvtCheckpointValue(adaptiveForceConstantScale_, adaptiveForceConstantScaleName_,
-                            identifier, kvtBuilder);
+    writeKvtCheckpointValue(
+            stepsSinceLastCalculation_, stepsSinceLastCalculationName_, identifier, kvtBuilder);
+    writeKvtCheckpointValue(
+            adaptiveForceConstantScale_, adaptiveForceConstantScaleName_, identifier, kvtBuilder);
 
     KeyValueTreeObjectBuilder exponentialMovingAverageKvtEntry =
             kvtBuilder.addObject(identifier + "-" + exponentialMovingAverageStateName_);
@@ -117,9 +116,13 @@ void DensityFittingForceProviderState::readState(const KeyValueTreeObject& kvtDa
                                                  const std::string&        identifier)
 {
     readKvtCheckpointValue(compat::make_not_null(&stepsSinceLastCalculation_),
-                           stepsSinceLastCalculationName_, identifier, kvtData);
+                           stepsSinceLastCalculationName_,
+                           identifier,
+                           kvtData);
     readKvtCheckpointValue(compat::make_not_null(&adaptiveForceConstantScale_),
-                           adaptiveForceConstantScaleName_, identifier, kvtData);
+                           adaptiveForceConstantScaleName_,
+                           identifier,
+                           kvtData);
 
     if (kvtData.keyExists(identifier + "-" + exponentialMovingAverageStateName_))
     {
@@ -230,11 +233,11 @@ DensityFittingForceProvider::Impl::Impl(const DensityFittingParameters&         
         Matrix3x3 translationMatrix = transformationMatrixParametersAsArray.has_value()
                                               ? *transformationMatrixParametersAsArray
                                               : identityMatrix<real, 3>();
-        RVec translationVector = translationParametersAsArray.has_value()
-                                         ? RVec((*translationParametersAsArray)[XX],
+        RVec      translationVector = translationParametersAsArray.has_value()
+                                              ? RVec((*translationParametersAsArray)[XX],
                                                 (*translationParametersAsArray)[YY],
                                                 (*translationParametersAsArray)[ZZ])
-                                         : RVec(0, 0, 0);
+                                              : RVec(0, 0, 0);
         affineTransformation_.emplace(translationMatrix.asConstView(), translationVector);
     }
 
@@ -266,7 +269,8 @@ void DensityFittingForceProvider::Impl::calculateForces(const ForceProviderInput
 
     transformedCoordinates_.resize(localAtomSet_.numAtomsLocal());
     // pick and copy atom coordinates
-    std::transform(std::cbegin(localAtomSet_.localIndex()), std::cend(localAtomSet_.localIndex()),
+    std::transform(std::cbegin(localAtomSet_.localIndex()),
+                   std::cend(localAtomSet_.localIndex()),
                    std::begin(transformedCoordinates_),
                    [&forceProviderInput](int index) { return forceProviderInput.x_[index]; });
 
@@ -294,8 +298,8 @@ void DensityFittingForceProvider::Impl::calculateForces(const ForceProviderInput
     // spread atoms on grid
     gaussTransform_.setZero();
 
-    std::vector<real> amplitudes =
-            amplitudeLookup_(forceProviderInput.mdatoms_, localAtomSet_.localIndex());
+    std::vector<real> amplitudes = amplitudeLookup_(
+            forceProviderInput.chargeA_, forceProviderInput.massT_, localAtomSet_.localIndex());
 
     if (parameters_.normalizeDensities_)
     {
@@ -323,7 +327,8 @@ void DensityFittingForceProvider::Impl::calculateForces(const ForceProviderInput
     {
         // \todo update to real once GaussTransform class returns real
         gmx_sumf(gaussTransform_.view().mapping().required_span_size(),
-                 gaussTransform_.view().data(), &forceProviderInput.cr_);
+                 gaussTransform_.view().data(),
+                 &forceProviderInput.cr_);
     }
 
     // calculate grid derivative
@@ -332,8 +337,11 @@ void DensityFittingForceProvider::Impl::calculateForces(const ForceProviderInput
     // calculate forces
     forces_.resize(localAtomSet_.numAtomsLocal());
     std::transform(
-            std::begin(transformedCoordinates_), std::end(transformedCoordinates_), std::begin(amplitudes),
-            std::begin(forces_), [&densityDerivative, this](const RVec r, real amplitude) {
+            std::begin(transformedCoordinates_),
+            std::end(transformedCoordinates_),
+            std::begin(amplitudes),
+            std::begin(forces_),
+            [&densityDerivative, this](const RVec r, real amplitude) {
                 return densityFittingForce_.evaluateForce({ r, amplitude }, densityDerivative);
             });
 
@@ -409,7 +417,7 @@ void DensityFittingForceProvider::calculateForces(const ForceProviderInput& forc
     impl_->calculateForces(forceProviderInput, forceProviderOutput);
 }
 
-void DensityFittingForceProvider::writeCheckpointData(MdModulesWriteCheckpointData checkpointWriting,
+void DensityFittingForceProvider::writeCheckpointData(MDModulesWriteCheckpointData checkpointWriting,
                                                       const std::string&           moduleName)
 {
     impl_->stateToCheckpoint().writeState(checkpointWriting.builder_, moduleName);

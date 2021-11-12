@@ -2,7 +2,7 @@
 # This file is part of the GROMACS molecular simulation package.
 #
 # Copyright (c) 2009,2010,2012,2014,2015 by the GROMACS development team.
-# Copyright (c) 2016,2020, by the GROMACS development team, led by
+# Copyright (c) 2016,2020,2021, by the GROMACS development team, led by
 # Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
 # and including many others, as listed in the AUTHORS file in the
 # top-level source directory and at http://www.gromacs.org.
@@ -33,6 +33,8 @@
 # To help us fund GROMACS development, we humbly ask that you cite
 # the research papers on the package. Check out http://www.gromacs.org.
 
+add_library(gmxlib INTERFACE)
+
 add_subdirectory(nonbonded)
 
 # The nonbonded directory contains subdirectories that are only
@@ -41,6 +43,25 @@ file(GLOB GMXLIB_SOURCES *.cpp)
 
 set(GMXLIB_SOURCES ${GMXLIB_SOURCES} ${NONBONDED_SOURCES} PARENT_SCOPE)
 
-# if(BUILD_TESTING)
-#     add_subdirectory(tests)
-# endif()
+# TODO(#3288): Explicitly link specific modules for source dependencies when gmxlib is an OBJECT target.
+# Source files have the following private module dependencies.
+target_link_libraries(gmxlib PRIVATE
+                      #                      common
+                      #                      math
+                      #                      mdtypes
+                      #                      tng_io
+                      )
+
+# Public interface for modules, including dependencies and interfaces
+#target_include_directories(gmxlib PUBLIC
+target_include_directories(gmxlib INTERFACE
+                           $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
+#target_link_libraries(gmxlib PUBLIC
+target_link_libraries(gmxlib INTERFACE
+                      legacy_api
+                      utility
+                      )
+
+if(BUILD_TESTING)
+    add_subdirectory(nonbonded/tests)
+endif()

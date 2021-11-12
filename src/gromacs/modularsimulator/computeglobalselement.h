@@ -1,7 +1,7 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -62,6 +62,7 @@ class FreeEnergyPerturbationData;
 class LegacySimulatorData;
 class MDAtoms;
 class MDLogger;
+class ObservablesReducer;
 
 //! \addtogroup module_modularsimulator
 //! \{
@@ -97,11 +98,7 @@ typedef std::function<void()> CheckBondedInteractionsCallback;
  * \tparam algorithm  The global reduction scheme
  */
 template<ComputeGlobalsAlgorithm algorithm>
-class ComputeGlobalsElement final :
-    public ISimulatorElement,
-    public IEnergySignallerClient,
-    public ITrajectorySignallerClient,
-    public ITopologyHolderClient
+class ComputeGlobalsElement final : public ISimulatorElement, public IEnergySignallerClient, public ITrajectorySignallerClient
 {
 public:
     //! Constructor
@@ -118,8 +115,9 @@ public:
                           t_nrnb*                     nrnb,
                           gmx_wallcycle*              wcycle,
                           t_forcerec*                 fr,
-                          const gmx_mtop_t*           global_top,
-                          Constraints*                constr);
+                          const gmx_mtop_t&           global_top,
+                          Constraints*                constr,
+                          ObservablesReducer*         observablesReducer);
 
     //! Destructor
     ~ComputeGlobalsElement() override;
@@ -139,9 +137,6 @@ public:
      */
     void scheduleTask(Step step, Time time, const RegisterRunFunction& registerRunFunction) override;
 
-    //! Get callback to request checking of bonded interactions
-    CheckBondedInteractionsCallback getCheckNumberOfBondedInteractionsCallback();
-
     //! No element teardown needed
     void elementTeardown() override {}
 
@@ -152,7 +147,8 @@ public:
      * \param statePropagatorData  Pointer to the \c StatePropagatorData object
      * \param energyData  Pointer to the \c EnergyData object
      * \param freeEnergyPerturbationData  Pointer to the \c FreeEnergyPerturbationData object
-     * \param globalCommunicationHelper  Pointer to the \c GlobalCommunicationHelper object
+     * \param globalCommunicationHelper   Pointer to the \c GlobalCommunicationHelper object
+     * \param observablesReducer          Pointer to the \c ObservablesReducer object
      *
      * \throws std::bad_any_cast  on internal error in VelocityVerlet algorithm builder.
      * \throws std::bad_alloc  when out of memory.
@@ -164,11 +160,10 @@ public:
                                                     StatePropagatorData*        statePropagatorData,
                                                     EnergyData*                 energyData,
                                                     FreeEnergyPerturbationData* freeEnergyPerturbationData,
-                                                    GlobalCommunicationHelper* globalCommunicationHelper);
+                                                    GlobalCommunicationHelper* globalCommunicationHelper,
+                                                    ObservablesReducer*        observablesReducer);
 
 private:
-    //! ITopologyClient implementation
-    void setTopology(const gmx_localtop_t* top) override;
     //! IEnergySignallerClient implementation
     std::optional<SignallerCallback> registerEnergyCallback(EnergySignallerEvent event) override;
     //! ITrajectorySignallerClient implementation
@@ -232,8 +227,6 @@ private:
     StatePropagatorData* statePropagatorData_;
     //! Pointer to the energy data (needed for the tensors and mu_tot)
     EnergyData* energyData_;
-    //! Pointer to the local topology (only needed for checkNumberOfBondedInteractions)
-    const gmx_localtop_t* localTopology_;
     //! Pointer to the free energy perturbation data
     FreeEnergyPerturbationData* freeEnergyPerturbationData_;
 
@@ -252,7 +245,7 @@ private:
     //! Contains user input mdp options.
     const t_inputrec* inputrec_;
     //! Full system topology - only needed for checkNumberOfBondedInteractions.
-    const gmx_mtop_t* top_global_;
+    const gmx_mtop_t& top_global_;
     //! Atom parameters for this domain.
     const MDAtoms* mdAtoms_;
     //! Handles constraints.
@@ -263,6 +256,8 @@ private:
     gmx_wallcycle* wcycle_;
     //! Parameters for force calculations.
     t_forcerec* fr_;
+    //! Coordinates reduction for observables
+    ObservablesReducer* observablesReducer_;
 };
 
 //! \}

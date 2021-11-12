@@ -39,7 +39,7 @@
 ########################################################################
 # Determine the defaults (this block has no effect if the variables have
 # already been set)
-if((APPLE OR CYGWIN OR ${CMAKE_SYSTEM_NAME} MATCHES "Linux|.*BSD|GNU") AND NOT GMX_BUILD_MDRUN_ONLY)
+if((APPLE OR CYGWIN OR ${CMAKE_SYSTEM_NAME} MATCHES "Linux|.*BSD|GNU"))
     # Maybe Solaris should be here? Patch this if you know!
     SET(SHARED_LIBS_DEFAULT ON)
 elseif(WIN32)
@@ -72,10 +72,6 @@ option(BUILD_SHARED_LIBS "Enable shared libraries (can be problematic e.g. with 
 set(GMX_PREFER_STATIC_LIBS_DEFAULT OFF)
 if (WIN32 AND NOT BUILD_SHARED_LIBS)
     set(GMX_PREFER_STATIC_LIBS_DEFAULT ON)
-endif()
-
-if(BUILD_SHARED_LIBS AND GMX_BUILD_MDRUN_ONLY)
-    message(WARNING "Both BUILD_SHARED_LIBS and GMX_BUILD_MDRUN_ONLY are set. Generally, an mdrun-only build should prefer to use static libraries, which is the default if you make a fresh build tree. You may be re-using an old build tree, and so may wish to set BUILD_SHARED_LIBS=off yourself.")
 endif()
 
 if (UNIX)

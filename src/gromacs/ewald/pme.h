@@ -50,11 +50,11 @@
 #define GMX_EWALD_PME_H
 
 #include <string>
+#include <vector>
 
 #include "gromacs/gpu_utils/devicebuffer_datatype.h"
 #include "gromacs/gpu_utils/gpu_macros.h"
 #include "gromacs/math/vectypes.h"
-#include "gromacs/utility/basedefinitions.h"
 #include "gromacs/utility/real.h"
 
 struct gmx_hw_info_t;
@@ -75,6 +75,19 @@ enum class GpuTaskCompletion;
 class PmeGpuProgram;
 class GpuEventSynchronizer;
 
+/*! \brief Hack to selectively enable some parts of PME during unit testing.
+ *
+ * Set to \c false by default. If any of the tests sets it to \c true, it will
+ * make the compatibility check consider PME to be supported in SYCL builds.
+ *
+ * Currently we don't have proper PME implementation with SYCL, but we still want
+ * to run tests for some of the kernels.
+ *
+ * \todo Remove after #3927 is done and PME is fully enabled in SYCL builds.
+ */
+//NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
+extern bool g_allowPmeWithSyclForTesting;
+
 namespace gmx
 {
 template<typename>
@@ -83,6 +96,30 @@ class ForceWithVirial;
 class MDLogger;
 enum class PinningPolicy : int;
 class StepWorkload;
+
+/*! \libinternal \brief Class for managing usage of separate PME-only ranks
+ *
+ * Used for checking if some parts of the code could not use PME-only ranks
+ *
+ */
+class SeparatePmeRanksPermitted
+{
+public:
+    //! Disables PME ranks permitted flag with a reason
+    void disablePmeRanks(const std::string& reason);
+    //! Return status of PME ranks usage
+    bool permitSeparatePmeRanks() const;
+    //! Returns all reasons, for not using PME ranks
+    std::string reasonsWhyDisabled() const;
+
+private:
+    //! Flag that informs whether simualtion could use dedicated PME ranks
+    bool permitSeparatePmeRanks_ = true;
+    //! Storage for all reasons, why PME ranks could not be used
+    std::vector<std::string> reasons_;
+};
+
+class PmeCoordinateReceiverGpu;
 } // namespace gmx
 
 enum
@@ -181,12 +218,12 @@ void gmx_pme_destroy(gmx_pme_t* pme);
 int gmx_pme_do(struct gmx_pme_t*              pme,
                gmx::ArrayRef<const gmx::RVec> coordinates,
                gmx::ArrayRef<gmx::RVec>       forces,
-               real                           chargeA[],
-               real                           chargeB[],
-               real                           c6A[],
-               real                           c6B[],
-               real                           sigmaA[],
-               real                           sigmaB[],
+               gmx::ArrayRef<const real>      chargeA,
+               gmx::ArrayRef<const real>      chargeB,
+               gmx::ArrayRef<const real>      c6A,
+               gmx::ArrayRef<const real>      c6B,
+               gmx::ArrayRef<const real>      sigmaA,
+               gmx::ArrayRef<const real>      sigmaB,
                const matrix                   box,
                const t_commrec*               cr,
                int                            maxshift_x,
@@ -210,7 +247,7 @@ int gmx_pme_do(struct gmx_pme_t*              pme,
  * pme struct. Currently does not work in parallel or with free
  * energy.
  */
-void gmx_pme_calc_energy(gmx_pme_t* pme, gmx::ArrayRef<const gmx::RVec> x, gmx::ArrayRef<const real> q, real* V);
+real gmx_pme_calc_energy(gmx_pme_t* pme, gmx::ArrayRef<const gmx::RVec> x, gmx::ArrayRef<const real> q);
 
 /*! \brief
  * This function updates the local atom data on GPU after DD (charges, coordinates, etc.).
@@ -224,7 +261,10 @@ void gmx_pme_calc_energy(gmx_pme_t* pme, gmx::ArrayRef<const gmx::RVec> x, gmx::
  * \param[in]     chargesB   The pointer to the array of particle charges in state B. Only used if
  * charges are perturbed and can otherwise be nullptr.
  */
-void gmx_pme_reinit_atoms(gmx_pme_t* pme, int numAtoms, const real* chargesA, const real* chargesB);
+void gmx_pme_reinit_atoms(gmx_pme_t*                pme,
+                          int                       numAtoms,
+                          gmx::ArrayRef<const real> chargesA,
+                          gmx::ArrayRef<const real> chargesB);
 
 /* A block of PME GPU functions */
 
@@ -345,17 +385,24 @@ GPU_FUNC_QUALIFIER void pme_gpu_prepare_computation(gmx_pme_t*     GPU_FUNC_ARGU
 /*! \brief
  * Launches first stage of PME on GPU - spreading kernel.
  *
- * \param[in] pme                The PME data structure.
- * \param[in] xReadyOnDevice     Event synchronizer indicating that the coordinates
- * are ready in the device memory; nullptr allowed only on separate PME ranks.
- * \param[in] wcycle             The wallclock counter.
- * \param[in] lambdaQ            The Coulomb lambda of the current state of the
- * system. Only used if FEP of Coulomb is active.
+ * \param[in] pme                            The PME data structure.
+ * \param[in] xReadyOnDevice                 Event synchronizer indicating that the coordinates
+ *                                           are ready in the device memory; nullptr allowed only
+ *                                           on separate PME ranks.
+ * \param[in] wcycle                         The wallclock counter.
+ * \param[in] lambdaQ                        The Coulomb lambda of the current state of the
+ *                                           system. Only used if FEP of Coulomb is active.
+ * \param[in] useGpuDirectComm               Whether direct GPU PME-PP communication is active
+ * \param[in]  pmeCoordinateReceiverGpu      Coordinate receiver object, which must be valid when
+ *                                           direct GPU PME-PP communication is active
  */
-GPU_FUNC_QUALIFIER void pme_gpu_launch_spread(gmx_pme_t*            GPU_FUNC_ARGUMENT(pme),
-                                              GpuEventSynchronizer* GPU_FUNC_ARGUMENT(xReadyOnDevice),
-                                              gmx_wallcycle*        GPU_FUNC_ARGUMENT(wcycle),
-                                              real GPU_FUNC_ARGUMENT(lambdaQ)) GPU_FUNC_TERM;
+GPU_FUNC_QUALIFIER void pme_gpu_launch_spread(
+        gmx_pme_t*                     GPU_FUNC_ARGUMENT(pme),
+        GpuEventSynchronizer*          GPU_FUNC_ARGUMENT(xReadyOnDevice),
+        gmx_wallcycle*                 GPU_FUNC_ARGUMENT(wcycle),
+        real                           GPU_FUNC_ARGUMENT(lambdaQ),
+        bool                           GPU_FUNC_ARGUMENT(useGpuDirectComm),
+        gmx::PmeCoordinateReceiverGpu* GPU_FUNC_ARGUMENT(pmeCoordinateReceiverGpu)) GPU_FUNC_TERM;
 
 /*! \brief
  * Launches middle stages of PME (FFT R2C, solving, FFT C2R) either on GPU or on CPU, depending on the run mode.
@@ -454,12 +501,12 @@ GPU_FUNC_QUALIFIER void pme_gpu_set_device_x(const gmx_pme_t*        GPU_FUNC_AR
  * \param[in] pme            The PME data structure.
  * \returns                  Pointer to force data
  */
-GPU_FUNC_QUALIFIER void* pme_gpu_get_device_f(const gmx_pme_t* GPU_FUNC_ARGUMENT(pme))
-        GPU_FUNC_TERM_WITH_RETURN(nullptr);
+GPU_FUNC_QUALIFIER DeviceBuffer<gmx::RVec> pme_gpu_get_device_f(const gmx_pme_t* GPU_FUNC_ARGUMENT(pme))
+        GPU_FUNC_TERM_WITH_RETURN(DeviceBuffer<gmx::RVec>{});
 
 /*! \brief Get pointer to the device synchronizer object that allows syncing on PME force calculation completion
  * \param[in] pme            The PME data structure.
- * \returns                  Pointer to sychronizer
+ * \returns                  Pointer to synchronizer
  */
 GPU_FUNC_QUALIFIER GpuEventSynchronizer* pme_gpu_get_f_ready_synchronizer(const gmx_pme_t* GPU_FUNC_ARGUMENT(pme))
         GPU_FUNC_TERM_WITH_RETURN(nullptr);

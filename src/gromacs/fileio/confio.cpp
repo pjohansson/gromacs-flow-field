@@ -4,7 +4,7 @@
  * Copyright (c) 1991-2000, University of Groningen, The Netherlands.
  * Copyright (c) 2001-2004, The GROMACS development team.
  * Copyright (c) 2013,2014,2015,2016,2017 by the GROMACS development team.
- * Copyright (c) 2018,2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2018,2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -37,7 +37,7 @@
  */
 #include "gmxpre.h"
 
-#include "confio.h"
+#include "gromacs/fileio/confio.h"
 
 #include <cstdio>
 #include <cstring>
@@ -107,8 +107,8 @@ void write_sto_conf_indexed(const char*    outfile,
         case efENT:
         case efPQR:
             out = gmx_fio_fopen(outfile, "w");
-            write_pdbfile_indexed(out, title, atoms, x, pbcType, box, ' ', -1, nindex, index,
-                                  nullptr, ftp == efPQR);
+            write_pdbfile_indexed(
+                    out, title, atoms, x, pbcType, box, ' ', -1, nindex, index, nullptr, ftp == efPQR);
             gmx_fio_fclose(out);
             break;
         case efESP:
@@ -174,7 +174,7 @@ void write_sto_conf(const char*    outfile,
 
 void write_sto_conf_mtop(const char*       outfile,
                          const char*       title,
-                         const gmx_mtop_t* mtop,
+                         const gmx_mtop_t& mtop,
                          const rvec        x[],
                          const rvec*       v,
                          PbcType           pbcType,
@@ -268,7 +268,7 @@ void ChainIdFiller::fill(t_atoms* atoms, const int startAtomIndex, const int end
     {
         // We always assign a new chain number, but only assign a chain id
         // characters for larger molecules.
-        int chainIdToAssign;
+        char chainIdToAssign;
         if (endAtomIndex - startAtomIndex >= s_chainMinAtoms && !outOfIds_)
         {
             /* Set the chain id for the output */
@@ -407,7 +407,7 @@ void readConfAndAtoms(const char* infile,
         readConfAndTopology(infile, &haveTopology, &mtop, pbcType, x, v, box);
         *symtab                          = mtop.symtab;
         *name                            = gmx_strdup(*mtop.name);
-        *atoms                           = gmx_mtop_global_atoms(&mtop);
+        *atoms                           = gmx_mtop_global_atoms(mtop);
         gmx::RangePartitioning molecules = gmx_mtop_molecules(mtop);
         makeChainIdentifiersAfterTprReading(atoms, molecules);
 
@@ -473,8 +473,8 @@ void readConfAndTopology(const char* infile,
             snew(*v, header.natoms);
         }
         int     natoms;
-        PbcType pbcType_tmp = read_tpx(infile, nullptr, box, &natoms, (x == nullptr) ? nullptr : *x,
-                                       (v == nullptr) ? nullptr : *v, mtop);
+        PbcType pbcType_tmp = read_tpx(
+                infile, nullptr, box, &natoms, (x == nullptr) ? nullptr : *x, (v == nullptr) ? nullptr : *v, mtop);
         if (pbcType != nullptr)
         {
             *pbcType = pbcType_tmp;

@@ -1,7 +1,7 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2020, by the GROMACS development team, led by
+ * Copyright (c) 2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -104,7 +104,9 @@ TEST_P(EwaldSurfaceTermTest, WithinTolerances)
         fprintf(stdout,
                 "Test system '%s' cannot run with %d ranks.\n"
                 "The supported numbers are %s 1.\n",
-                simulationName.c_str(), numRanksAvailable, numRanksAvailable == 1 ? ">" : "=");
+                simulationName.c_str(),
+                numRanksAvailable,
+                numRanksAvailable == 1 ? ">" : "=");
         return;
     }
 
@@ -165,7 +167,7 @@ TEST_P(EwaldSurfaceTermTest, WithinTolerances)
             auto frame = reader.frame();
             auto force = frame.f();
             int  atom  = 0;
-            for (auto& f : force)
+            for (const auto& f : force)
             {
                 std::string forceName = frame.frameName() + " F[" + toString(atom) + "]";
 
@@ -181,7 +183,7 @@ TEST_P(EwaldSurfaceTermTest, WithinTolerances)
 std::vector<std::string> surfaceTerm = { "3DC", "epsilon-surface-constraint", "epsilon-surface" };
 //! \}
 
-INSTANTIATE_TEST_CASE_P(EwaldSurfaceTerm, EwaldSurfaceTermTest, ::testing::ValuesIn(surfaceTerm));
+INSTANTIATE_TEST_SUITE_P(EwaldSurfaceTerm, EwaldSurfaceTermTest, ::testing::ValuesIn(surfaceTerm));
 
 } // namespace
 } // namespace test

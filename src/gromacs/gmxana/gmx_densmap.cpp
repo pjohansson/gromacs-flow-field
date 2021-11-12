@@ -4,7 +4,7 @@
  * Copyright (c) 1991-2000, University of Groningen, The Netherlands.
  * Copyright (c) 2001-2004, The GROMACS development team.
  * Copyright (c) 2013,2014,2015,2016,2017 by the GROMACS development team.
- * Copyright (c) 2018,2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2018,2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -47,6 +47,7 @@
 #include "gromacs/fileio/trxio.h"
 #include "gromacs/gmxana/gmx_ana.h"
 #include "gromacs/gmxana/gstat.h"
+#include "gromacs/math/units.h"
 #include "gromacs/math/utilities.h"
 #include "gromacs/math/vec.h"
 #include "gromacs/pbcutil/pbc.h"
@@ -147,8 +148,8 @@ int gmx_densmap(int argc, char* argv[])
 
     npargs = asize(pa);
 
-    if (!parse_common_args(&argc, argv, PCA_CAN_TIME | PCA_CAN_VIEW, NFILE, fnm, npargs, pa,
-                           asize(desc), desc, 0, nullptr, &oenv))
+    if (!parse_common_args(
+                &argc, argv, PCA_CAN_TIME | PCA_CAN_VIEW, NFILE, fnm, npargs, pa, asize(desc), desc, 0, nullptr, &oenv))
     {
         return 0;
     }
@@ -518,9 +519,22 @@ int gmx_densmap(int argc, char* argv[])
     else
     {
         fp = gmx_ffopen(ftp2fn(efXPM, NFILE, fnm), "w");
-        write_xpm(fp, MAT_SPATIAL_X | MAT_SPATIAL_Y, buf, unit, bRadial ? "axial (nm)" : label[c1],
-                  bRadial ? "r (nm)" : label[c2], n1, n2, tickx, tickz, grid, dmin, maxgrid, rlo,
-                  rhi, &nlev);
+        write_xpm(fp,
+                  MAT_SPATIAL_X | MAT_SPATIAL_Y,
+                  buf,
+                  unit,
+                  bRadial ? "axial (nm)" : label[c1],
+                  bRadial ? "r (nm)" : label[c2],
+                  n1,
+                  n2,
+                  tickx,
+                  tickz,
+                  grid,
+                  dmin,
+                  maxgrid,
+                  rlo,
+                  rhi,
+                  &nlev);
         gmx_ffclose(fp);
     }
 

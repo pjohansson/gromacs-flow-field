@@ -1,7 +1,7 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2016,2017,2018,2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2016,2017,2018,2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -251,8 +251,7 @@ const TrajectoryTolerances TrajectoryComparison::s_defaultTrajectoryTolerances{
 
 TrajectoryComparison::TrajectoryComparison(const TrajectoryFrameMatchSettings& matchSettings,
                                            const TrajectoryTolerances&         tolerances) :
-    matchSettings_(matchSettings),
-    tolerances_(tolerances)
+    matchSettings_(matchSettings), tolerances_(tolerances)
 {
 }
 
@@ -309,11 +308,18 @@ static void checkPositionsAgainstReference(const TrajectoryFrame&              f
     SCOPED_TRACE("Comparing positions");
     if (shouldDoComparison(frame.x(), matchSettings.coordinatesComparison))
     {
-        auto positions = frame.x();
+        ArrayRef<const RVec> positions{};
+        std::vector<RVec>    shiftedPositions{};
         if (frame.hasBox() && (matchSettings.handlePbcIfPossible || matchSettings.requirePbcHandling))
         {
-            positions = putAtomsInBox(frame);
+            shiftedPositions = putAtomsInBox(frame);
+            positions        = shiftedPositions;
         }
+        else
+        {
+            positions = frame.x();
+        }
+
         if (!frame.hasBox() && matchSettings.requirePbcHandling)
         {
             ADD_FAILURE() << "Comparing positions required PBC handling, "
@@ -405,8 +411,8 @@ void checkTrajectoryAgainstReferenceData(const std::string&          trajectoryF
                                          const TrajectoryComparison& trajectoryComparison,
                                          TestReferenceChecker*       checker)
 {
-    checkTrajectoryAgainstReferenceData(trajectoryFilename, trajectoryComparison, checker,
-                                        MaxNumFrames::compareAllFrames());
+    checkTrajectoryAgainstReferenceData(
+            trajectoryFilename, trajectoryComparison, checker, MaxNumFrames::compareAllFrames());
 }
 
 void checkTrajectoryAgainstReferenceData(const std::string&          trajectoryFilename,

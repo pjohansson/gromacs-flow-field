@@ -1,7 +1,7 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -55,11 +55,13 @@ namespace gmx
 SimulationWorkload createSimulationWorkload(const t_inputrec& inputrec,
                                             const bool        disableNonbondedCalculation,
                                             const DevelopmentFeatureFlags& devFlags,
-                                            bool                           useGpuForNonbonded,
-                                            PmeRunMode                     pmeRunMode,
-                                            bool                           useGpuForBonded,
-                                            bool                           useGpuForUpdate,
-                                            bool                           useGpuDirectHalo)
+                                            bool       havePpDomainDecomposition,
+                                            bool       haveSeparatePmeRank,
+                                            bool       useGpuForNonbonded,
+                                            PmeRunMode pmeRunMode,
+                                            bool       useGpuForBonded,
+                                            bool       useGpuForUpdate,
+                                            bool       useGpuDirectHalo)
 {
     SimulationWorkload simulationWorkload;
     simulationWorkload.computeNonbonded = !disableNonbondedCalculation;
@@ -71,17 +73,37 @@ SimulationWorkload createSimulationWorkload(const t_inputrec& inputrec,
     simulationWorkload.useGpuNonbonded = useGpuForNonbonded;
     simulationWorkload.useCpuPme       = (pmeRunMode == PmeRunMode::CPU);
     simulationWorkload.useGpuPme = (pmeRunMode == PmeRunMode::GPU || pmeRunMode == PmeRunMode::Mixed);
-    simulationWorkload.useGpuPmeFft    = (pmeRunMode == PmeRunMode::Mixed);
-    simulationWorkload.useGpuBonded    = useGpuForBonded;
-    simulationWorkload.useGpuUpdate    = useGpuForUpdate;
-    simulationWorkload.useGpuBufferOps = (devFlags.enableGpuBufferOps || useGpuForUpdate)
-                                         && !simulationWorkload.computeNonbondedAtMtsLevel1;
-    simulationWorkload.useGpuHaloExchange = useGpuDirectHalo;
+    simulationWorkload.useGpuPmeFft = (pmeRunMode == PmeRunMode::Mixed);
+    simulationWorkload.useGpuBonded = useGpuForBonded;
+    simulationWorkload.useGpuUpdate = useGpuForUpdate;
+    simulationWorkload.useGpuXBufferOps =
+            (devFlags.enableGpuBufferOps || useGpuForUpdate) && !inputrec.useMts;
+    simulationWorkload.useGpuFBufferOps =
+            (devFlags.enableGpuBufferOps || useGpuForUpdate) && !inputrec.useMts;
+    if (simulationWorkload.useGpuXBufferOps || simulationWorkload.useGpuFBufferOps)
+    {
+        GMX_ASSERT(simulationWorkload.useGpuNonbonded,
+                   "Can only offload X/F buffer ops if nonbonded computation is also offloaded");
+    }
+    simulationWorkload.havePpDomainDecomposition = havePpDomainDecomposition;
+    simulationWorkload.useCpuHaloExchange        = havePpDomainDecomposition && !useGpuDirectHalo;
+    simulationWorkload.useGpuHaloExchange        = useGpuDirectHalo;
+    if (pmeRunMode == PmeRunMode::None)
+    {
+        GMX_RELEASE_ASSERT(!haveSeparatePmeRank, "Can not have separate PME rank(s) without PME.");
+    }
+    simulationWorkload.haveSeparatePmeRank = haveSeparatePmeRank;
     simulationWorkload.useGpuPmePpCommunication =
-            devFlags.enableGpuPmePPComm && (pmeRunMode == PmeRunMode::GPU);
+            haveSeparatePmeRank && devFlags.enableGpuPmePPComm && (pmeRunMode == PmeRunMode::GPU);
+    simulationWorkload.useCpuPmePpCommunication =
+            haveSeparatePmeRank && !simulationWorkload.useGpuPmePpCommunication;
+    GMX_RELEASE_ASSERT(!(simulationWorkload.useGpuPmePpCommunication
+                         && simulationWorkload.useCpuPmePpCommunication),
+                       "Cannot do PME-PP communication on both CPU and GPU");
     simulationWorkload.useGpuDirectCommunication =
             devFlags.enableGpuHaloExchange || devFlags.enableGpuPmePPComm;
     simulationWorkload.haveEwaldSurfaceContribution = haveEwaldSurfaceContribution(inputrec);
+    simulationWorkload.useMts                       = inputrec.useMts;
 
     return simulationWorkload;
 }

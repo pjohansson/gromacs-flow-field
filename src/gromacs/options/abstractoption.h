@@ -2,7 +2,7 @@
  * This file is part of the GROMACS molecular simulation package.
  *
  * Copyright (c) 2010-2017, The GROMACS development team.
- * Copyright (c) 2019, by the GROMACS development team, led by
+ * Copyright (c) 2019,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -55,6 +55,7 @@
 #ifndef GMX_OPTIONS_ABSTRACTOPTION_H
 #define GMX_OPTIONS_ABSTRACTOPTION_H
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -104,11 +105,7 @@ protected:
     /*! \cond libapi */
     //! Initializes the name and default values for an option.
     explicit AbstractOption(const char* name) :
-        minValueCount_(1),
-        maxValueCount_(1),
-        name_(name),
-        descr_(nullptr),
-        storeIsSet_(nullptr)
+        minValueCount_(1), maxValueCount_(1), name_(name), descr_(nullptr), storeIsSet_(nullptr)
     {
     }
 

@@ -4,7 +4,7 @@
  * Copyright (c) 1991-2000, University of Groningen, The Netherlands.
  * Copyright (c) 2001-2004, The GROMACS development team.
  * Copyright (c) 2013,2014,2015,2017,2018 by the GROMACS development team.
- * Copyright (c) 2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -91,8 +91,10 @@ static void get_xlatoms(const std::string& filename, FILE* fp, int* nptr, t_xlat
         }
         if (na != 3)
         {
-            gmx_fatal(FARGS, "Expected a residue name and two atom names in file '%s', not '%s'",
-                      filename.c_str(), line);
+            gmx_fatal(FARGS,
+                      "Expected a residue name and two atom names in file '%s', not '%s'",
+                      filename.c_str(),
+                      line);
         }
 
         srenew(xl, n + 1);
@@ -146,7 +148,7 @@ void rename_atoms(const char*                            xlfile,
                   t_symtab*                              symtab,
                   gmx::ArrayRef<const PreprocessResidue> localPpResidue,
                   bool                                   bResname,
-                  ResidueType*                           rt,
+                  const ResidueTypeMap&                  rt,
                   bool                                   bReorderNum,
                   bool                                   bVerbose)
 {
@@ -216,15 +218,15 @@ void rename_atoms(const char*                            xlfile,
                 /* Match the residue name */
                 bMatch = (xlatom[i].res == nullptr
                           || (gmx_strcasecmp("protein-nterm", xlatom[i].res) == 0
-                              && rt->namedResidueHasType(rnm, "Protein") && bStartTerm)
+                              && namedResidueHasType(rt, rnm, "Protein") && bStartTerm)
                           || (gmx_strcasecmp("protein-cterm", xlatom[i].res) == 0
-                              && rt->namedResidueHasType(rnm, "Protein") && bEndTerm)
+                              && namedResidueHasType(rt, rnm, "Protein") && bEndTerm)
                           || (gmx_strcasecmp("protein", xlatom[i].res) == 0
-                              && rt->namedResidueHasType(rnm, "Protein"))
+                              && namedResidueHasType(rt, rnm, "Protein"))
                           || (gmx_strcasecmp("DNA", xlatom[i].res) == 0
-                              && rt->namedResidueHasType(rnm, "DNA"))
+                              && namedResidueHasType(rt, rnm, "DNA"))
                           || (gmx_strcasecmp("RNA", xlatom[i].res) == 0
-                              && rt->namedResidueHasType(rnm, "RNA")));
+                              && namedResidueHasType(rt, rnm, "RNA")));
                 if (!bMatch)
                 {
                     const char* ptr0 = rnm;
@@ -245,8 +247,11 @@ void rename_atoms(const char*                            xlfile,
                     const char* ptr0 = xlatom[i].replace;
                     if (bVerbose)
                     {
-                        printf("Renaming atom '%s' in residue %d %s to '%s'\n", *atoms->atomname[a],
-                               atoms->resinfo[resind].nr, *atoms->resinfo[resind].name, ptr0);
+                        printf("Renaming atom '%s' in residue %d %s to '%s'\n",
+                               *atoms->atomname[a],
+                               atoms->resinfo[resind].nr,
+                               *atoms->resinfo[resind].name,
+                               ptr0);
                     }
                     atoms->atomname[a] = put_symtab(symtab, ptr0);
                     bRenamed           = TRUE;

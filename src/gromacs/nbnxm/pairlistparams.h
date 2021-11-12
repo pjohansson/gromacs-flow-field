@@ -1,7 +1,7 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -59,9 +59,9 @@ enum class KernelType;
 //! The i-cluster size for CPU kernels, always 4 atoms
 static constexpr int c_nbnxnCpuIClusterSize = 4;
 
-//! The i- and j-cluster size for GPU lists, 8 atoms for CUDA, set at compile time for OpenCL
-#if GMX_GPU_OPENCL
-static constexpr int c_nbnxnGpuClusterSize = GMX_OPENCL_NB_CLUSTER_SIZE;
+//! The i- and j-cluster size for GPU lists, 8 atoms for CUDA, set at configure time for OpenCL and SYCL
+#if GMX_GPU_OPENCL || GMX_GPU_SYCL
+static constexpr int c_nbnxnGpuClusterSize = GMX_GPU_NB_CLUSTER_SIZE;
 #else
 static constexpr int c_nbnxnGpuClusterSize = 8;
 #endif
@@ -105,6 +105,10 @@ static constexpr gmx::EnumerationArray<PairlistType, int> IClusterSizePerListTyp
 //! Gives the j-cluster size for each pairlist type
 static constexpr gmx::EnumerationArray<PairlistType, int> JClusterSizePerListType = {
     { 2, 4, 8, c_nbnxnGpuClusterSize }
+};
+//! True if given pairlist type is used on GPU, false if on CPU.
+static constexpr gmx::EnumerationArray<PairlistType, bool> sc_isGpuPairListType = {
+    { false, false, false, true }
 };
 
 /*! \internal

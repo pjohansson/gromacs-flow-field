@@ -1,7 +1,7 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2015,2016,2017,2018,2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2015,2016,2017,2018,2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -88,9 +88,10 @@ namespace gmx
 template<typename>
 class ArrayRef;
 struct AwhHistory;
-struct AwhParams;
+class AwhParams;
 class Bias;
 struct BiasCoupledToSystem;
+class BiasSharing;
 class ForceWithVirial;
 
 /*! \libinternal
@@ -186,7 +187,7 @@ public:
      * \returns the potential energy for the bias.
      */
     real applyBiasForcesAndUpdateBias(PbcType                pbcType,
-                                      const real*            masses,
+                                      ArrayRef<const real>   masses,
                                       ArrayRef<const double> neighborLambdaEnergies,
                                       ArrayRef<const double> neighborLambdaDhdl,
                                       const matrix           box,
@@ -275,14 +276,14 @@ private:
      */
     bool isOutputStep(int64_t step) const;
 
-private:
     std::vector<BiasCoupledToSystem> biasCoupledToSystem_; /**< AWH biases and definitions of their coupling to the system. */
     const int64_t    seed_;   /**< Random seed for MC jumping with umbrella type bias potential. */
     const int        nstout_; /**< Interval in steps for writing to energy file. */
-    const t_commrec* commRecord_;          /**< Pointer to the communication record. */
-    const gmx_multisim_t* multiSimRecord_; /**< Handler for multi-simulations. */
-    pull_t*               pull_;           /**< Pointer to the pull working data. */
-    double                potentialOffset_; /**< The offset of the bias potential which changes due to bias updates. */
+    const t_commrec* commRecord_; /**< Pointer to the communication record. */
+    //! Object for sharing bias between simulations, only set when needed
+    std::unique_ptr<BiasSharing> biasSharing_;
+    pull_t*                      pull_; /**< Pointer to the pull working data. */
+    double potentialOffset_; /**< The offset of the bias potential which changes due to bias updates. */
     const int numFepLambdaStates_; /**< The number of free energy lambda states of the system. */
     int       fepLambdaState_;     /**< The current free energy lambda state. */
 };

@@ -2,7 +2,7 @@
  * This file is part of the GROMACS molecular simulation package.
  *
  * Copyright (c) 2012,2013,2014,2015,2016, The GROMACS development team.
- * Copyright (c) 2017,2018,2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2017,2018,2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -71,8 +71,7 @@
 
 gmx_hw_info_t::gmx_hw_info_t(std::unique_ptr<gmx::CpuInfo>          cpuInfo,
                              std::unique_ptr<gmx::HardwareTopology> hardwareTopology) :
-    cpuInfo(std::move(cpuInfo)),
-    hardwareTopology(std::move(hardwareTopology))
+    cpuInfo(std::move(cpuInfo)), hardwareTopology(std::move(hardwareTopology))
 {
 }
 
@@ -209,10 +208,7 @@ static void gmx_collect_hardware_mpi(const gmx::CpuInfo&             cpuInfo,
      * - family=23 with the below listed models;
      * - Hygon as vendor.
      */
-    const bool cpuIsAmdZen1 = ((cpuInfo.vendor() == CpuInfo::Vendor::Amd && cpuInfo.family() == 23
-                                && (cpuInfo.model() == 1 || cpuInfo.model() == 17
-                                    || cpuInfo.model() == 8 || cpuInfo.model() == 24))
-                               || cpuInfo.vendor() == CpuInfo::Vendor::Hygon);
+    const bool cpuIsAmdZen1 = gmx::cpuIsAmdZen1(cpuInfo);
 
     int numCompatibleDevices = getCompatibleDevices(hardwareInfo->deviceInfoList).size();
 #if GMX_LIB_MPI
@@ -251,8 +247,7 @@ static void gmx_collect_hardware_mpi(const gmx::CpuInfo&             cpuInfo,
             countsLocal[3] = numCompatibleDevices;
         }
 
-        MPI_Allreduce(countsLocal.data(), countsReduced.data(), countsLocal.size(), MPI_INT,
-                      MPI_SUM, MPI_COMM_WORLD);
+        MPI_Allreduce(countsLocal.data(), countsReduced.data(), countsLocal.size(), MPI_INT, MPI_SUM, MPI_COMM_WORLD);
     }
 
     constexpr int                   numElementsMax = 11;
@@ -274,8 +269,7 @@ static void gmx_collect_hardware_mpi(const gmx::CpuInfo&             cpuInfo,
         maxMinLocal[9]  = -maxMinLocal[4];
         maxMinLocal[10] = (cpuIsAmdZen1 ? 1 : 0);
 
-        MPI_Allreduce(maxMinLocal.data(), maxMinReduced.data(), maxMinLocal.size(), MPI_INT,
-                      MPI_MAX, MPI_COMM_WORLD);
+        MPI_Allreduce(maxMinLocal.data(), maxMinReduced.data(), maxMinLocal.size(), MPI_INT, MPI_MAX, MPI_COMM_WORLD);
     }
 
     hardwareInfo->nphysicalnode       = countsReduced[0];
@@ -333,7 +327,8 @@ void hardwareTopologyDoubleCheckDetection(const gmx::MDLogger gmx_unused& mdlog,
         GMX_LOG(mdlog.info)
                 .appendTextFormatted(
                         "Note: %d CPUs configured, but only %d were detected to be online.\n",
-                        countConfigured, countFromDetection);
+                        countConfigured,
+                        countFromDetection);
 
         if (c_architecture == Architecture::X86 && countConfigured == 2 * countFromDetection)
         {

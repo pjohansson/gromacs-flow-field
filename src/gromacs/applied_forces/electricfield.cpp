@@ -59,7 +59,6 @@
 #include "gromacs/mdtypes/imdmodule.h"
 #include "gromacs/mdtypes/imdoutputprovider.h"
 #include "gromacs/mdtypes/imdpoptionprovider.h"
-#include "gromacs/mdtypes/mdatom.h"
 #include "gromacs/options/basicoptions.h"
 #include "gromacs/options/ioptionscontainerwithsections.h"
 #include "gromacs/options/optionsection.h"
@@ -178,8 +177,8 @@ public:
     void calculateForces(const ForceProviderInput& forceProviderInput,
                          ForceProviderOutput*      forceProviderOutput) override;
 
-    void subscribeToSimulationSetupNotifications(MdModulesNotifier* /* notifier */) override {}
-    void subscribeToPreProcessingNotifications(MdModulesNotifier* /* notifier */) override {}
+    void subscribeToSimulationSetupNotifications(MDModulesNotifiers* /* notifiers */) override {}
+    void subscribeToPreProcessingNotifications(MDModulesNotifiers* /* notifiers */) override {}
 
 private:
     //! Return whether or not to apply a field
@@ -268,8 +267,11 @@ void ElectricField::initOutput(FILE* fplog, int nfile, const t_filenm fnm[], boo
             }
             else
             {
-                fpField_ = xvgropen(opt2fn("-field", nfile, fnm), "Applied electric field",
-                                    "Time (ps)", "E (V/nm)", oenv);
+                fpField_ = xvgropen(opt2fn("-field", nfile, fnm),
+                                    "Applied electric field",
+                                    "Time (ps)",
+                                    "E (V/nm)",
+                                    oenv);
             }
         }
     }
@@ -306,24 +308,24 @@ void ElectricField::calculateForces(const ForceProviderInput& forceProviderInput
 {
     if (isActive())
     {
-        const t_mdatoms& mdatoms = forceProviderInput.mdatoms_;
-        const double     t       = forceProviderInput.t_;
-        const t_commrec& cr      = forceProviderInput.cr_;
+        const double     t  = forceProviderInput.t_;
+        const t_commrec& cr = forceProviderInput.cr_;
 
         // NOTE: The non-conservative electric field does not have a virial
         ArrayRef<RVec> f = forceProviderOutput->forceWithVirial_.force_;
 
+        auto chargeA = forceProviderInput.chargeA_;
         for (int m = 0; (m < DIM); m++)
         {
-            const real fieldStrength = FIELDFAC * field(m, t);
+            const real fieldStrength = gmx::c_fieldfac * field(m, t);
 
             if (fieldStrength != 0)
             {
                 // TODO: Check parallellism
-                for (int i = 0; i < mdatoms.homenr; ++i)
+                for (int i = 0; i < forceProviderInput.homenr_; ++i)
                 {
                     // NOTE: Not correct with perturbed charges
-                    f[i][m] += mdatoms.chargeA[i] * fieldStrength;
+                    f[i][m] += chargeA[i] * fieldStrength;
                 }
             }
         }

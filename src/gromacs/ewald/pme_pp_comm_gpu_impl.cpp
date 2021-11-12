@@ -1,7 +1,7 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -64,6 +64,7 @@ class PmePpCommGpu::Impl
 /*!\brief Constructor stub. */
 PmePpCommGpu::PmePpCommGpu(MPI_Comm /* comm */,
                            int /* pmeRank */,
+                           std::vector<gmx::RVec>* /* pmeCpuForceBuffer */,
                            const DeviceContext& /* deviceContext */,
                            const DeviceStream& /* deviceStream */) :
     impl_(nullptr)
@@ -83,31 +84,37 @@ void PmePpCommGpu::reinit(int /* size */)
                "correct implementation.");
 }
 
-void PmePpCommGpu::receiveForceFromPmeCudaDirect(void* /* recvPtr */,
-                                                 int /* recvSize */,
-                                                 bool /* receivePmeForceToGpu */)
+void PmePpCommGpu::receiveForceFromPme(RVec* /* recvPtr */, int /* recvSize */, bool /* receivePmeForceToGpu */)
 {
     GMX_ASSERT(!impl_,
                "A CPU stub for PME-PP GPU communication was called instead of the correct "
                "implementation.");
 }
 
-void PmePpCommGpu::sendCoordinatesToPmeCudaDirect(void* /* sendPtr */,
-                                                  int /* sendSize */,
-                                                  bool /* sendPmeCoordinatesFromGpu */,
-                                                  GpuEventSynchronizer* /* coordinatesOnDeviceEvent */)
+void PmePpCommGpu::sendCoordinatesToPmeFromGpu(DeviceBuffer<RVec> /* sendPtr */,
+                                               int /* sendSize */,
+                                               GpuEventSynchronizer* /* coordinatesOnDeviceEvent */)
 {
     GMX_ASSERT(!impl_,
                "A CPU stub for PME-PP GPU communication was called instead of the correct "
                "implementation.");
 }
 
-void* PmePpCommGpu::getGpuForceStagingPtr()
+void PmePpCommGpu::sendCoordinatesToPmeFromCpu(RVec* /* sendPtr */,
+                                               int /* sendSize */,
+                                               GpuEventSynchronizer* /* coordinatesOnDeviceEvent */)
 {
     GMX_ASSERT(!impl_,
                "A CPU stub for PME-PP GPU communication was called instead of the correct "
                "implementation.");
-    return nullptr;
+}
+
+DeviceBuffer<gmx::RVec> PmePpCommGpu::getGpuForceStagingPtr()
+{
+    GMX_ASSERT(!impl_,
+               "A CPU stub for PME-PP GPU communication was called instead of the correct "
+               "implementation.");
+    return DeviceBuffer<gmx::RVec>{};
 }
 
 GpuEventSynchronizer* PmePpCommGpu::getForcesReadySynchronizer()

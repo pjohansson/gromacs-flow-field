@@ -1,7 +1,7 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2015,2016,2017,2018,2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2015,2016,2017,2018,2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -63,13 +63,16 @@
 namespace gmx
 {
 
-CoordState::CoordState(const AwhBiasParams&          awhBiasParams,
-                       const std::vector<DimParams>& dimParams,
-                       const BiasGrid&               grid)
+CoordState::CoordState(const AwhBiasParams&      awhBiasParams,
+                       ArrayRef<const DimParams> dimParams,
+                       const BiasGrid&           grid)
 {
-    for (size_t d = 0; d < dimParams.size(); d++)
+    GMX_RELEASE_ASSERT(awhBiasParams.ndim() == dimParams.ssize(),
+                       "Need to have identical size for dimensions");
+    const auto& awhDimParams = awhBiasParams.dimParams();
+    for (int d = 0; d < gmx::ssize(awhDimParams); d++)
     {
-        coordValue_[d] = dimParams[d].scaleUserInputToInternal(awhBiasParams.dimParams[d].coordValueInit);
+        coordValue_[d] = dimParams[d].scaleUserInputToInternal(awhDimParams[d].initialCoordinate());
     }
 
     /* The grid-point index is always the nearest point to the coordinate.
@@ -173,7 +176,10 @@ void CoordState::setCoordValue(const BiasGrid& grid, const awh_dvec coordValue)
                         "Coordinate %d of an AWH bias has a value %f which is more than %d sigma "
                         "out of the AWH range of [%f, %f]. You seem to have an unstable reaction "
                         "coordinate setup or an unequilibrated system.",
-                        dim + 1, coordValue[dim], c_marginInSigma, axis.origin(),
+                        dim + 1,
+                        coordValue[dim],
+                        c_marginInSigma,
+                        axis.origin(),
                         axis.origin() + axis.length());
                 GMX_THROW(SimulationInstabilityError(mesg));
             }

@@ -1,7 +1,7 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2016,2017,2018,2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2016,2017,2018,2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -114,7 +114,8 @@ void dumpKeyValueTree(TextWriter* writer, const KeyValueTreeObject& tree)
             writer->wrapperSettings().setIndent(oldIndent);
         }
         else if (value.isArray()
-                 && std::all_of(value.asArray().values().begin(), value.asArray().values().end(),
+                 && std::all_of(value.asArray().values().begin(),
+                                value.asArray().values().end(),
                                 [](const auto& elem) { return elem.isObject(); }))
         {
             // Array containing only objects
@@ -168,12 +169,9 @@ class CompareHelper
 {
 public:
     CompareHelper(TextWriter* writer, real ftol, real abstol) :
-        writer_(writer),
-        ftol_(ftol),
-        abstol_(abstol)
+        writer_(writer), ftol_(ftol), abstol_(abstol)
     {
     }
-
     void compareObjects(const KeyValueTreeObject& obj1, const KeyValueTreeObject& obj2)
     {
         for (const auto& prop1 : obj1.properties())
@@ -216,7 +214,8 @@ private:
             else if (!areSimpleValuesOfSameTypeEqual(value1, value2))
             {
                 writer_->writeString(currentPath_.toString());
-                writer_->writeLine(formatString(" (%s - %s)", simpleValueToString(value1).c_str(),
+                writer_->writeLine(formatString(" (%s - %s)",
+                                                simpleValueToString(value1).c_str(),
                                                 simpleValueToString(value2).c_str()));
             }
         }
@@ -238,7 +237,7 @@ private:
         }
     }
 
-    bool areSimpleValuesOfSameTypeEqual(const KeyValueTreeValue& value1, const KeyValueTreeValue& value2)
+    bool areSimpleValuesOfSameTypeEqual(const KeyValueTreeValue& value1, const KeyValueTreeValue& value2) const
     {
         GMX_ASSERT(value1.type() == value2.type(), "Caller should ensure that types are equal");
         if (value1.isType<bool>())
@@ -281,13 +280,15 @@ private:
 
     void handleMissingKeyInFirstObject(const KeyValueTreeValue& value)
     {
-        const std::string message = formatString("%s (missing - %s)", currentPath_.toString().c_str(),
+        const std::string message = formatString("%s (missing - %s)",
+                                                 currentPath_.toString().c_str(),
                                                  formatValueForMissingMessage(value).c_str());
         writer_->writeLine(message);
     }
     void handleMissingKeyInSecondObject(const KeyValueTreeValue& value)
     {
-        const std::string message = formatString("%s (%s - missing)", currentPath_.toString().c_str(),
+        const std::string message = formatString("%s (%s - missing)",
+                                                 currentPath_.toString().c_str(),
                                                  formatValueForMissingMessage(value).c_str());
         writer_->writeLine(message);
     }

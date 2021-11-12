@@ -146,8 +146,7 @@ static int load_sharedlibrary_plugins(const char* fullpath, gmx_vmdplugin_t* vmd
     {
         if (debug)
         {
-            fprintf(debug, "\nUnable to open dynamic library %s.\n%s\n", fullpath,
-                    vmddlerror()); /*only to debug because of stdc++ erros */
+            fprintf(debug, "\nUnable to open dynamic library %s.\n%s\n", fullpath, vmddlerror()); /*only to debug because of stdc++ erros */
         }
         return 0;
     }

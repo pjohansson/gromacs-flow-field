@@ -1,7 +1,7 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2016,2017,2018,2019, by the GROMACS development team, led by
+ * Copyright (c) 2016,2017,2018,2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -212,6 +212,21 @@ static inline float maskzFma(float a, float b, float c, float m)
     return m != 0.0F ? (a * b + c) : 0.0F;
 }
 
+/*! \brief Float 1.0/x, masked version.
+ *
+ * \param x Argument, x>0 for entries where mask is true.
+ * \param m Mask
+ * \return 1/x. The result for masked-out entries will be 0.0.
+ *
+ * \note This function might be superficially meaningless, but it helps us to
+ *       write templated SIMD/non-SIMD code. For clarity it should not be used
+ *       outside such code.
+ */
+static inline float gmx_simdcall maskzRcp(float x, float m)
+{
+    return m != 0.0F ? 1.0F / x : 0.0F;
+}
+
 /*! \brief Float Floating-point abs().
  *
  * \param a any floating point values
@@ -310,7 +325,8 @@ static inline float reduce(float a)
  */
 static inline float andNot(float a, float b)
 {
-    union {
+    union
+    {
         float         r;
         std::uint32_t i;
     } conv1, conv2;
@@ -338,7 +354,8 @@ static inline float andNot(float a, float b)
  */
 static inline bool testBits(float a)
 {
-    union {
+    union
+    {
         std::uint32_t i;
         float         f;
     } conv;
@@ -603,6 +620,21 @@ static inline double maskzFma(double a, double b, double c, double m)
     return m != 0.0 ? (a * b + c) : 0.0;
 }
 
+/*! \brief Double 1.0/x, masked version.
+ *
+ * \param x Argument, x>0 for entries where mask is true.
+ * \param m Mask
+ * \return Approximation of 1/x. The result for masked-out entries will be 0.0.
+ *
+ * \note This function might be superficially meaningless, but it helps us to
+ *       write templated SIMD/non-SIMD code. For clarity it should not be used
+ *       outside such code.
+ */
+static inline double gmx_simdcall maskzRcp(double x, double m)
+{
+    return m != 0.0 ? 1.0 / x : 0.0;
+}
+
 /*! \brief double doubleing-point abs().
  *
  * \param a any doubleing point values
@@ -701,7 +733,8 @@ static inline double reduce(double a)
  */
 static inline double andNot(double a, double b)
 {
-    union {
+    union
+    {
         double        r;
         std::uint64_t i;
     } conv1, conv2;
@@ -729,7 +762,8 @@ static inline double andNot(double a, double b)
  */
 static inline bool testBits(double a)
 {
-    union {
+    union
+    {
         std::uint64_t i;
         double        f;
     } conv;

@@ -4,7 +4,7 @@
  * Copyright (c) 1991-2000, University of Groningen, The Netherlands.
  * Copyright (c) 2001-2004, The GROMACS development team.
  * Copyright (c) 2013,2014,2015,2016,2017 by the GROMACS development team.
- * Copyright (c) 2018,2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2018,2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -62,6 +62,7 @@ enum
     eCommType_SigmaB,
     eCommType_NR,
     eCommType_COORD,
+    eCommType_COORD_GPU,
     eCommType_CNB
 };
 
@@ -84,6 +85,8 @@ enum
 #define PP_PME_SWITCHGRID (1 << 11)
 #define PP_PME_RESETCOUNTERS (1 << 12)
 #define PP_PME_GPUCOMMS (1 << 13)
+// Whether PME forces are transferred directly to remote PP GPU memory in a specific step
+#define PP_PME_RECVFTOGPU (1 << 14)
 //@}
 
 /*! \brief Return values for gmx_pme_recv_q_x */
@@ -136,6 +139,6 @@ struct gmx_pme_comm_vir_ene_t
     real   dvdlambda_q;
     real   dvdlambda_lj;
     //@}
-    float           cycles;    /**< Counter of CPU cycles used */
-    gmx_stop_cond_t stop_cond; /**< Flag used in responding to an external signal to terminate */
+    float         cycles;    /**< Counter of CPU cycles used */
+    StopCondition stop_cond; /**< Flag used in responding to an external signal to terminate */
 };

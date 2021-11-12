@@ -1,7 +1,7 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -42,10 +42,14 @@
 #ifndef GMX_PMEFORCESENDERGPU_H
 #define GMX_PMEFORCESENDERGPU_H
 
+#include <memory>
+
 #include "gromacs/math/vectypes.h"
-#include "gromacs/utility/classhelpers.h"
+#include "gromacs/gpu_utils/devicebuffer_datatype.h"
 #include "gromacs/utility/gmxmpi.h"
 
+class GpuEventSynchronizer;
+class DeviceContext;
 class DeviceStream;
 
 /*! \libinternal
@@ -71,28 +75,44 @@ class PmeForceSenderGpu
 
 public:
     /*! \brief Creates PME GPU Force sender object
-     * \param[in] pmeStream       CUDA stream used for PME computations
+     * \param[in] pmeForcesReady  Event synchronizer marked when PME forces are ready on the GPU
      * \param[in] comm            Communicator used for simulation
+     * \param[in] deviceContext   GPU context
      * \param[in] ppRanks         List of PP ranks
      */
-    PmeForceSenderGpu(const DeviceStream& pmeStream, MPI_Comm comm, gmx::ArrayRef<PpRanks> ppRanks);
+    PmeForceSenderGpu(GpuEventSynchronizer*  pmeForcesReady,
+                      MPI_Comm               comm,
+                      const DeviceContext&   deviceContext,
+                      gmx::ArrayRef<PpRanks> ppRanks);
     ~PmeForceSenderGpu();
 
     /*! \brief
-     * Initialization of GPU PME Force sender
+     * Sets location of force to be sent to each PP rank
      * \param[in] d_f   force buffer in GPU memory
      */
-    void sendForceBufferAddressToPpRanks(rvec* d_f);
+    void setForceSendBuffer(DeviceBuffer<RVec> d_f);
 
     /*! \brief
-     * Send PP data to PP rank
-     * \param[in] ppRank           PP rank to receive data
+     * Send force to PP rank (used with Thread-MPI)
+     * \param[in] ppRank                   PP rank to receive data
+     * \param[in] numAtoms                 number of atoms to send
+     * \param[in] sendForcesDirectToPpGpu  whether forces are transferred direct to remote GPU memory
      */
-    void sendFToPpCudaDirect(int ppRank);
+    void sendFToPpCudaDirect(int ppRank, int numAtoms, bool sendForcesDirectToPpGpu);
+
+    /*! \brief
+     * Send force to PP rank (used with Lib-MPI)
+     * \param[in] sendbuf  force buffer in GPU memory
+     * \param[in] offset   starting element in buffer
+     * \param[in] numBytes number of bytes to transfer
+     * \param[in] ppRank   PP rank to receive data
+     * \param[in] request  MPI request to track asynchronous MPI call status
+     */
+    void sendFToPpCudaMpi(DeviceBuffer<RVec> sendbuf, int offset, int numBytes, int ppRank, MPI_Request* request);
 
 private:
     class Impl;
-    gmx::PrivateImplPointer<Impl> impl_;
+    std::unique_ptr<Impl> impl_;
 };
 
 } // namespace gmx

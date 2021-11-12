@@ -1,7 +1,7 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2015,2017,2018,2019, by the GROMACS development team, led by
+ * Copyright (c) 2015,2017,2018,2019,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -96,6 +96,10 @@ namespace
  *  \note This is an internal routine that should only be called from
  *        gmx::alignedMalloc(). Just like system-provided routines, it provides
  *        memory that is aligned - but not padded.
+ *
+ *  \note This functionality is provided by C++17 std::aligned_alloc,
+ *  and it would be preferable to use that instead, however it is not
+ *  yet widely enough available to depend on. See #3968.
  */
 gmx_unused void* alignedMallocGeneric(std::size_t bytes, std::size_t alignment)
 {
@@ -149,7 +153,7 @@ gmx_unused void alignedFreeGeneric(void* p)
 //! Implement malloc of \c bytes of memory, aligned to \c alignment.
 void* mallocImpl(std::size_t bytes, std::size_t alignment)
 {
-    void* p;
+    void* p = nullptr;
 
 #if HAVE__MM_MALLOC
     p = _mm_malloc(bytes, alignment);
@@ -228,7 +232,7 @@ void AlignedAllocationPolicy::free(void* p)
 //! \todo Move this function into sysinfo.cpp where other OS-specific code/includes live
 static std::size_t getPageSize()
 {
-    long pageSize;
+    long pageSize = 0;
 #if GMX_NATIVE_WINDOWS
     SYSTEM_INFO si;
     GetNativeSystemInfo(&si);

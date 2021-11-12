@@ -4,7 +4,7 @@
  * Copyright (c) 1991-2000, University of Groningen, The Netherlands.
  * Copyright (c) 2001-2007, The GROMACS development team.
  * Copyright (c) 2013,2014,2015,2016,2017 by the GROMACS development team.
- * Copyright (c) 2018,2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2018,2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -96,7 +96,7 @@ static void clust_size(const char*             ndx,
     /* Topology stuff */
     t_trxframe    fr;
     TpxFileHeader tpxh;
-    gmx_mtop_t*   mtop    = nullptr;
+    gmx_mtop_t    mtop;
     PbcType       pbcType = PbcType::Unset;
     int           ii, jj;
     real          temp, tfac;
@@ -127,13 +127,12 @@ static void clust_size(const char*             ndx,
 
     if (tpr)
     {
-        mtop = new gmx_mtop_t;
         tpxh = readTpxHeader(tpr, true);
         if (tpxh.natoms != natoms)
         {
             gmx_fatal(FARGS, "tpr (%d atoms) and trajectory (%d atoms) do not match!", tpxh.natoms, natoms);
         }
-        pbcType = read_tpx(tpr, nullptr, nullptr, &natoms, nullptr, nullptr, mtop);
+        pbcType = read_tpx(tpr, nullptr, nullptr, &natoms, nullptr, nullptr, &mtop);
     }
     if (ndf <= -1)
     {
@@ -151,8 +150,8 @@ static void clust_size(const char*             ndx,
         {
             printf("Using molecules rather than atoms. Not reading index file %s\n", ndx);
         }
-        GMX_RELEASE_ASSERT(mtop != nullptr, "Trying to access mtop->mols from NULL mtop pointer");
-        mols = gmx_mtop_molecules(*mtop);
+        GMX_RELEASE_ASSERT(tpr, "Cannot access topology without having read it from TPR");
+        mols = gmx_mtop_molecules(mtop);
 
         /* Make dummy index */
         nindex = mols.numBlocks();
@@ -266,8 +265,10 @@ static void clust_size(const char*             ndx,
                                 {
                                     if (clust_size[cj] <= 0)
                                     {
-                                        gmx_fatal(FARGS, "negative cluster size %d for element %d",
-                                                  clust_size[cj], cj);
+                                        gmx_fatal(FARGS,
+                                                  "negative cluster size %d for element %d",
+                                                  clust_size[cj],
+                                                  cj);
                                     }
                                     clust_size[cj]--;
                                     clust_index[k] = ci;
@@ -352,7 +353,7 @@ static void clust_size(const char*             ndx,
                             ekin += 0.5 * m * iprod(v[ai], v[ai]);
                         }
                     }
-                    temp = (ekin * 2.0) / (3.0 * tfac * max_clust_size * BOLTZ);
+                    temp = (ekin * 2.0) / (3.0 * tfac * max_clust_size * gmx::c_boltz);
                     fprintf(tp, "%10.3f  %10.3f\n", frameTime, temp);
                 }
             }
@@ -430,8 +431,24 @@ static void clust_size(const char*             ndx,
     fprintf(stderr, "cmid: %g, cmax: %g, max_size: %d\n", cmid, cmax, max_size);
     cmid = 1;
     fp   = gmx_ffopen(xpm, "w");
-    write_xpm3(fp, 0, "Cluster size distribution", "# clusters", timeLabel, "Size", n_x, max_size,
-               t_x, t_y, cs_dist, 0, cmid, cmax, rlo, rmid, rhi, &nlevels);
+    write_xpm3(fp,
+               0,
+               "Cluster size distribution",
+               "# clusters",
+               timeLabel,
+               "Size",
+               n_x,
+               max_size,
+               t_x,
+               t_y,
+               cs_dist,
+               0,
+               cmid,
+               cmax,
+               rlo,
+               rmid,
+               rhi,
+               &nlevels);
     gmx_ffclose(fp);
     cmid = 100.0;
     cmax = 0.0;
@@ -449,10 +466,25 @@ static void clust_size(const char*             ndx,
     }
     fprintf(stderr, "cmid: %g, cmax: %g, max_size: %d\n", cmid, cmax, max_size);
     fp = gmx_ffopen(xpmw, "w");
-    write_xpm3(fp, 0, "Weighted cluster size distribution", "Fraction", timeLabel, "Size", n_x,
-               max_size, t_x, t_y, cs_dist, 0, cmid, cmax, rlo, rmid, rhi, &nlevels);
+    write_xpm3(fp,
+               0,
+               "Weighted cluster size distribution",
+               "Fraction",
+               timeLabel,
+               "Size",
+               n_x,
+               max_size,
+               t_x,
+               t_y,
+               cs_dist,
+               0,
+               cmid,
+               cmax,
+               rlo,
+               rmid,
+               rhi,
+               &nlevels);
     gmx_ffclose(fp);
-    delete mtop;
     sfree(t_x);
     sfree(t_y);
     for (i = 0; (i < n_x); i++)
@@ -546,8 +578,8 @@ int gmx_clustsize(int argc, char* argv[])
     };
 #define NFILE asize(fnm)
 
-    if (!parse_common_args(&argc, argv, PCA_CAN_VIEW | PCA_CAN_TIME | PCA_TIME_UNIT, NFILE, fnm,
-                           NPA, pa, asize(desc), desc, 0, nullptr, &oenv))
+    if (!parse_common_args(
+                &argc, argv, PCA_CAN_VIEW | PCA_CAN_TIME | PCA_TIME_UNIT, NFILE, fnm, NPA, pa, asize(desc), desc, 0, nullptr, &oenv))
     {
         return 0;
     }
@@ -566,10 +598,26 @@ int gmx_clustsize(int argc, char* argv[])
         gmx_fatal(FARGS, "You need a tpr file for the -mol option");
     }
 
-    clust_size(fnNDX, ftp2fn(efTRX, NFILE, fnm), opt2fn("-o", NFILE, fnm), opt2fn("-ow", NFILE, fnm),
-               opt2fn("-nc", NFILE, fnm), opt2fn("-ac", NFILE, fnm), opt2fn("-mc", NFILE, fnm),
-               opt2fn("-hc", NFILE, fnm), opt2fn("-temp", NFILE, fnm), opt2fn("-mcn", NFILE, fnm),
-               bMol, bPBC, fnTPR, cutoff, nskip, nlevels, rgblo, rgbhi, ndf, oenv);
+    clust_size(fnNDX,
+               ftp2fn(efTRX, NFILE, fnm),
+               opt2fn("-o", NFILE, fnm),
+               opt2fn("-ow", NFILE, fnm),
+               opt2fn("-nc", NFILE, fnm),
+               opt2fn("-ac", NFILE, fnm),
+               opt2fn("-mc", NFILE, fnm),
+               opt2fn("-hc", NFILE, fnm),
+               opt2fn("-temp", NFILE, fnm),
+               opt2fn("-mcn", NFILE, fnm),
+               bMol,
+               bPBC,
+               fnTPR,
+               cutoff,
+               nskip,
+               nlevels,
+               rgblo,
+               rgbhi,
+               ndf,
+               oenv);
 
     output_env_done(oenv);
 

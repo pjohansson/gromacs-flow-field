@@ -2,7 +2,7 @@
  * This file is part of the GROMACS molecular simulation package.
  *
  * Copyright (c) 2020 Research Organization for Information Science and Technology (RIST).
- * Copyright (c) 2020, by the GROMACS development team, led by
+ * Copyright (c) 2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -211,29 +211,29 @@ gmx_simdcall static inline float extract(SimdFloat a)
 static inline SimdFloat gmx_simdcall operator&(SimdFloat a, SimdFloat b)
 {
     svbool_t pg = svptrue_b32();
-    return { svreinterpret_f32_s32(svand_s32_x(pg, svreinterpret_s32_f32(a.simdInternal_),
-                                               svreinterpret_s32_f32(b.simdInternal_))) };
+    return { svreinterpret_f32_s32(svand_s32_x(
+            pg, svreinterpret_s32_f32(a.simdInternal_), svreinterpret_s32_f32(b.simdInternal_))) };
 }
 
 static inline SimdFloat gmx_simdcall andNot(SimdFloat a, SimdFloat b)
 {
     svbool_t pg = svptrue_b32();
-    return { svreinterpret_f32_s32(svbic_s32_x(pg, svreinterpret_s32_f32(b.simdInternal_),
-                                               svreinterpret_s32_f32(a.simdInternal_))) };
+    return { svreinterpret_f32_s32(svbic_s32_x(
+            pg, svreinterpret_s32_f32(b.simdInternal_), svreinterpret_s32_f32(a.simdInternal_))) };
 }
 
 static inline SimdFloat gmx_simdcall operator|(SimdFloat a, SimdFloat b)
 {
     svbool_t pg = svptrue_b32();
-    return { svreinterpret_f32_s32(svorr_s32_x(pg, svreinterpret_s32_f32(a.simdInternal_),
-                                               svreinterpret_s32_f32(b.simdInternal_))) };
+    return { svreinterpret_f32_s32(svorr_s32_x(
+            pg, svreinterpret_s32_f32(a.simdInternal_), svreinterpret_s32_f32(b.simdInternal_))) };
 }
 
 static inline SimdFloat gmx_simdcall operator^(SimdFloat a, SimdFloat b)
 {
     svbool_t pg = svptrue_b32();
-    return { svreinterpret_f32_s32(sveor_s32_x(pg, svreinterpret_s32_f32(a.simdInternal_),
-                                               svreinterpret_s32_f32(b.simdInternal_))) };
+    return { svreinterpret_f32_s32(sveor_s32_x(
+            pg, svreinterpret_s32_f32(a.simdInternal_), svreinterpret_s32_f32(b.simdInternal_))) };
 }
 
 static inline SimdFloat gmx_simdcall operator+(SimdFloat a, SimdFloat b)
@@ -386,17 +386,17 @@ static inline SimdFloat gmx_simdcall frexp(SimdFloat value, SimdFInt32* exponent
     const svint32_t exponentMask = svdup_n_s32(0x7F800000);
     const svint32_t mantissaMask = svdup_n_s32(0x807FFFFF);
     const svint32_t exponentBias = svdup_n_s32(126); // add 1 to make our definition identical to frexp()
-    const svfloat32_t half = svdup_n_f32(0.5f);
+    const svfloat32_t half       = svdup_n_f32(0.5f);
     svint32_t         iExponent;
 
     iExponent = svand_s32_x(pg, svreinterpret_s32_f32(value.simdInternal_), exponentMask);
     iExponent = svsub_s32_x(
             pg, svreinterpret_s32_u32(svlsr_n_u32_x(pg, svreinterpret_u32_s32(iExponent), 23)), exponentBias);
 
-
-    svfloat32_t result = svreinterpret_f32_s32(svorr_s32_x(
-            pg, svand_s32_x(pg, svreinterpret_s32_f32(value.simdInternal_), mantissaMask),
-            svreinterpret_s32_f32(half)));
+    svfloat32_t result = svreinterpret_f32_s32(
+            svorr_s32_x(pg,
+                        svand_s32_x(pg, svreinterpret_s32_f32(value.simdInternal_), mantissaMask),
+                        svreinterpret_s32_f32(half)));
 
     if (opt == MathOptimization::Safe)
     {

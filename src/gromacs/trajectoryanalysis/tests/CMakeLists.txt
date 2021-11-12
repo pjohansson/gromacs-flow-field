@@ -2,7 +2,7 @@
 # This file is part of the GROMACS molecular simulation package.
 #
 # Copyright (c) 2010,2012,2013,2014,2015 by the GROMACS development team.
-# Copyright (c) 2016,2017,2018,2019,2020, by the GROMACS development team, led by
+# Copyright (c) 2016,2017,2018,2019,2020,2021, by the GROMACS development team, led by
 # Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
 # and including many others, as listed in the AUTHORS file in the
 # top-level source directory and at http://www.gromacs.org.
@@ -45,6 +45,7 @@ gmx_add_gtest_executable(trajectoryanalysis-test
         distance.cpp
         extract_cluster.cpp
         freevolume.cpp
+        msd.cpp
         pairdist.cpp
         rdf.cpp
         sasa.cpp
@@ -56,6 +57,12 @@ gmx_add_gtest_executable(trajectoryanalysis-test
         )
 gmx_register_gtest_test(TrajectoryAnalysisUnitTests trajectoryanalysis-test SLOW_TEST)
 target_link_libraries(trajectoryanalysis-test PRIVATE analysisdata-test-shared)
+target_link_libraries(trajectoryanalysis-test PRIVATE common)
 
 add_executable(test_selection ${UNITTEST_TARGET_OPTIONS} test_selection.cpp)
-target_link_libraries(test_selection PRIVATE libgromacs ${GMX_EXE_LINKER_FLAGS})
+target_link_libraries(test_selection PRIVATE
+                      common
+                      libgromacs
+                      ${GMX_EXE_LINKER_FLAGS})
+# TODO: Explicitly link to module dependencies.
+target_link_libraries(test_selection PRIVATE legacy_modules)

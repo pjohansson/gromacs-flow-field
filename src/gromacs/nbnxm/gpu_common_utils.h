@@ -1,7 +1,7 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2017,2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2017,2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -42,17 +42,11 @@
 #ifndef GMX_NBNXM_GPU_COMMON_UTILS_H
 #define GMX_NBNXM_GPU_COMMON_UTILS_H
 
-#include "config.h"
-
-#include "gromacs/nbnxm/nbnxm.h"
-
-#if GMX_GPU_CUDA
-#    include "cuda/nbnxm_cuda_types.h"
-#endif
-
-#if GMX_GPU_OPENCL
-#    include "opencl/nbnxm_ocl_types.h"
-#endif
+#include "gromacs/listed_forces/listed_forces_gpu.h"
+#include "gromacs/mdtypes/locality.h"
+#include "gromacs/nbnxm/gpu_types_common.h"
+#include "gromacs/utility/exceptions.h"
+#include "gromacs/utility/range.h"
 
 namespace Nbnxm
 {
@@ -68,6 +62,32 @@ static inline bool canSkipNonbondedWork(const NbnxmGpu& nb, InteractionLocality 
 {
     assert(nb.plist[iloc]);
     return (iloc == InteractionLocality::NonLocal && nb.plist[iloc]->nsci == 0);
+}
+
+/*! \brief Calculate atom range and return start index and length.
+ *
+ * \param[in] atomData Atom descriptor data structure
+ * \param[in] atomLocality Atom locality specifier
+ * \returns Range of indexes for selected locality.
+ */
+static inline gmx::Range<int> getGpuAtomRange(const NBAtomDataGpu* atomData, const AtomLocality atomLocality)
+{
+    assert(atomData);
+
+    /* calculate the atom data index range based on locality */
+    if (atomLocality == AtomLocality::Local)
+    {
+        return gmx::Range<int>(0, atomData->numAtomsLocal);
+    }
+    else if (atomLocality == AtomLocality::NonLocal)
+    {
+        return gmx::Range<int>(atomData->numAtomsLocal, atomData->numAtoms);
+    }
+    else
+    {
+        GMX_THROW(gmx::InconsistentInputError(
+                "Only Local and NonLocal atom locities can be used to get atom ranges in NBNXM."));
+    }
 }
 
 } // namespace Nbnxm

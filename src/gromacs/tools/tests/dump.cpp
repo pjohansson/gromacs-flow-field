@@ -1,7 +1,7 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -64,9 +64,9 @@ public:
 protected:
     // TODO this is changed in newer googletest versions
     //! Prepare shared resources.
-    static void SetUpTestCase() { s_tprFileHandle = new TprAndFileManager("lysozyme"); }
+    static void SetUpTestSuite() { s_tprFileHandle = new TprAndFileManager("lysozyme"); }
     //! Clean up shared resources.
-    static void TearDownTestCase()
+    static void TearDownTestSuite()
     {
         delete s_tprFileHandle;
         s_tprFileHandle = nullptr;
@@ -91,11 +91,10 @@ TEST_F(DumpTest, WorksWithTpr)
 
 TEST_F(DumpTest, WorksWithTprAndMdpWriting)
 {
-    TestFileManager   fileManager;
-    std::string       mdpName   = fileManager.getTemporaryFilePath("output.mdp");
-    const char* const command[] = { "dump", "-s", s_tprFileHandle->tprName().c_str(), "-om",
-                                    mdpName.c_str() };
-    CommandLine       cmdline(command);
+    TestFileManager fileManager;
+    std::string     mdpName = fileManager.getTemporaryFilePath("output.mdp");
+    const char* const command[] = { "dump", "-s", s_tprFileHandle->tprName().c_str(), "-om", mdpName.c_str() };
+    CommandLine cmdline(command);
     runTest(&cmdline);
 }
 

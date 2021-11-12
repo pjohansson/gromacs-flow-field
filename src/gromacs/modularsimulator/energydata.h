@@ -1,7 +1,7 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -44,15 +44,15 @@
 #ifndef GMX_ENERGYELEMENT_MICROSTATE_H
 #define GMX_ENERGYELEMENT_MICROSTATE_H
 
-#include "gromacs/math/vectypes.h"
 #include "gromacs/mdtypes/state.h"
 
 #include "modularsimulatorinterfaces.h"
 
-struct gmx_ekindata_t;
+class gmx_ekindata_t;
 struct gmx_enerdata_t;
 struct gmx_mtop_t;
 struct ObservablesHistory;
+struct pull_t;
 struct t_fcdata;
 struct t_inputrec;
 struct SimulationGroups;
@@ -67,10 +67,14 @@ class GlobalCommunicationHelper;
 class LegacySimulatorData;
 class MDAtoms;
 class ModularSimulatorAlgorithmBuilderHelper;
+class ObservablesReducer;
 class ParrinelloRahmanBarostat;
 class StatePropagatorData;
 class VelocityScalingTemperatureCoupling;
-struct MdModulesNotifier;
+struct MDModulesNotifiers;
+
+//! Function type for elements contributing energy
+using EnergyContribution = std::function<real(Step, Time)>;
 
 /*! \internal
  * \ingroup module_modularsimulator
@@ -96,7 +100,7 @@ public:
     //! Constructor
     EnergyData(StatePropagatorData*        statePropagatorData,
                FreeEnergyPerturbationData* freeEnergyPerturbationData,
-               const gmx_mtop_t*           globalTopology,
+               const gmx_mtop_t&           globalTopology,
                const t_inputrec*           inputrec,
                const MDAtoms*              mdAtoms,
                gmx_enerdata_t*             enerd,
@@ -104,11 +108,12 @@ public:
                const Constraints*          constr,
                FILE*                       fplog,
                t_fcdata*                   fcd,
-               const MdModulesNotifier&    mdModulesNotifier,
+               const MDModulesNotifiers&   mdModulesNotifiers,
                bool                        isMasterRank,
                ObservablesHistory*         observablesHistory,
                StartingBehavior            startingBehavior,
-               bool                        simulationsShareState);
+               bool                        simulationsShareState,
+               pull_t*                     pullWork);
 
     /*! \brief Final output
      *
@@ -171,6 +176,11 @@ public:
      */
     gmx_enerdata_t* enerdata();
 
+    /*! \brief Get const pointer to energy structure
+     *
+     */
+    const gmx_enerdata_t* enerdata() const;
+
     /*! \brief Get pointer to kinetic energy structure
      *
      */
@@ -188,21 +198,19 @@ public:
      */
     [[nodiscard]] bool hasReadEkinFromCheckpoint() const;
 
-    /*! \brief Set velocity scaling temperature coupling
+    /*! \brief Add conserved energy contribution
      *
-     * This allows to set a pointer to a velocity scaling temperature coupling
-     * element used to obtain contributions to the conserved energy.
-     * TODO: This should be made obsolete my a more modular energy element
+     * This allows other elements to register callbacks for contributions to
+     * the conserved energy term.
      */
-    void setVelocityScalingTemperatureCoupling(const VelocityScalingTemperatureCoupling* velocityScalingTemperatureCoupling);
+    void addConservedEnergyContribution(EnergyContribution&& energyContribution);
 
     /*! \brief set Parrinello-Rahman barostat
      *
      * This allows to set a pointer to the Parrinello-Rahman barostat used to
      * print the box velocities.
-     * TODO: This should be made obsolete my a more modular energy element
      */
-    void setParrinelloRahamnBarostat(const ParrinelloRahmanBarostat* parrinelloRahmanBarostat);
+    void setParrinelloRahmanBoxVelocities(std::function<const rvec*()>&& parrinelloRahmanBoxVelocities);
 
     /*! \brief Initialize energy history
      *
@@ -212,6 +220,10 @@ public:
     static void initializeEnergyHistory(StartingBehavior    startingBehavior,
                                         ObservablesHistory* observablesHistory,
                                         EnergyOutput*       energyOutput);
+
+    /*! \brief Request (local) kinetic energy update
+     */
+    void updateKineticEnergy();
 
     //! The element taking part in the simulator loop
     class Element;
@@ -229,11 +241,12 @@ private:
 
     /*! \brief Save data at energy steps
      *
+     * \param step  The current step
      * \param time  The current time
      * \param isEnergyCalculationStep  Whether the current step is an energy calculation step
      * \param isFreeEnergyCalculationStep  Whether the current step is a free energy calculation step
      */
-    void doStep(Time time, bool isEnergyCalculationStep, bool isFreeEnergyCalculationStep);
+    void doStep(Step step, Time time, bool isEnergyCalculationStep, bool isFreeEnergyCalculationStep);
 
     /*! \brief Write to energy trajectory
      *
@@ -290,14 +303,16 @@ private:
     StatePropagatorData* statePropagatorData_;
     //! Pointer to the free energy perturbation data
     FreeEnergyPerturbationData* freeEnergyPerturbationData_;
-    //! Pointer to the vrescale thermostat
-    const VelocityScalingTemperatureCoupling* velocityScalingTemperatureCoupling_;
-    //! Pointer to the Parrinello-Rahman barostat
-    const ParrinelloRahmanBarostat* parrinelloRahmanBarostat_;
+
+    //! Callbacks contributing to the conserved energy term
+    std::vector<EnergyContribution> conservedEnergyContributions_;
+    //! Callback to the Parrinello-Rahman box velocities
+    std::function<const rvec*()> parrinelloRahmanBoxVelocities_;
+
     //! Contains user input mdp options.
     const t_inputrec* inputrec_;
     //! Full system topology.
-    const gmx_mtop_t* top_global_;
+    const gmx_mtop_t& top_global_;
     //! Atom parameters for this domain.
     const MDAtoms* mdAtoms_;
     //! Energy data structure
@@ -310,14 +325,16 @@ private:
     FILE* fplog_;
     //! Helper struct for force calculations.
     t_fcdata* fcd_;
-    //! Notification to MD modules
-    const MdModulesNotifier& mdModulesNotifier_;
+    //! Notifiers to MD modules
+    const MDModulesNotifiers& mdModulesNotifiers_;
     //! Global topology groups
     const SimulationGroups* groups_;
     //! History of simulation observables.
     ObservablesHistory* observablesHistory_;
     //! Whether simulations share the state
     bool simulationsShareState_;
+    //! The pull work object.
+    pull_t* pullWork_;
 };
 
 /*! \internal
@@ -380,7 +397,8 @@ public:
      * \param statePropagatorData  Pointer to the \c StatePropagatorData object
      * \param energyData  Pointer to the \c EnergyData object
      * \param freeEnergyPerturbationData  Pointer to the \c FreeEnergyPerturbationData object
-     * \param globalCommunicationHelper  Pointer to the \c GlobalCommunicationHelper object
+     * \param globalCommunicationHelper   Pointer to the \c GlobalCommunicationHelper object
+     * \param observablesReducer          Pointer to the \c ObservablesReducer object
      *
      * \return  Pointer to the element to be added. Element needs to have been stored using \c storeElement
      */
@@ -389,7 +407,8 @@ public:
                                                     StatePropagatorData*        statePropagatorData,
                                                     EnergyData*                 energyData,
                                                     FreeEnergyPerturbationData* freeEnergyPerturbationData,
-                                                    GlobalCommunicationHelper* globalCommunicationHelper);
+                                                    GlobalCommunicationHelper* globalCommunicationHelper,
+                                                    ObservablesReducer*        observablesReducer);
 
 private:
     EnergyData* energyData_;

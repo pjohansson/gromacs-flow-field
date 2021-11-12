@@ -3,7 +3,7 @@
  *
  * Copyright (c) 1991-2000, University of Groningen, The Netherlands.
  * Copyright (c) 2001-2004, The GROMACS development team.
- * Copyright (c) 2013,2014,2015,2017,2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2013,2014,2015,2017,2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -45,6 +45,7 @@
 #include "gromacs/gmxana/gmx_ana.h"
 #include "gromacs/gmxana/nrama.h"
 #include "gromacs/math/units.h"
+#include "gromacs/math/utilities.h"
 #include "gromacs/math/vec.h"
 #include "gromacs/utility/arraysize.h"
 #include "gromacs/utility/futil.h"
@@ -58,8 +59,8 @@ static void plot_rama(FILE* out, t_xrama* xr)
 
     for (i = 0; (i < xr->npp); i++)
     {
-        phi = xr->dih[xr->pp[i].iphi].ang * RAD2DEG;
-        psi = xr->dih[xr->pp[i].ipsi].ang * RAD2DEG;
+        phi = xr->dih[xr->pp[i].iphi].ang * gmx::c_rad2Deg;
+        psi = xr->dih[xr->pp[i].ipsi].ang * gmx::c_rad2Deg;
         fprintf(out, "%g  %g  %s\n", phi, psi, xr->pp[i].label);
     }
 }
@@ -81,8 +82,8 @@ int gmx_rama(int argc, char* argv[])
                        { efXVG, nullptr, "rama", ffWRITE } };
 #define NFILE asize(fnm)
 
-    if (!parse_common_args(&argc, argv, PCA_CAN_VIEW | PCA_CAN_TIME, NFILE, fnm, 0, nullptr,
-                           asize(desc), desc, 0, nullptr, &oenv))
+    if (!parse_common_args(
+                &argc, argv, PCA_CAN_VIEW | PCA_CAN_TIME, NFILE, fnm, 0, nullptr, asize(desc), desc, 0, nullptr, &oenv))
     {
         return 0;
     }

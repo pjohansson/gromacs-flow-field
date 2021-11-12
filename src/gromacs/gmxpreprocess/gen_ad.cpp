@@ -4,7 +4,7 @@
  * Copyright (c) 1991-2000, University of Groningen, The Netherlands.
  * Copyright (c) 2001-2004, The GROMACS development team.
  * Copyright (c) 2013,2014,2015,2016,2017 by the GROMACS development team.
- * Copyright (c) 2018,2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2018,2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -58,6 +58,7 @@
 #include "gromacs/math/vec.h"
 #include "gromacs/topology/ifunc.h"
 #include "gromacs/utility/cstringutil.h"
+#include "gromacs/utility/enumerationhelpers.h"
 #include "gromacs/utility/fatalerror.h"
 #include "gromacs/utility/smalloc.h"
 
@@ -129,9 +130,10 @@ static bool dcomp(const InteractionOfType& d1, const InteractionOfType& d2)
     {
         // AMBER force fields with type 9 dihedrals can reach here, where we sort on
         // the contents of the string that names the macro for the parameters.
-        return std::lexicographical_compare(
-                d1.interactionTypeName().begin(), d1.interactionTypeName().end(),
-                d2.interactionTypeName().begin(), d2.interactionTypeName().end());
+        return std::lexicographical_compare(d1.interactionTypeName().begin(),
+                                            d1.interactionTypeName().end(),
+                                            d2.interactionTypeName().begin(),
+                                            d2.interactionTypeName().end());
     }
 }
 
@@ -245,7 +247,7 @@ static std::vector<InteractionOfType> clean_dih(gmx::ArrayRef<const InteractionO
         int i = 0;
         for (const auto& dihedral : dih)
         {
-            newDihedrals.emplace_back(std::pair<InteractionOfType, int>(dihedral, i++));
+            newDihedrals.emplace_back(dihedral, i++);
         }
     }
     else
@@ -264,7 +266,7 @@ static std::vector<InteractionOfType> clean_dih(gmx::ArrayRef<const InteractionO
             if (was_dihedral_set_in_rtp(*dihedral) || dihedral == dih.begin()
                 || !is_dihedral_on_same_bond(*dihedral, *(dihedral - 1)))
             {
-                newDihedrals.emplace_back(std::pair<InteractionOfType, int>(*dihedral, i++));
+                newDihedrals.emplace_back(*dihedral, i++);
             }
         }
     }
@@ -299,7 +301,8 @@ static std::vector<InteractionOfType> clean_dih(gmx::ArrayRef<const InteractionO
                 int minh = 2;
                 int next = dihedral->second + 1;
                 for (int l = dihedral->second;
-                     (l < next && is_dihedral_on_same_bond(dihedral->first, dih[l])); l++)
+                     (l < next && is_dihedral_on_same_bond(dihedral->first, dih[l]));
+                     l++)
                 {
                     int nh = n_hydro(dih[l].atoms(), atoms->atomname);
                     if (nh < minh)
@@ -347,15 +350,15 @@ static std::vector<InteractionOfType> get_impropers(t_atoms*                    
     {
         for (int i = 0; (i < atoms->nres); i++)
         {
-            BondedInteractionList* impropers = &globalPatches[i].rb[ebtsIDIHS];
+            BondedInteractionList* impropers = &globalPatches[i].rb[BondedTypes::ImproperDihedrals];
             for (const auto& bondeds : impropers->b)
             {
                 bool             bStop = false;
                 std::vector<int> ai;
                 for (int k = 0; (k < 4) && !bStop; k++)
                 {
-                    const int entry = search_atom(bondeds.a[k].c_str(), start, atoms, "improper",
-                                                  bAllowMissing, cyclicBondsIndex);
+                    const int entry = search_atom(
+                            bondeds.a[k].c_str(), start, atoms, "improper", bAllowMissing, cyclicBondsIndex);
 
                     if (entry != -1)
                     {
@@ -369,7 +372,7 @@ static std::vector<InteractionOfType> get_impropers(t_atoms*                    
                 if (!bStop)
                 {
                     /* Not broken out */
-                    improper.emplace_back(InteractionOfType(ai, {}, bondeds.s));
+                    improper.emplace_back(ai, gmx::ArrayRef<const real>{}, bondeds.s);
                 }
             }
             while ((start < atoms->nr) && (atoms->atom[start].resind == i))
@@ -451,7 +454,7 @@ static void gen_excls(t_atoms*                             atoms,
         int r = atoms->atom[a].resind;
         if (a == atoms->nr - 1 || atoms->atom[a + 1].resind != r)
         {
-            BondedInteractionList* hbexcl = &globalPatches[r].rb[ebtsEXCLS];
+            BondedInteractionList* hbexcl = &globalPatches[r].rb[BondedTypes::Exclusions];
 
             for (const auto& bondeds : hbexcl->b)
             {
@@ -605,9 +608,9 @@ void gen_pad(t_atoms*                               atoms,
         /* mark all entries as not matched yet */
         for (int i = 0; i < atoms->nres; i++)
         {
-            for (int j = 0; j < ebtsNR; j++)
+            for (auto bondedsList : globalPatches[i].rb)
             {
-                for (auto& bondeds : globalPatches[i].rb[j].b)
+                for (auto& bondeds : bondedsList.b)
                 {
                     bondeds.match = false;
                 }
@@ -649,7 +652,7 @@ void gen_pad(t_atoms*                               atoms,
                             {
                                 res += maxres - minres;
                                 get_atomnames_min(3, anm, res, atoms, atomNumbers);
-                                BondedInteractionList* hbang = &globalPatches[res].rb[ebtsANGLES];
+                                BondedInteractionList* hbang = &globalPatches[res].rb[BondedTypes::Angles];
                                 for (auto& bondeds : hbang->b)
                                 {
                                     if (anm[1] == bondeds.aj())
@@ -700,7 +703,8 @@ void gen_pad(t_atoms*                               atoms,
                                     {
                                         res += maxres - minres;
                                         get_atomnames_min(4, anm, res, atoms, atomNumbers);
-                                        BondedInteractionList* hbdih = &globalPatches[res].rb[ebtsPDIHS];
+                                        BondedInteractionList* hbdih =
+                                                &globalPatches[res].rb[BondedTypes::ProperDihedrals];
                                         for (auto& bondeds : hbdih->b)
                                         {
                                             bool bFound = false;
@@ -773,7 +777,7 @@ void gen_pad(t_atoms*                               atoms,
         for (int i = 0; i < atoms->nres; i++)
         {
             /* Add remaining angles from hackblock */
-            BondedInteractionList* hbang = &globalPatches[i].rb[ebtsANGLES];
+            BondedInteractionList* hbang = &globalPatches[i].rb[BondedTypes::Angles];
             for (auto& bondeds : hbang->b)
             {
                 if (bondeds.match)
@@ -824,7 +828,7 @@ void gen_pad(t_atoms*                               atoms,
             }
 
             /* Add remaining dihedrals from hackblock */
-            BondedInteractionList* hbdih = &globalPatches[i].rb[ebtsPDIHS];
+            BondedInteractionList* hbdih = &globalPatches[i].rb[BondedTypes::ProperDihedrals];
             for (auto& bondeds : hbdih->b)
             {
                 if (bondeds.match)
@@ -913,8 +917,7 @@ void gen_pad(t_atoms*                               atoms,
     if (!dih.empty())
     {
         fprintf(stderr, "Before cleaning: %zu dihedrals\n", dih.size());
-        dih = clean_dih(dih, improper, atoms, rtpFFDB[0].bKeepAllGeneratedDihedrals,
-                        rtpFFDB[0].bRemoveDihedralIfWithImproper);
+        dih = clean_dih(dih, improper, atoms, rtpFFDB[0].bKeepAllGeneratedDihedrals, rtpFFDB[0].bRemoveDihedralIfWithImproper);
     }
 
     /* Now we have unique lists of angles and dihedrals

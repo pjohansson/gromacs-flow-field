@@ -3,7 +3,7 @@
  *
  * Copyright (c) 2009,2010,2011,2012,2013 by the GROMACS development team.
  * Copyright (c) 2014,2015,2016,2017,2018 by the GROMACS development team.
- * Copyright (c) 2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -330,16 +330,13 @@ namespace gmx
  */
 
 SelectionParserValue::SelectionParserValue(e_selvalue_t type, const SelectionLocation& location) :
-    type(type),
-    location_(location)
+    type(type), location_(location)
 {
     memset(&u, 0, sizeof(u));
 }
 
 SelectionParserValue::SelectionParserValue(const SelectionTreeElementPointer& expr) :
-    type(expr->v.type),
-    expr(expr),
-    location_(expr->location())
+    type(expr->v.type), expr(expr), location_(expr->location())
 {
     memset(&u, 0, sizeof(u));
 }
@@ -706,8 +703,8 @@ static SelectionTreeElementPointer init_keyword_internal(gmx_ana_selmethod_t*   
         SelectionParserParameterList params;
         params.push_back(SelectionParserParameter::createFromExpression(nullptr, child));
         params.push_back(SelectionParserParameter::create(nullptr, std::move(args), location));
-        _gmx_sel_parse_params(params, root->u.expr.method->nparams, root->u.expr.method->param,
-                              root, scanner);
+        _gmx_sel_parse_params(
+                params, root->u.expr.method->nparams, root->u.expr.method->param, root, scanner);
     }
     set_refpos_type(&sc->pcc, child, rpost);
 
@@ -847,8 +844,8 @@ SelectionTreeElementPointer _gmx_sel_init_modifier(gmx_ana_selmethod_t*         
         root = modifier;
     }
     /* Process the parameters */
-    _gmx_sel_parse_params(*params, modifier->u.expr.method->nparams, modifier->u.expr.method->param,
-                          modifier, scanner);
+    _gmx_sel_parse_params(
+            *params, modifier->u.expr.method->nparams, modifier->u.expr.method->param, modifier, scanner);
 
     return root;
 }

@@ -36,11 +36,14 @@
 # Sets version information variables and provides CMake functions for
 # generating files based on them
 #
-# This script provides the following basic version variables that need to be
-# maintained manually:
+# The following variables are derived from variables initialized by
+# https://cmake.org/cmake/help/latest/command/project.html#command:project
 #   GMX_VERSION_MAJOR      Major version number.
 #   GMX_VERSION_PATCH      Patch version number.
 #       Should always be defined: zero for, e.g., 2016.
+#
+# This script provides the following basic version variables that need to be
+# maintained manually:
 #   GMX_VERSION_SUFFIX     String suffix to add to numeric version string.
 #       "-dev" is automatically added when not building from a source package,
 #       and does not need to be kept here. This mechanism is not quite enough
@@ -60,6 +63,7 @@
 #         GROMACS     2019   4
 #         GROMACS     2020   5
 #         GROMACS     2021   6
+#         GROMACS     2022   7
 #   LIBRARY_SOVERSION_MINOR so minor version for the built libraries.
 #       Should be increased for each release that changes only the implementation.
 #       In GROMACS, the typical policy is to increase it for each patch version
@@ -193,17 +197,19 @@
 # are used internally by this machinery, as well as VersionInfo.cmake.cmakein.
 
 #####################################################################
+# Derived version info.
+# Ref https://cmake.org/cmake/help/latest/command/project.html#command:project
+set(GMX_VERSION_MAJOR ${Gromacs_VERSION_MAJOR})
+set(GMX_VERSION_PATCH ${Gromacs_VERSION_MINOR})
+
+#####################################################################
 # Manually maintained version info
 
-# The GROMACS convention is that these are the version number of the next
-# release that is going to be made from this branch.
-set(GMX_VERSION_MAJOR 2021)
-set(GMX_VERSION_PATCH 4)
-# The suffix, on the other hand, is used mainly for betas and release
+# The suffix is used mainly for betas and release
 # candidates, where it signifies the most recent such release from
 # this branch; it will be empty before the first such release, as well
 # as after the final release is out.
-set(GMX_VERSION_SUFFIX "")
+set(GMX_VERSION_SUFFIX "-beta1")
 
 # Conventionally with libtool, any ABI change must change the major
 # version number, the minor version number should change if it's just
@@ -214,7 +220,7 @@ set(GMX_VERSION_SUFFIX "")
 # here. The important thing is to minimize the chance of third-party
 # code being able to dynamically link with a version of libgromacs
 # that might not work.
-set(LIBRARY_SOVERSION_MAJOR 6)
+set(LIBRARY_SOVERSION_MAJOR 7)
 set(LIBRARY_SOVERSION_MINOR 0)
 set(LIBRARY_VERSION ${LIBRARY_SOVERSION_MAJOR}.${LIBRARY_SOVERSION_MINOR}.0)
 
@@ -229,13 +235,15 @@ endif()
 set(GMX_VERSION_STRING "${GMX_VERSION}${GMX_VERSION_SUFFIX}")
 
 set(REGRESSIONTEST_VERSION "${GMX_VERSION_STRING}")
-set(REGRESSIONTEST_BRANCH "release-2021")
-# Run the regressiontests packaging job with the correct pakage
-# version string, and the release box checked, in order to have it
-# build the regressiontests tarball with all the right naming. The
-# naming affects the md5sum that has to go here, and if it isn't right
-# release workflow will report a failure.
-set(REGRESSIONTEST_MD5SUM "7ffbe341d9ce6fab581e1c481ea74cf5" CACHE INTERNAL "MD5 sum of the regressiontests tarball for this GROMACS version")
+set(REGRESSIONTEST_BRANCH "master")
+# Follow the relevant part of the release checklist at
+# https://gitlab.com/gromacs/gromacs/-/wikis/Release-checklist#how-to-build-a-regressiontests-tarball
+# in order to have it build the regressiontests tarball with all the
+# right version naming. The version number and suffix goes into the
+# directory name within the regressiontests tarball, which affects the
+# md5sum of the tarball. The matching md5sum has to go here, and if it
+# isn't right the real release workflow will report a failure.
+set(REGRESSIONTEST_MD5SUM "9e122010c6e0fea35ec621a8e6561f7f" CACHE INTERNAL "MD5 sum of the regressiontests tarball for this GROMACS version")
 
 # If you are making a custom fork of GROMACS, please describe your
 # fork, perhaps with its version number, in the value of
@@ -257,23 +265,14 @@ endif()
 
 option(GMX_BUILD_TARBALL "Build tarball without -dev version suffix" OFF)
 mark_as_advanced(GMX_BUILD_TARBALL)
-# If run with cmake -P, the -dev suffix is managed elsewhere.
 if (NOT SOURCE_IS_SOURCE_DISTRIBUTION AND
-    NOT GMX_BUILD_TARBALL AND
-    NOT CMAKE_SCRIPT_MODE_FILE)
+    NOT GMX_BUILD_TARBALL)
     set(GMX_VERSION_STRING "${GMX_VERSION_STRING}-dev")
 endif()
 
 math(EXPR GMX_VERSION_NUMERIC
      "${GMX_VERSION_MAJOR}*10000 + ${GMX_VERSION_PATCH}")
 set(GMX_API_VERSION ${GMX_VERSION_NUMERIC})
-
-# If run with cmake -P from GitLab scripts, print out necessary version info
-# as JSON.
-if (CMAKE_SCRIPT_MODE_FILE)
-    message("{ \"version\": \"${GMX_VERSION_STRING}\", \"regressiontest-md5sum\": \"${REGRESSIONTEST_MD5SUM}\" }")
-    return()
-endif()
 
 # Set those values only in release versions, after getting the identifiers
 # from Zenodo for the manual and source code
@@ -285,8 +284,8 @@ if (GMX_VERSION_STRING_OF_FORK)
     set(GMX_MANUAL_DOI_INTERNAL "")
     set(GMX_SOURCE_DOI_INTERNAL "")
 else()
-    set(GMX_MANUAL_DOI_INTERNAL "10.5281/zenodo.5636522") # Set correct doi string here
-    set(GMX_SOURCE_DOI_INTERNAL "10.5281/zenodo.5636567") # Set correct doi string here
+    set(GMX_MANUAL_DOI_INTERNAL "") # Set correct doi string here
+    set(GMX_SOURCE_DOI_INTERNAL "") # Set correct doi string here
 endif()
 set(GMX_MANUAL_DOI ${GMX_MANUAL_DOI_INTERNAL} CACHE INTERNAL "reserved doi for GROMACS manual" FORCE)
 set(GMX_SOURCE_DOI ${GMX_SOURCE_DOI_INTERNAL} CACHE INTERNAL "reserved doi for GROMACS source code" FORCE)
@@ -364,6 +363,9 @@ string(REPLACE ";" ":" DIRECTORIES_TO_CHECKSUM_STRING "${SET_OF_DIRECTORIES_TO_C
 #        - These are again custom commands that depend on the output from
 #          step 1, so they get regenerated only when the static version info
 #          changes.
+#
+# Note that VersionInfo-partial.cmake is also used to transfer version
+# information between GitLab CI jobs for release and documentation builds.
 
 # Check if we have all necessary python modules available
 if (Python3_Interpreter_FOUND)
@@ -413,15 +415,20 @@ if (GMX_GIT_VERSION_INFO)
 else()
     # Leave these to be substituted by the custom target below.
     # Specific for building from source tarball.
+    set(GMX_RELEASE_SOURCE_FILE_CHECKSUM "\@GMX_RELEASE_SOURCE_FILE_CHECKSUM\@")
+    set(GMX_CURRENT_SOURCE_FILE_CHECKSUM "\@GMX_CURRENT_SOURCE_FILE_CHECKSUM\@")
     gmx_add_custom_output_target(release-version-info RUN_ALWAYS
         OUTPUT ${VERSION_INFO_CMAKE_FILE}
         COMMAND ${CMAKE_COMMAND}
             -D PYTHON_EXECUTABLE=${PYTHON_EXECUTABLE}
+            -D HAVE_FULL_FUNCTIONING_PYTHON=${HAVE_FULL_FUNCTIONING_PYTHON}
             -D PROJECT_VERSION=${GMX_VERSION_STRING}
             -D PROJECT_SOURCE_DIR=${PROJECT_SOURCE_DIR}
+            -D DIRECTORIES_TO_CHECKSUM=${DIRECTORIES_TO_CHECKSUM_STRING}
             -D VERSION_CMAKEIN=${VERSION_INFO_CMAKEIN_FILE_PARTIAL}
             -D VERSION_OUT=${VERSION_INFO_CMAKE_FILE}
             -D VERSION_STRING_OF_FORK=${GMX_VERSION_STRING_OF_FORK}
+            -D SOURCE_IS_SOURCE_DISTRIBUTION=${SOURCE_IS_SOURCE_DISTRIBUTION}
             -P ${CMAKE_CURRENT_LIST_DIR}/gmxGenerateVersionInfoWithoutGit.cmake
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
         COMMENT "Generating release version information")
@@ -433,7 +440,39 @@ configure_file(${VERSION_INFO_CMAKEIN_FILE}
 unset(GMX_VERSION_STRING_FULL)
 unset(GMX_VERSION_FULL_HASH)
 unset(GMX_VERSION_CENTRAL_BASE_HASH)
+unset(GMX_RELEASE_SOURCE_FILE_CHECKSUM)
+unset(GMX_CURRENT_SOURCE_FILE_CHECKSUM)
 
+
+# What file the checksum should be written to
+set(CHECKSUM_FILE "${PROJECT_SOURCE_DIR}/src/reference_checksum")
+
+# Target that allows checksumming a source tree when producing a tarball.
+# Allows verification of builds from the tarball to make sure the source had
+# not been tampered with.
+# Note: The RUN_ALWAYS here is to regenerate the hash file only, it does not
+# mean that the target is run in all builds
+if (HAVE_FULL_FUNCTIONING_PYTHON)
+    # We need the full path to the directories after passing it through
+    set(FULL_PATH_DIRECTORIES "")
+    foreach(DIR ${SET_OF_DIRECTORIES_TO_CHECKSUM})
+        list(APPEND FULL_PATH_DIRECTORIES "${PROJECT_SOURCE_DIR}/${DIR}")
+    endforeach()
+    gmx_add_custom_output_target(reference_checksum RUN_ALWAYS
+        OUTPUT ${CHECKSUM_FILE}
+        COMMAND ${PYTHON_EXECUTABLE}
+            ${PROJECT_SOURCE_DIR}/admin/createFileHash.py
+            -s ${FULL_PATH_DIRECTORIES}
+            -o ${CHECKSUM_FILE}
+        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+        COMMENT "Generating reference checksum of source files")
+else()
+    add_custom_target(reference_checksum
+        COMMAND ${CMAKE_COMMAND} -E echo
+        "Can not checksum files without python3 being available"
+        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+        COMMENT "Generating reference checksum of source files")
+endif()
 
 # The main user-visible interface to the machinery.
 # See documentation at the top of the script.

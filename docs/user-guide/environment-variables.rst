@@ -22,12 +22,6 @@ you should consult your local documentation for details.
 
 Output Control
 --------------
-``GMX_CONSTRAINTVIR``
-        Print constraint virial and force virial energy terms.
-
-``GMX_DUMP_NL``
-        Neighbour list dump level; default 0.
-
 ``GMX_MAXBACKUP``
         |Gromacs| automatically backs up old
         copies of files when trying to write a new file of the same
@@ -50,10 +44,10 @@ Output Control
         file that have an interaction energy less than the value set
         in this environment variable.
 
-``GMX_VIEW_XPM``
-        ``GMX_VIEW_XVG``, ``GMX_VIEW_EPS`` and ``GMX_VIEW_PDB``, commands used to
-        automatically view :ref:`xvg`, :ref:`xpm`, :ref:`eps`
-        and :ref:`pdb` file types, respectively; they default to ``xv``, ``xmgrace``,
+``GMX_VIEW_XVG``
+        ``GMX_VIEW_EPS`` and ``GMX_VIEW_PDB``, commands used to
+        automatically view :ref:`xvg`, :ref:`eps`
+        and :ref:`pdb` file types, respectively; they default to ``xmgrace``,
         ``ghostview`` and ``rasmol``. Set to empty to disable
         automatic viewing of a particular file type. The command will
         be forked off and run in the background at the same priority
@@ -85,8 +79,8 @@ Output Control
         files. Set to 0 for quiet operation.
 
 ``GMX_ENABLE_GPU_TIMING``
-        Enables GPU timings in the log file for CUDA. Note that CUDA timings
-        are incorrect with multiple streams, as happens with domain
+        Enables GPU timings in the log file for CUDA and SYCL. Note that CUDA
+        timings are incorrect with multiple streams, as happens with domain
         decomposition or with both non-bondeds and PME on the GPU (this is
         also the main reason why they are not turned on by default).
 
@@ -95,9 +89,6 @@ Output Control
 
 Debugging
 ---------
-``GMX_PRINT_DEBUG_LINES``
-        when set, print debugging info on line numbers.
-
 ``GMX_DD_NST_DUMP``
         number of steps that elapse between dumping
         the current DD to a PDB file (default 0). This only takes effect
@@ -170,6 +161,14 @@ Performance and Run Control
         (for coordinate and force buffers) directly on GPU memory spaces, without the staging of data through CPU
         memory, where possible. 
 
+``GMX_GPU_SYCL_NO_SYNCHRONIZE``
+        disable synchronizations between different GPU streams in SYCL build, instead relying on SYCL runtime to
+        do scheduling based on data dependencies. Experimental.
+
+``GMX_GPU_SYCL_USE_SUBDEVICES``
+        partition the GPUs that support it into sub-devices, and treat each one as an independent device.
+        GPUs that can not be split are ignored. Intended for use with multi-tile GPUs.
+
 ``GMX_CYCLE_ALL``
         times all code during runs.  Incompatible with threads.
 
@@ -210,14 +209,11 @@ Performance and Run Control
 ``GMX_DISABLE_GPU_TIMING``
         timing of asynchronously executed GPU operations can have a
         non-negligible overhead with short step times. Disabling timing can improve performance in these cases.
+        Timings are disabled by default with CUDA and SYCL.
 
 ``GMX_DISABLE_GPU_DETECTION``
         when set, disables GPU detection even if :ref:`gmx mdrun` was compiled
         with GPU support.
-
-``GMX_GPU_APPLICATION_CLOCKS``
-        setting this variable to a value of "0", "ON", or "DISABLE" (case insensitive)
-        allows disabling the CUDA GPU allication clock support.
 
 ``GMX_DISRE_ENSEMBLE_SIZE``
         the number of systems for distance restraint ensemble
@@ -277,9 +273,6 @@ Performance and Run Control
         The default value is optimized for supported GPUs
         therefore changing it is not necessary for normal usage, but it can be useful on future architectures.
 
-``GMX_NBLISTCG``
-        use neighbor list and kernels based on charge groups.
-
 ``GMX_NBNXN_CYCLE``
         when set, print detailed neighbor search cycle counting.
 
@@ -333,11 +326,6 @@ Performance and Run Control
         turns off update groups. May allow for a decomposition of more
         domains for small systems at the cost of communication during update.
 
-``GMX_NSCELL_NCG``
-        the ideal number of charge groups per neighbor searching grid cell is hard-coded
-        to a value of 10. Setting this environment variable to any other integer value overrides this hard-coded
-        value.
-
 ``GMX_PME_NUM_THREADS``
         set the number of OpenMP or PME threads; overrides the default set by
         :ref:`gmx mdrun`; can be used instead of the ``-npme`` command line option,
@@ -358,16 +346,9 @@ Performance and Run Control
 ``GMX_REQUIRE_SHELL_INIT``
         require that shell positions are initiated.
 
-``GMX_REQUIRE_TABLES``
-        require the use of tabulated Coulombic
-        and van der Waals interactions.
-
 ``GMX_TPIC_MASSES``
         should contain multiple masses used for test particle insertion into a cavity.
         The center of mass of the last atoms is used for insertion into the cavity.
-
-``GMX_USE_GRAPH``
-        use graph for bonded interactions.
 
 ``GMX_VERLET_BUFFER_RES``
         resolution of buffer size in Verlet cutoff scheme.  The default value is
@@ -396,10 +377,6 @@ Performance and Run Control
         by mdrun. Values should be between the pruning frequency value
         (1 for CPU and 2 for GPU) and :mdp:`nstlist` ``- 1``.
 
-``GMX_USE_TREEREDUCE``
-        use tree reduction for nbnxn force reduction. Potentially faster for large number of
-        OpenMP threads (if memory locality is important).
-
 .. _opencl-management:
 
 OpenCL management
@@ -407,12 +384,6 @@ OpenCL management
 Currently, several environment variables exist that help customize some aspects
 of the OpenCL_ version of |Gromacs|. They are mostly related to the runtime
 compilation of OpenCL kernels, but they are also used in device selection.
-
-``GMX_OCL_NOGENCACHE``
-        If set, disable caching for OpenCL kernel builds. Caching is
-        normally useful so that future runs can re-use the compiled
-        kernels from previous runs. Currently, caching is always
-        disabled, until we solve concurrency issues.
 
 ``GMX_OCL_GENCACHE``
         Enable OpenCL binary caching. Only intended to be used for
@@ -426,6 +397,7 @@ compilation of OpenCL kernels, but they are also used in device selection.
 
 ``GMX_OCL_DISABLE_FASTMATH``
         Prevents the use of ``-cl-fast-relaxed-math`` compiler option.
+        Note: fast math is always disabled on Intel devices due to instability.
 
 ``GMX_OCL_DUMP_LOG``
         If defined, the OpenCL build log is always written to the
@@ -441,12 +413,11 @@ compilation of OpenCL kernels, but they are also used in device selection.
 
         If defined, intermediate language code corresponding to the
         OpenCL build process is saved to file. Caching has to be
-        turned off in order for this option to take effect (see
-        ``GMX_OCL_NOGENCACHE``).
+        turned off in order for this option to take effect.
 
             - NVIDIA GPUs: PTX code is saved in the current directory
-	      with the name ``device_name.ptx``
-	    - AMD GPUs: ``.IL/.ISA`` files will be created for each OpenCL
+              with the name ``device_name.ptx``
+            - AMD GPUs: ``.IL/.ISA`` files will be created for each OpenCL
               kernel built.  For details about where these files are
               created check AMD documentation for ``-save-temps`` compiler
               option.
@@ -502,9 +473,6 @@ Analysis and Core Functions
         terminal residues (NXXX and CXXX) as :ref:`rtp` entries that are normally renamed. Setting
         this environment variable disables this renaming.
 
-``GMX_PATH_GZIP``
-        ``gunzip`` executable, used by :ref:`gmx wham`.
-
 ``GMX_FONT``
         name of X11 font used by :ref:`gmx view`.
 
@@ -512,16 +480,6 @@ Analysis and Core Functions
         the time unit used in output files, can be
         anything in fs, ps, ns, us, ms, s, m or h.
 
-``MULTIPROT``
-        name of the ``multiprot`` executable, used by the
-        contributed program ``do_multiprot``.
-
-``NCPUS``
-        number of CPUs to be used for Gaussian QM calculation
-
-``GMX_TOTAL``
-        name of the ``total`` executable used by the contributed
-        ``do_shift`` program.
 
 ``GMX_ENER_VERBOSE``
         make :ref:`gmx energy` and :ref:`gmx eneconv`

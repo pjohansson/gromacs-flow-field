@@ -1,7 +1,7 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -62,9 +62,7 @@
 #include "gromacs/utility/arrayref.h"
 #include "gromacs/utility/range.h"
 
-struct gmx_domdec_zones_t;
 struct nbnxn_atomdata_t;
-struct nbnxn_search;
 enum class PairlistType;
 
 namespace gmx
@@ -351,7 +349,7 @@ public:
                         GridSetData*                   gridSetData,
                         gmx::ArrayRef<GridWork>        gridWork,
                         gmx::Range<int>                atomRange,
-                        const int*                     atinfo,
+                        gmx::ArrayRef<const int64_t>   atomInfo,
                         gmx::ArrayRef<const gmx::RVec> x,
                         int                            numAtomsMoved,
                         nbnxn_atomdata_t*              nbat);
@@ -377,14 +375,14 @@ private:
                   nbnxn_atomdata_t*              nbat,
                   int                            atomStart,
                   int                            atomEnd,
-                  const int*                     atinfo,
+                  gmx::ArrayRef<const int64_t>   atomInfo,
                   gmx::ArrayRef<const gmx::RVec> x,
                   BoundingBox gmx_unused* bb_work_aligned);
 
     //! Spatially sort the atoms within the given column range, for CPU geometry
     void sortColumnsCpuGeometry(GridSetData*                   gridSetData,
                                 int                            dd_zone,
-                                const int*                     atinfo,
+                                gmx::ArrayRef<const int64_t>   atomInfo,
                                 gmx::ArrayRef<const gmx::RVec> x,
                                 nbnxn_atomdata_t*              nbat,
                                 gmx::Range<int>                columnRange,
@@ -393,7 +391,7 @@ private:
     //! Spatially sort the atoms within the given column range, for GPU geometry
     void sortColumnsGpuGeometry(GridSetData*                   gridSetData,
                                 int                            dd_zone,
-                                const int*                     atinfo,
+                                gmx::ArrayRef<const int64_t>   atomInfo,
                                 gmx::ArrayRef<const gmx::RVec> x,
                                 nbnxn_atomdata_t*              nbat,
                                 gmx::Range<int>                columnRange,

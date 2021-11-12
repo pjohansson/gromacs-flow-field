@@ -1,7 +1,7 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2014,2015,2017,2018,2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2014,2015,2017,2018,2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -195,10 +195,20 @@ public:
         int               numIterations  = 0;
         int               numErrors      = 0;
 
-        cshake(iatom.data(), numConstraints, &numIterations, ShakeTest::maxNumIterations_,
-               constrainedDistancesSquared, finalPositions, nullptr, initialDisplacements,
-               halfOfReducedMasses, omega_, inverseMasses.data(), distanceSquaredTolerances,
-               lagrangianValues, &numErrors);
+        cshake(iatom.data(),
+               numConstraints,
+               &numIterations,
+               ShakeTest::maxNumIterations_,
+               constrainedDistancesSquared,
+               finalPositions,
+               nullptr,
+               initialDisplacements,
+               halfOfReducedMasses,
+               omega_,
+               inverseMasses,
+               distanceSquaredTolerances,
+               lagrangianValues,
+               &numErrors);
 
         std::vector<RVec> finalDisplacements    = computeDisplacements(iatom, finalPositions);
         std::vector<real> finalDistancesSquared = computeDistancesSquared(finalDisplacements);
@@ -218,7 +228,8 @@ public:
                                             + coordMax * GMX_REAL_EPS);
             // Assert that the constrained distances are within the required tolerance
             EXPECT_FLOAT_EQ_TOL(std::sqrt(constrainedDistancesSquared[i]),
-                                std::sqrt(finalDistancesSquared[i]), constraintTolerance);
+                                std::sqrt(finalDistancesSquared[i]),
+                                constraintTolerance);
         }
     }
 

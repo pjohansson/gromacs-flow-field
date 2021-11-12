@@ -86,15 +86,13 @@ class ParticleIdentifier final
 public:
     //! \brief construct form a ParticleName, allow implicit conversion
     ParticleIdentifier(ParticleName particleName) :
-        particleName_(std::move(particleName)),
-        residueName_()
+        particleName_(std::move(particleName)), residueName_()
     {
     }
 
     //! \brief construct with a non-default ResidueName
     ParticleIdentifier(ParticleName particleName, ResidueName residueName) :
-        particleName_(std::move(particleName)),
-        residueName_(std::move(residueName))
+        particleName_(std::move(particleName)), residueName_(std::move(residueName))
     {
     }
 
@@ -244,6 +242,40 @@ private:
     //! collection of data for all types of interactions
     InteractionTuple interactionData_;
 };
+
+/*! \brief Helper function to add harmonic angle and harmonic bonds for Urey-Bradley term.
+ *
+ * Urey-Bradley consist of two harmonic terms:
+ *   1. Harmonic angle, connecting all three particles.
+ *   2. Harmonic correction to the distance between two non-central particles (particles 1 and 3)
+ * This function creates theese terms and adds them to the \c molecule as independent harmonic
+ * angle and harmonic bond.
+ *
+ * \todo This should be moved to another location (e.g. to TPR reader).
+ *
+ * \param[in,out] molecule   The molecule to add Urey-bradley to.
+ * \param[in]     particleI  First interacting particle.
+ * \param[in]     particleJ  Second (central) interacting particle.
+ * \param[in]     particleK  Third interacting particle.
+ * \param[in]     theta0     Equilibrium angle (in radians).
+ * \param[in]     kTheta     Force-constant for angle.
+ * \param[in]     r130       Equilibrium distance between particles 1 and 3.
+ * \param[in]     kUB        Force constant for bond correction term.
+ */
+static inline void addUreyBradleyInteraction(Molecule&                 molecule,
+                                             const ParticleIdentifier& particleI,
+                                             const ParticleIdentifier& particleJ,
+                                             const ParticleIdentifier& particleK,
+                                             const Radians             theta0,
+                                             const ForceConstant       kTheta,
+                                             const EquilConstant       r130,
+                                             const ForceConstant       kUB)
+{
+    HarmonicAngle    ubAngle(kTheta, theta0);
+    HarmonicBondType ubBond(kUB, r130);
+    molecule.addInteraction(particleI, particleJ, particleK, ubAngle);
+    molecule.addInteraction(particleI, particleK, ubBond);
+}
 
 } // namespace nblib
 #endif // NBLIB_MOLECULES_H

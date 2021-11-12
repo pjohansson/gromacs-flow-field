@@ -46,7 +46,7 @@
 #include <boost/stl_interfaces/iterator_interface.hpp>
 
 #include "gromacs/topology/topology.h"
-#include "gromacs/utility/basedefinitions.h"
+#include "gromacs/utility/enumerationhelpers.h"
 
 struct gmx_localtop_t;
 struct t_atom;
@@ -62,7 +62,7 @@ struct t_symtab;
  * state A and 1 for state B types.  typecount should have at
  * least mtop->ffparams.atnr elements.
  */
-void gmx_mtop_count_atomtypes(const gmx_mtop_t* mtop, int state, int typecount[]);
+void gmx_mtop_count_atomtypes(const gmx_mtop_t& mtop, int state, int typecount[]);
 
 /*!\brief Returns the total number of molecules in mtop
  *
@@ -71,7 +71,7 @@ void gmx_mtop_count_atomtypes(const gmx_mtop_t* mtop, int state, int typecount[]
 int gmx_mtop_num_molecules(const gmx_mtop_t& mtop);
 
 /* Returns the total number of residues in mtop. */
-int gmx_mtop_nres(const gmx_mtop_t* mtop);
+int gmx_mtop_nres(const gmx_mtop_t& mtop);
 
 class AtomIterator;
 
@@ -157,12 +157,82 @@ private:
     AtomIterator begin_, end_;
 };
 
+class IListIterator;
+
+//! Proxy object returned from IListIterator
+class IListProxy
+{
+public:
+    //! Default constructor.
+    IListProxy(const IListIterator* it) : it_(it) {}
+    //! Access current global atom number.
+    const InteractionLists& list() const;
+    //! Access current molecule.
+    int nmol() const;
+
+private:
+    const IListIterator* it_;
+};
+
+/*! \brief
+ * Object that allows looping over all atoms in an mtop.
+ */
+class IListIterator :
+    public boost::stl_interfaces::proxy_iterator_interface<IListIterator, std::forward_iterator_tag, InteractionLists, IListProxy>
+{
+    using Base =
+            boost::stl_interfaces::proxy_iterator_interface<IListIterator, std::forward_iterator_tag, InteractionLists, IListProxy>;
+
+public:
+    //! Construct from topology.
+    explicit IListIterator(const gmx_mtop_t& mtop, size_t mblock = 0);
+
+    //! Prefix increment.
+    IListIterator& operator++();
+    using Base::   operator++;
+
+    //! Equality comparison.
+    bool operator==(const IListIterator& o) const;
+
+    //! Dereference operator. Returns proxy.
+    IListProxy operator*() const { return { this }; }
+
+private:
+    //! Global topology.
+    const gmx_mtop_t* mtop_;
+    //! Index of molecule block corresponding to the current location.
+    size_t mblock_;
+
+    friend class IListProxy;
+};
+
+
+/*! \brief
+ * Range over all interaction lists of topology.
+ *
+ * Includes the intermolecular interactions as the final element in the
+ * range if present.
+ */
+class IListRange
+{
+public:
+    //! Default constructor.
+    explicit IListRange(const gmx_mtop_t& mtop);
+    //! Iterator to begin of range.
+    IListIterator& begin() { return begin_; }
+    //! Iterator to end of range.
+    IListIterator& end() { return end_; }
+
+private:
+    IListIterator begin_, end_;
+};
+
 /* Abstract type for atom loop over atoms in all molecule blocks */
 typedef struct gmx_mtop_atomloop_block* gmx_mtop_atomloop_block_t;
 
 /* Initialize an atom loop over atoms in all molecule blocks the system.
  */
-gmx_mtop_atomloop_block_t gmx_mtop_atomloop_block_init(const gmx_mtop_t* mtop);
+gmx_mtop_atomloop_block_t gmx_mtop_atomloop_block_init(const gmx_mtop_t& mtop);
 
 /* Loop to the next atom.
  * When not at the end:
@@ -180,26 +250,6 @@ gmx_mtop_atomloop_block_t gmx_mtop_atomloop_block_init(const gmx_mtop_t* mtop);
 gmx_bool gmx_mtop_atomloop_block_next(gmx_mtop_atomloop_block_t aloop, const t_atom** atom, int* nmol);
 
 
-/* Abstract type for ilist loop over all ilists */
-typedef struct gmx_mtop_ilistloop* gmx_mtop_ilistloop_t;
-
-/* Initialize an ilist loop over all molecule types in the system. */
-gmx_mtop_ilistloop_t gmx_mtop_ilistloop_init(const gmx_mtop_t* mtop);
-
-/* Initialize an ilist loop over all molecule types in the system. */
-gmx_mtop_ilistloop_t gmx_mtop_ilistloop_init(const gmx_mtop_t& mtop);
-
-/* Loop to the next molecule,
- * When not at the end:
- *   returns a valid pointer to the next array ilist_mol[F_NRE],
- *   writes the number of molecules for this ilist in *nmol.
- * When at the end, destroys iloop and returns nullptr.
- */
-const InteractionLists* gmx_mtop_ilistloop_next(gmx_mtop_ilistloop_t iloop, int* nmol);
-
-/* Returns the total number of interactions in the system of type ftype */
-int gmx_mtop_ftype_count(const gmx_mtop_t* mtop, int ftype);
-
 /* Returns the total number of interactions in the system of type ftype */
 int gmx_mtop_ftype_count(const gmx_mtop_t& mtop, int ftype);
 
@@ -207,11 +257,25 @@ int gmx_mtop_ftype_count(const gmx_mtop_t& mtop, int ftype);
 int gmx_mtop_interaction_count(const gmx_mtop_t& mtop, int unsigned if_flags);
 
 /* Returns the count of atoms for each particle type */
-std::array<int, eptNR> gmx_mtop_particletype_count(const gmx_mtop_t& mtop);
+gmx::EnumerationArray<ParticleType, int> gmx_mtop_particletype_count(const gmx_mtop_t& mtop);
 
 /* Returns a single t_atoms struct for the whole system */
-t_atoms gmx_mtop_global_atoms(const gmx_mtop_t* mtop);
+t_atoms gmx_mtop_global_atoms(const gmx_mtop_t& mtop);
 
+/*! \brief Return whether the atom with the given index is within a
+ * 1-4 interaction within the given molecule type and its charge is
+ * perturbed.
+ *
+ * Some 1-4 interactions like F_COUL14 have the charges stored in the
+ * iparams list, but others do not. The commonly used F_LJ14 gets its
+ * charges from the topology, so we need more detailed checks for it,
+ * when FEP is active.
+ *
+ * \param[in] atomIndex  Index within range [0, molt.nr)
+ * \param[in] molt       Moleculetype to consider
+ * \return               Whether this atom is in a 1-4 interaction and charge is perturbed
+ * */
+bool atomHasPerturbedChargeIn14Interaction(int atomIndex, const gmx_moltype_t& molt);
 
 /*! \brief
  * Populate a 'local' topology for the whole system.
@@ -263,7 +327,7 @@ t_topology gmx_mtop_t_to_t_topology(gmx_mtop_t* mtop, bool freeMTop);
  * \param[in]  mtop Molecular topology
  * \returns Vector that will be filled with the atom indices
  */
-std::vector<int> get_atom_index(const gmx_mtop_t* mtop);
+std::vector<int> get_atom_index(const gmx_mtop_t& mtop);
 
 /*! \brief Converts a t_atoms struct to an mtop struct
  *

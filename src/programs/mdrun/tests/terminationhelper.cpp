@@ -1,7 +1,7 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2016,2018,2019, by the GROMACS development team, led by
+ * Copyright (c) 2016,2018,2019,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -55,13 +55,9 @@ namespace gmx
 namespace test
 {
 
-TerminationHelper::TerminationHelper(TestFileManager*  fileManager,
-                                     CommandLine*      mdrunCaller,
-                                     SimulationRunner* runner) :
-    mdrunCaller_(mdrunCaller),
-    runner_(runner)
+TerminationHelper::TerminationHelper(CommandLine* mdrunCaller, SimulationRunner* runner) :
+    mdrunCaller_(mdrunCaller), runner_(runner)
 {
-    runner_->cptFileName_ = fileManager->getTemporaryFilePath(".cpt");
     runner_->useTopGroAndNdxFromDatabase("spc2");
 }
 
@@ -72,7 +68,6 @@ void TerminationHelper::runFirstMdrun(const std::string& expectedCptFileName)
     // numSteps isn't reached first.
     firstPart.addOption("-maxh", 1e-7);
     firstPart.addOption("-nstlist", 1);
-    firstPart.addOption("-cpo", runner_->cptFileName_);
     ASSERT_EQ(0, runner_->callMdrun(firstPart));
     EXPECT_EQ(true, File::exists(expectedCptFileName, File::returnFalseOnError))
             << expectedCptFileName << " was not found";
@@ -81,7 +76,7 @@ void TerminationHelper::runFirstMdrun(const std::string& expectedCptFileName)
 void TerminationHelper::runSecondMdrun()
 {
     CommandLine secondPart(*mdrunCaller_);
-    secondPart.addOption("-cpi", runner_->cptFileName_);
+    secondPart.addOption("-cpi", runner_->cptOutputFileName_);
     secondPart.addOption("-nsteps", 2);
     ASSERT_EQ(0, runner_->callMdrun(secondPart));
 }
@@ -89,7 +84,7 @@ void TerminationHelper::runSecondMdrun()
 void TerminationHelper::runSecondMdrunWithNoAppend()
 {
     CommandLine secondPart(*mdrunCaller_);
-    secondPart.addOption("-cpi", runner_->cptFileName_);
+    secondPart.addOption("-cpi", runner_->cptOutputFileName_);
     secondPart.addOption("-nsteps", 2);
     secondPart.append("-noappend");
     ASSERT_EQ(0, runner_->callMdrun(secondPart));

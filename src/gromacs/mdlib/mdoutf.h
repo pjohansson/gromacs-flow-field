@@ -2,7 +2,7 @@
  * This file is part of the GROMACS molecular simulation package.
  *
  * Copyright (c) 2013,2014,2015,2016,2017 The GROMACS development team.
- * Copyright (c) 2018,2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2018,2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -57,7 +57,7 @@ namespace gmx
 {
 enum class StartingBehavior;
 class IMDOutputProvider;
-struct MdModulesNotifier;
+struct MDModulesNotifiers;
 struct MdrunOptions;
 class WriteCheckpointDataHolder;
 } // namespace gmx
@@ -69,20 +69,20 @@ typedef struct gmx_mdoutf* gmx_mdoutf_t;
  * Returns a pointer to a data structure with all output file pointers
  * and names required by mdrun.
  */
-gmx_mdoutf_t init_mdoutf(FILE*                         fplog,
-                         int                           nfile,
-                         const t_filenm                fnm[],
-                         const gmx::MdrunOptions&      mdrunOptions,
-                         const t_commrec*              cr,
-                         gmx::IMDOutputProvider*       outputProvider,
-                         const gmx::MdModulesNotifier& mdModulesNotifier,
-                         const t_inputrec*             ir,
-                         const gmx_mtop_t*             mtop,
-                         const gmx_output_env_t*       oenv,
-                         gmx_wallcycle_t               wcycle,
-                         gmx::StartingBehavior         startingBehavior,
-                         bool                          simulationsShareState,
-                         const gmx_multisim_t*         ms);
+gmx_mdoutf_t init_mdoutf(FILE*                          fplog,
+                         int                            nfile,
+                         const t_filenm                 fnm[],
+                         const gmx::MdrunOptions&       mdrunOptions,
+                         const t_commrec*               cr,
+                         gmx::IMDOutputProvider*        outputProvider,
+                         const gmx::MDModulesNotifiers& mdModulesNotifiers,
+                         const t_inputrec*              ir,
+                         const gmx_mtop_t&              mtop,
+                         const gmx_output_env_t*        oenv,
+                         gmx_wallcycle*                 wcycle,
+                         gmx::StartingBehavior          startingBehavior,
+                         bool                           simulationsShareState,
+                         const gmx_multisim_t*          ms);
 
 /*! \brief Getter for file pointer */
 ener_file_t mdoutf_get_fp_ene(gmx_mdoutf_t of);
@@ -91,7 +91,7 @@ ener_file_t mdoutf_get_fp_ene(gmx_mdoutf_t of);
 FILE* mdoutf_get_fp_dhdl(gmx_mdoutf_t of);
 
 /*! \brief Getter for wallcycle timer */
-gmx_wallcycle_t mdoutf_get_wcycle(gmx_mdoutf_t of);
+gmx_wallcycle* mdoutf_get_wcycle(gmx_mdoutf_t of);
 
 /*! \brief Close TNG files if they are open.
  *

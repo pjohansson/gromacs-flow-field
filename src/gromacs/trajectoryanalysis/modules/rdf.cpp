@@ -4,7 +4,7 @@
  * Copyright (c) 1991-2000, University of Groningen, The Netherlands.
  * Copyright (c) 2001-2004, The GROMACS development team.
  * Copyright (c) 2013,2014,2015,2016,2018 by the GROMACS development team.
- * Copyright (c) 2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -58,6 +58,7 @@
 #include "gromacs/analysisdata/modules/histogram.h"
 #include "gromacs/analysisdata/modules/plot.h"
 #include "gromacs/math/functions.h"
+#include "gromacs/math/units.h"
 #include "gromacs/math/utilities.h"
 #include "gromacs/math/vec.h"
 #include "gromacs/options/basicoptions.h"
@@ -286,14 +287,14 @@ void Rdf::initOptions(IOptionsContainer* options, TrajectoryAnalysisSettings* se
     settings->setHelpText(desc);
 
     options->addOption(FileNameOption("o")
-                               .filetype(eftPlot)
+                               .filetype(OptionFileType::Plot)
                                .outputFile()
                                .required()
                                .store(&fnRdf_)
                                .defaultBasename("rdf")
                                .description("Computed RDFs"));
     options->addOption(FileNameOption("cn")
-                               .filetype(eftPlot)
+                               .filetype(OptionFileType::Plot)
                                .outputFile()
                                .store(&fnCumulative_)
                                .defaultBasename("rdf_cn")
@@ -478,8 +479,8 @@ void Rdf::analyzeFrame(int frnr, const t_trxframe& fr, t_pbc* pbc, TrajectoryAna
 {
     AnalysisDataHandle   dh        = pdata->dataHandle(pairDist_);
     AnalysisDataHandle   nh        = pdata->dataHandle(normFactors_);
-    const Selection&     refSel    = TrajectoryAnalysisModuleData::parallelSelection(refSel_);
-    const SelectionList& sel       = TrajectoryAnalysisModuleData::parallelSelections(sel_);
+    const Selection&     refSel    = pdata->parallelSelection(refSel_);
+    const SelectionList& sel       = pdata->parallelSelections(sel_);
     RdfModuleData&       frameData = *static_cast<RdfModuleData*>(pdata);
     const bool           bSurface  = !frameData.surfaceDist2_.empty();
 
@@ -614,19 +615,11 @@ void Rdf::finishAnalysis(int /*nframes*/)
         real prevSphereVolume = 0.0;
         for (int i = 0; i < nbin; ++i)
         {
-            const real r = (i + 0.5) * binwidth_;
-            real       sphereVolume;
-            if (bXY_)
-            {
-                sphereVolume = M_PI * r * r;
-            }
-            else
-            {
-                sphereVolume = (4.0 / 3.0) * M_PI * r * r * r;
-            }
-            const real binVolume = sphereVolume - prevSphereVolume;
-            invBinVolume[i]      = 1.0 / binVolume;
-            prevSphereVolume     = sphereVolume;
+            const real r            = (i + 0.5) * binwidth_;
+            const real sphereVolume = (bXY_) ? M_PI * r * r : (4.0 / 3.0) * M_PI * r * r * r;
+            const real binVolume    = sphereVolume - prevSphereVolume;
+            invBinVolume[i]         = 1.0 / binVolume;
+            prevSphereVolume        = sphereVolume;
         }
         finalRdf->scaleAllByVector(invBinVolume.data());
 

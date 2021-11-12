@@ -4,7 +4,7 @@
  * Copyright (c) 1991-2000, University of Groningen, The Netherlands.
  * Copyright (c) 2001-2008, The GROMACS development team.
  * Copyright (c) 2013,2014,2015,2016,2017 by the GROMACS development team.
- * Copyright (c) 2018,2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2018,2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -43,6 +43,7 @@
 #include "gromacs/math/vectypes.h"
 #include "gromacs/timing/wallcycle.h"
 #include "gromacs/topology/atoms.h"
+#include "gromacs/utility/enumerationhelpers.h"
 
 class DDBalanceRegionHandler;
 struct gmx_enerdata_t;
@@ -58,6 +59,7 @@ struct t_inputrec;
 struct t_mdatoms;
 struct t_nrnb;
 class t_state;
+class CpuPpLongRangeNonbondeds;
 
 namespace gmx
 {
@@ -84,7 +86,7 @@ class VirtualSitesHandler;
  * \returns a pointer to an initialized \c shellfc object.
  */
 gmx_shellfc_t* init_shell_flexcon(FILE*             fplog,
-                                  const gmx_mtop_t* mtop,
+                                  const gmx_mtop_t& mtop,
                                   int               nflexcon,
                                   int               nstcalcenergy,
                                   bool              usingDomainDecomposition,
@@ -110,12 +112,13 @@ void relax_shell_flexcon(FILE*                               log,
                          gmx::ArrayRefWithPadding<gmx::RVec> v,
                          const matrix                        box,
                          gmx::ArrayRef<real>                 lambda,
-                         history_t*                          hist,
+                         const history_t*                    hist,
                          gmx::ForceBuffersView*              f,
                          tensor                              force_vir,
-                         const t_mdatoms*                    md,
+                         const t_mdatoms&                    md,
+                         CpuPpLongRangeNonbondeds*           longRangeNonbondeds,
                          t_nrnb*                             nrnb,
-                         gmx_wallcycle_t                     wcycle,
+                         gmx_wallcycle*                      wcycle,
                          gmx_shellfc_t*                      shfc,
                          t_forcerec*                         fr,
                          gmx::MdrunScheduleWorkload*         runScheduleWork,
@@ -135,6 +138,6 @@ void done_shellfc(FILE* fplog, gmx_shellfc_t* shellfc, int64_t numSteps);
  * \param[in]  mtop  Molecular topology.
  * \returns Array holding the number of particles of a type
  */
-std::array<int, eptNR> countPtypes(FILE* fplog, const gmx_mtop_t* mtop);
+gmx::EnumerationArray<ParticleType, int> countPtypes(FILE* fplog, const gmx_mtop_t& mtop);
 
 #endif

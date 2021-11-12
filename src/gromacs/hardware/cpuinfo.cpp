@@ -2,7 +2,7 @@
  * This file is part of the GROMACS molecular simulation package.
  *
  * Copyright (c) 2012-2018, The GROMACS development team.
- * Copyright (c) 2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -548,8 +548,11 @@ void renumberIndex(std::vector<unsigned int>* v)
     for (std::size_t i = 0; i < uniqueSortedV.size(); i++)
     {
         unsigned int val = uniqueSortedV[i];
-        std::replace_if(v->begin(), v->end(), [val](unsigned int& c) -> bool { return c == val; },
-                        static_cast<unsigned int>(i));
+        std::replace_if(
+                v->begin(),
+                v->end(),
+                [val](unsigned int& c) -> bool { return c == val; },
+                static_cast<unsigned int>(i));
     }
 }
 
@@ -808,14 +811,14 @@ CpuInfo::Vendor detectProcCpuInfoVendor(const std::map<std::string, std::string>
 
     // For each label in /proc/cpuinfo, compare the value to the name in the
     // testNames map above, and if it's a match return the vendor.
-    for (auto& l : { "vendor_id", "vendor", "manufacture", "model", "processor", "cpu" })
+    for (const auto& l : { "vendor_id", "vendor", "manufacture", "model", "processor", "cpu" })
     {
         if (cpuInfo.count(l) != 0U)
         {
             // there was a line with this left-hand side in /proc/cpuinfo
             const std::string& s1 = cpuInfo.at(l);
 
-            for (auto& t : testVendors)
+            for (const auto& t : testVendors)
             {
                 const std::string& s2 = t.first;
 
@@ -863,7 +866,7 @@ void detectProcCpuInfoIbm(const std::map<std::string, std::string>& cpuInfo,
         features->insert(CpuInfo::Feature::Ibm_Qpx);
     }
 
-    for (auto& l : { "model name", "model", "Processor", "cpu" })
+    for (const auto& l : { "model name", "model", "Processor", "cpu" })
     {
         if (cpuInfo.count(l) != 0U)
         {
@@ -1027,8 +1030,8 @@ CpuInfo CpuInfo::detect()
         {
             result.features_.insert(CpuInfo::Feature::X86_Hygon);
         }
-        detectX86Features(&result.brandString_, &result.family_, &result.model_, &result.stepping_,
-                          &result.features_);
+        detectX86Features(
+                &result.brandString_, &result.family_, &result.model_, &result.stepping_, &result.features_);
         result.logicalProcessors_ = detectX86LogicalProcessors();
     }
     else
@@ -1057,8 +1060,12 @@ CpuInfo CpuInfo::detect()
 
         // On Linux we might be able to find information in /proc/cpuinfo. If vendor or brand
         // is set to a known value this routine will not overwrite it.
-        detectProcCpuInfo(&result.vendor_, &result.brandString_, &result.family_, &result.model_,
-                          &result.stepping_, &result.features_);
+        detectProcCpuInfo(&result.vendor_,
+                          &result.brandString_,
+                          &result.family_,
+                          &result.model_,
+                          &result.stepping_,
+                          &result.features_);
     }
 
     if (!result.logicalProcessors_.empty())
@@ -1083,11 +1090,7 @@ CpuInfo CpuInfo::detect()
 }
 
 CpuInfo::CpuInfo() :
-    vendor_(CpuInfo::Vendor::Unknown),
-    brandString_("Unknown CPU brand"),
-    family_(0),
-    model_(0),
-    stepping_(0)
+    vendor_(CpuInfo::Vendor::Unknown), brandString_("Unknown CPU brand"), family_(0), model_(0), stepping_(0)
 {
 }
 
@@ -1168,9 +1171,26 @@ const std::string& CpuInfo::featureString(Feature f)
 
 bool cpuIsX86Nehalem(const CpuInfo& cpuInfo)
 {
-    return (cpuInfo.vendor() == gmx::CpuInfo::Vendor::Intel && cpuInfo.family() == 6
+    return (cpuInfo.vendor() == CpuInfo::Vendor::Intel && cpuInfo.family() == 6
             && (cpuInfo.model() == 0x2E || cpuInfo.model() == 0x1A || cpuInfo.model() == 0x1E
                 || cpuInfo.model() == 0x2F || cpuInfo.model() == 0x2C || cpuInfo.model() == 0x25));
+}
+
+bool cpuIsAmdZen1(const CpuInfo& cpuInfo)
+{
+    /* Both Zen/Zen+/Zen2 have family==23
+     * Model numbers for Zen:
+     * 1)  Naples, Whitehaven, Summit Ridge, and Snowy Owl;
+     * 17) Raven Ridge.
+     * Model numbers for Zen+:
+     * 8)  Pinnacle Ridge;
+     * 24) Picasso.
+     * Hygon got license for Zen1, but not Zen2 (https://www.tomshardware.com/news/amd-zen-china-x86-ip-license,39573.html)
+     */
+    return (cpuInfo.vendor() == CpuInfo::Vendor::Amd && cpuInfo.family() == 23
+            && (cpuInfo.model() == 1 || cpuInfo.model() == 17 || cpuInfo.model() == 8
+                || cpuInfo.model() == 24))
+           || (cpuInfo.vendor() == CpuInfo::Vendor::Hygon);
 }
 
 } // namespace gmx

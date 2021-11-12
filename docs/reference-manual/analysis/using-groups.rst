@@ -211,6 +211,4 @@ It is also possible to write your own analysis tools to take advantage
 of the flexibility of these selections: see the
 ``template.cpp`` file in the
 ``share/gromacs/template`` directory of your installation
-for an example and
-https://manual.gromacs.org/current/doxygen/html-full/page_analysistemplate.xhtml
-for documentation.
+for an example.

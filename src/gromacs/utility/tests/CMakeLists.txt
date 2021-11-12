@@ -2,7 +2,7 @@
 # This file is part of the GROMACS molecular simulation package.
 #
 # Copyright (c) 2012,2013,2014,2015,2016 by the GROMACS development team.
-# Copyright (c) 2017,2018,2019,2020, by the GROMACS development team, led by
+# Copyright (c) 2017,2018,2019,2020,2021, by the GROMACS development team, led by
 # Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
 # and including many others, as listed in the AUTHORS file in the
 # top-level source directory and at http://www.gromacs.org.
@@ -47,20 +47,23 @@ gmx_add_unit_test(UtilityUnitTests utility-test
         keyvaluetreetransform.cpp
         listoflists.cpp
         logger.cpp
-        mdmodulenotification-impl.cpp
-        mutex.cpp
+        mdmodulesnotifier.cpp
+        message_string_collector.cpp
         path.cpp
         physicalnodecommunicator.cpp
         range.cpp
         strconvert.cpp
+        stringtoenumvalueconverter.cpp
         stringutil.cpp
         template_mp.cpp
         textreader.cpp
         textwriter.cpp
         typetraits.cpp
         )
+# TODO: Explicitly link specific modules.
+target_link_libraries(utility-test PRIVATE legacy_modules)
 
-gmx_add_mpi_unit_test(UtilityMpiUnitTests utility-mpi-test 4
+gmx_add_mpi_unit_test(UtilityMpiUnitTests utility-mpi-test 2
     CPP_SOURCE_FILES
         physicalnodecommunicator_mpi.cpp
         )

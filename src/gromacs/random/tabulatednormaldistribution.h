@@ -1,7 +1,7 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2015,2016,2018,2019, by the GROMACS development team, led by
+ * Copyright (c) 2015,2016,2018,2019,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -50,6 +50,7 @@
 
 #include <array>
 #include <limits>
+#include <memory>
 
 #include "gromacs/math/functions.h"
 #include "gromacs/math/utilities.h"
@@ -128,8 +129,7 @@ public:
          *
          */
         explicit param_type(result_type mean = 0.0, result_type stddev = 1.0) :
-            mean_(mean),
-            stddev_(stddev)
+            mean_(mean), stddev_(stddev)
         {
         }
 
@@ -212,16 +212,13 @@ public:
         return table;
     }
 
-public:
     /*! \brief Construct new normal distribution with specified mean & stdddev.
      *
      *  \param mean    Mean value of tabulated normal distribution
      *  \param stddev  Standard deviation of tabulated normal distribution
      */
     explicit TabulatedNormalDistribution(result_type mean = 0.0, result_type stddev = 1.0) :
-        param_(param_type(mean, stddev)),
-        savedRandomBits_(0),
-        savedRandomBitsLeft_(0)
+        param_(param_type(mean, stddev)), savedRandomBits_(0), savedRandomBitsLeft_(0)
     {
     }
 
@@ -230,9 +227,7 @@ public:
      *  \param param Parameter class containing mean and standard deviation.
      */
     explicit TabulatedNormalDistribution(const param_type& param) :
-        param_(param),
-        savedRandomBits_(0),
-        savedRandomBitsLeft_(0)
+        param_(param), savedRandomBits_(0), savedRandomBitsLeft_(0)
     {
     }
 

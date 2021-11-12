@@ -425,7 +425,7 @@ private:
 
     class Impl;
 
-    PrivateImplPointer<Impl> impl_;
+    std::unique_ptr<Impl> impl_;
 
     // Copy and assign disallowed by base.
 };
@@ -487,7 +487,7 @@ private:
 
     class Impl;
 
-    PrivateImplPointer<Impl> impl_;
+    std::unique_ptr<Impl> impl_;
 
     // Copy and assign disallowed by base.
 };
@@ -535,7 +535,7 @@ public:
 private:
     class Impl;
 
-    PrivateImplPointer<Impl> impl_;
+    std::unique_ptr<Impl> impl_;
 
     // Copy and assign disallowed by base.
 };

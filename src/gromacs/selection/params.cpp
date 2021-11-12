@@ -3,7 +3,7 @@
  *
  * Copyright (c) 2009,2010,2011,2012,2013 by the GROMACS development team.
  * Copyright (c) 2014,2015,2016,2017,2018 by the GROMACS development team.
- * Copyright (c) 2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -48,6 +48,7 @@
 #include <string>
 
 #include "gromacs/math/units.h"
+#include "gromacs/math/utilities.h"
 #include "gromacs/math/vec.h"
 #include "gromacs/utility/cstringutil.h"
 #include "gromacs/utility/exceptions.h"
@@ -149,8 +150,8 @@ static void convert_value(SelectionParserValue* value, e_selvalue_t type, Except
         /* Integers to floating point are easy */
         if (value->type == INT_VALUE && type == REAL_VALUE)
         {
-            *value = SelectionParserValue::createRealRange(value->u.i.i1, value->u.i.i2,
-                                                           value->location());
+            *value = SelectionParserValue::createRealRange(
+                    value->u.i.i1, value->u.i.i2, value->location());
             return;
         }
         /* Reals that are integer-valued can also be converted */
@@ -327,7 +328,7 @@ static void parse_values_range(const SelectionParserValueList& values, gmx_ana_s
     /* Sort the ranges and merge consequent ones */
     if (param->val.type == INT_VALUE)
     {
-        const auto range_data = reinterpret_cast<std::array<int, 2>*>(idata);
+        auto* range_data = reinterpret_cast<std::array<int, 2>*>(idata);
         sort(range_data, range_data + n, cmp_range<int>);
         for (i = j = 2; i < 2 * n; i += 2)
         {
@@ -348,7 +349,7 @@ static void parse_values_range(const SelectionParserValueList& values, gmx_ana_s
     }
     else
     {
-        const auto range_data = reinterpret_cast<std::array<real, 2>*>(rdata);
+        auto* range_data = reinterpret_cast<std::array<real, 2>*>(rdata);
         sort(range_data, range_data + n, cmp_range<real>);
         for (i = j = 2; i < 2 * n; i += 2)
         {
@@ -532,8 +533,7 @@ static void parse_values_varnum(const SelectionParserValueList&    values,
                 GMX_RELEASE_ASSERT(false, "Variable-count value type not implemented");
         }
     }
-    GMX_RELEASE_ASSERT(i == valueCount,
-                       "Inconsistent value count wrt. the actual value population");
+    GMX_RELEASE_ASSERT(i == valueCount, "Inconsistent value count wrt. the actual value population");
     if (param->nvalptr)
     {
         *param->nvalptr = param->val.nr;

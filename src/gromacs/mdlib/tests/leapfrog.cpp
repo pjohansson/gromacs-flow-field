@@ -1,7 +1,7 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -209,8 +209,8 @@ TEST_P(LeapFrogTest, SimpleIntegration)
     std::vector<std::unique_ptr<ILeapFrogTestRunner>> runners;
     // Add runners for CPU version
     runners.emplace_back(std::make_unique<LeapFrogHostTestRunner>());
-    // If using CUDA, add runners for the GPU version for each available GPU
-    const bool addGpuRunners = HAVE_GPU_LEAPFROG;
+    // If supported, add runners for the GPU version for each available GPU
+    const bool addGpuRunners = GPU_LEAPFROG_SUPPORTED;
     if (addGpuRunners)
     {
         for (const auto& testDevice : getTestHardwareEnvironment()->getTestDeviceList())
@@ -228,15 +228,28 @@ TEST_P(LeapFrogTest, SimpleIntegration)
                 "groups and "
                 "%s pressure coupling (dt = %f, v0=(%f, %f, %f), f0=(%f, %f, %f), nstpcouple = "
                 "%d)",
-                runner->hardwareDescription().c_str(), parameters.numAtoms, parameters.numSteps,
-                parameters.numTCoupleGroups, parameters.nstpcouple == 0 ? "without" : "with",
-                parameters.timestep, parameters.v[XX], parameters.v[YY], parameters.v[ZZ],
-                parameters.f[XX], parameters.f[YY], parameters.f[ZZ], parameters.nstpcouple);
+                runner->hardwareDescription().c_str(),
+                parameters.numAtoms,
+                parameters.numSteps,
+                parameters.numTCoupleGroups,
+                parameters.nstpcouple == 0 ? "without" : "with",
+                parameters.timestep,
+                parameters.v[XX],
+                parameters.v[YY],
+                parameters.v[ZZ],
+                parameters.f[XX],
+                parameters.f[YY],
+                parameters.f[ZZ],
+                parameters.nstpcouple);
         SCOPED_TRACE(testDescription);
 
-        std::unique_ptr<LeapFrogTestData> testData = std::make_unique<LeapFrogTestData>(
-                parameters.numAtoms, parameters.timestep, parameters.v, parameters.f,
-                parameters.numTCoupleGroups, parameters.nstpcouple);
+        std::unique_ptr<LeapFrogTestData> testData =
+                std::make_unique<LeapFrogTestData>(parameters.numAtoms,
+                                                   parameters.timestep,
+                                                   parameters.v,
+                                                   parameters.f,
+                                                   parameters.numTCoupleGroups,
+                                                   parameters.nstpcouple);
 
         runner->integrate(testData.get(), parameters.numSteps);
 
@@ -257,7 +270,7 @@ TEST_P(LeapFrogTest, SimpleIntegration)
     }
 }
 
-INSTANTIATE_TEST_CASE_P(WithParameters, LeapFrogTest, ::testing::ValuesIn(parametersSets));
+INSTANTIATE_TEST_SUITE_P(WithParameters, LeapFrogTest, ::testing::ValuesIn(parametersSets));
 
 } // namespace
 } // namespace test

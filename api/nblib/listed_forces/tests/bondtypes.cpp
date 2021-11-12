@@ -114,8 +114,8 @@ void testThreeParameterBondLessThan([[maybe_unused]] const B& deduceType)
 
 TEST(NBlibTest, BondTypesOperatorEqualWorks)
 {
-    auto bondList3 = std::make_tuple(HarmonicBondType(), G96BondType(), FENEBondType(),
-                                     HalfAttractiveQuarticBondType());
+    auto bondList3 = std::make_tuple(
+            HarmonicBondType(), G96BondType(), FENEBondType(), HalfAttractiveQuarticBondType());
     for_each_tuple([](const auto& b) { test_detail::testTwoParameterBondEquality(b); }, bondList3);
 
     auto bondList4 = std::make_tuple(CubicBondType(), MorseBondType());
@@ -124,8 +124,8 @@ TEST(NBlibTest, BondTypesOperatorEqualWorks)
 
 TEST(NBlibTest, BondTypesLessThanWorks)
 {
-    auto bondList3 = std::make_tuple(HarmonicBondType(), G96BondType(), FENEBondType(),
-                                     HalfAttractiveQuarticBondType());
+    auto bondList3 = std::make_tuple(
+            HarmonicBondType(), G96BondType(), FENEBondType(), HalfAttractiveQuarticBondType());
     for_each_tuple([](const auto& b) { test_detail::testTwoParameterBondLessThan(b); }, bondList3);
 
     auto bondList4 = std::make_tuple(CubicBondType(), MorseBondType());

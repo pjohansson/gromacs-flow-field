@@ -88,6 +88,8 @@ struct DevelopmentFeatureFlags
     bool enableGpuHaloExchange = false;
     //! True if the PME PP direct communication GPU development feature is enabled
     bool enableGpuPmePPComm = false;
+    //! True if the CUDA-aware MPI is being used for GPU direct communication feature
+    bool usingCudaAwareMpi = false;
 };
 
 
@@ -103,8 +105,7 @@ class MDAtoms;
  *
  * \param[in] nonbondedTarget              The user's choice for mdrun -nb for where to assign
  *                                         short-ranged nonbonded interaction tasks.
- * \param[in] numDevicesToUse              Number of compatible GPUs that the user permitted
- *                                         us to use.
+ * \param[in] haveAvailableDevices         Whether there are available devices.
  * \param[in] userGpuTaskAssignment        The user-specified assignment of GPU tasks to device IDs.
  * \param[in] emulateGpuNonbonded          Whether we will emulate GPU calculation of nonbonded
  *                                         interactions.
@@ -118,7 +119,7 @@ class MDAtoms;
  * \throws     std::bad_alloc          If out of memory
  *             InconsistentInputError  If the user requirements are inconsistent. */
 bool decideWhetherToUseGpusForNonbondedWithThreadMpi(TaskTarget              nonbondedTarget,
-                                                     int                     numDevicesToUse,
+                                                     bool                    haveAvailableDevices,
                                                      const std::vector<int>& userGpuTaskAssignment,
                                                      EmulateGpuNonbonded     emulateGpuNonbonded,
                                                      bool buildSupportsNonbondedOnGpu,
@@ -242,7 +243,8 @@ bool decideWhetherToUseGpusForPme(bool                    useGpuForNonbonded,
  *
  * \param[in]  useGpuForPme              PME task assignment, true if PME task is mapped to the GPU.
  * \param[in]  pmeFftTarget              The user's choice for -pmefft for where to assign the FFT
- * work of the PME task. \param[in]  inputrec                  The user input record
+ *                                       work of the PME task.
+ * \param[in]  inputrec                  The user input record
  * */
 PmeRunMode determinePmeRunMode(bool useGpuForPme, const TaskTarget& pmeFftTarget, const t_inputrec& inputrec);
 
@@ -281,7 +283,6 @@ bool decideWhetherToUseGpusForBonded(bool              useGpuForNonbonded,
  * \param[in]  mtop                         The global topology.
  * \param[in]  useEssentialDynamics         If essential dynamics is active.
  * \param[in]  doOrientationRestraints      If orientation restraints are enabled.
- * \param[in]  useReplicaExchange           If this is a REMD simulation.
  * \param[in]  haveFrozenAtoms              If this simulation has frozen atoms (see Issue #3920).
  * \param[in]  doRerun                      It this is a rerun.
  * \param[in]  devFlags                     GPU development / experimental feature flags.
@@ -302,7 +303,6 @@ bool decideWhetherToUseGpuForUpdate(bool                           isDomainDecom
                                     const gmx_mtop_t&              mtop,
                                     bool                           useEssentialDynamics,
                                     bool                           doOrientationRestraints,
-                                    bool                           useReplicaExchange,
                                     bool                           haveFrozenAtoms,
                                     bool                           doRerun,
                                     const DevelopmentFeatureFlags& devFlags,

@@ -4,7 +4,7 @@
  * Copyright (c) 1991-2000, University of Groningen, The Netherlands.
  * Copyright (c) 2001-2004, The GROMACS development team.
  * Copyright (c) 2013,2014,2015,2016,2017 by the GROMACS development team.
- * Copyright (c) 2018,2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2018,2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -72,12 +72,7 @@ SimulationSignaller::SimulationSignaller(SimulationSignals*    signals,
                                          const gmx_multisim_t* ms,
                                          bool                  doInterSim,
                                          bool                  doIntraSim) :
-    signals_(signals),
-    cr_(cr),
-    ms_(ms),
-    doInterSim_(doInterSim),
-    doIntraSim_(doInterSim || doIntraSim),
-    mpiBuffer_{}
+    signals_(signals), cr_(cr), ms_(ms), doInterSim_(doInterSim), doIntraSim_(doInterSim || doIntraSim), mpiBuffer_{}
 {
 }
 
@@ -85,7 +80,9 @@ gmx::ArrayRef<real> SimulationSignaller::getCommunicationBuffer()
 {
     if (doIntraSim_)
     {
-        std::transform(std::begin(*signals_), std::end(*signals_), std::begin(mpiBuffer_),
+        std::transform(std::begin(*signals_),
+                       std::end(*signals_),
+                       std::begin(mpiBuffer_),
                        [](const SimulationSignals::value_type& s) { return s.sig; });
 
         return mpiBuffer_;
@@ -112,7 +109,7 @@ void SimulationSignaller::signalInterSim()
         // Communicate the signals between the simulations.
         gmx_sum_sim(eglsNR, mpiBuffer_.data(), ms_);
     }
-    if (DOMAINDECOMP(cr_))
+    if (haveDDAtomOrdering(*cr_))
     {
         // Communicate the signals from the master to the others.
         gmx_bcast(eglsNR * sizeof(mpiBuffer_[0]), mpiBuffer_.data(), cr_->mpi_comm_mygroup);

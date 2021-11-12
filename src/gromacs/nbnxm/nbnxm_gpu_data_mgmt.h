@@ -44,6 +44,7 @@
 #ifndef GMX_NBNXM_NBNXM_GPU_DATA_MGMT_H
 #define GMX_NBNXM_NBNXM_GPU_DATA_MGMT_H
 
+class DeviceContext;
 struct interaction_const_t;
 struct NBParamGpu;
 struct PairlistParams;
@@ -58,29 +59,11 @@ namespace Nbnxm
 
 struct gpu_plist;
 
-/*! \brief Tabulates the Ewald Coulomb force and initializes the size/scale and the table GPU array.
- *
- * If called with an already allocated table, it just re-uploads the
- * table.
- */
-void init_ewald_coulomb_force_table(const EwaldCorrectionTables& tables,
-                                    NBParamGpu*                  nbp,
-                                    const DeviceContext&         deviceContext);
+/*! \brief Initializes the NBNXM GPU data structures. */
+void gpu_init_platform_specific(NbnxmGpu* nb);
 
-/*! \brief Selects the Ewald kernel type, analytical or tabulated, single or twin cut-off. */
-int nbnxn_gpu_pick_ewald_kernel_type(const interaction_const_t gmx_unused& ic,
-                                     const DeviceInformation&              deviceInfo);
-
-/*! \brief Copies all parameters related to the cut-off from ic to nbp
- */
-void set_cutoff_parameters(NBParamGpu* nbp, const interaction_const_t* ic, const PairlistParams& listParams);
-
-/*! \brief Initializes the pair list data structure.
- */
-void init_plist(gpu_plist* pl);
-
-/*! \brief Initializes the timings data structure. */
-void init_timings(gmx_wallclock_gpu_nbnxn_t* t);
+/*! \brief Releases the NBNXM GPU data structures. */
+void gpu_free_platform_specific(NbnxmGpu* nb);
 
 } // namespace Nbnxm
 

@@ -86,7 +86,8 @@ ExclusionLists<int> TopologyBuilder::createExclusionsLists() const
         {
             auto offsetExclusions = offsetGmxBlock(exclusionBlockPerMolecule, particleNumberOffset);
 
-            std::copy(std::begin(offsetExclusions), std::end(offsetExclusions),
+            std::copy(std::begin(offsetExclusions),
+                      std::end(offsetExclusions),
                       std::back_inserter(exclusionBlockGlobal));
 
             particleNumberOffset += molecule.numParticlesInMolecule();
@@ -134,8 +135,10 @@ ListedInteractionData TopologyBuilder::createInteractionData(const ParticleSeque
 
         // combine stage 1 + 2 expansion arrays
         std::vector<size_t> expansionArray(expansionArrayStage1.size());
-        std::transform(begin(expansionArrayStage1), end(expansionArrayStage1), begin(expansionArray),
-                       [& S2 = expansionArrayStage2](size_t S1Element) { return S2[S1Element]; });
+        std::transform(begin(expansionArrayStage1),
+                       end(expansionArrayStage1),
+                       begin(expansionArray),
+                       [&S2 = expansionArrayStage2](size_t S1Element) { return S2[S1Element]; });
 
         // add data about InteractionType instances
         interactionDataElement.parameters = std::move(uniqueInteractionInstances);
@@ -144,7 +147,9 @@ ListedInteractionData TopologyBuilder::createInteractionData(const ParticleSeque
         // coordinateIndices contains the particle sequence IDs of all interaction coordinates of type <BondType>
         auto coordinateIndices = detail::sequenceIDs<InteractionType>(this->molecules_, particleSequencer);
         // zip coordinateIndices(i,j,...) + expansionArray(k) -> interactionDataElement.indices(i,j,...,k)
-        std::transform(begin(coordinateIndices), end(coordinateIndices), begin(expansionArray),
+        std::transform(begin(coordinateIndices),
+                       end(coordinateIndices),
+                       begin(expansionArray),
                        begin(interactionDataElement.indices),
                        [](auto coordinateIndex, auto interactionIndex) {
                            std::array<int, coordinateIndex.size() + 1> ret{ 0 };
@@ -236,7 +241,8 @@ Topology TopologyBuilder::buildTopology()
             {
                 std::string message =
                         formatString("Missing nonbonded interaction parameters for pair {} {}",
-                                     particleType1.first, particleType2.first);
+                                     particleType1.first,
+                                     particleType2.first);
                 throw InputException(message);
             }
         }

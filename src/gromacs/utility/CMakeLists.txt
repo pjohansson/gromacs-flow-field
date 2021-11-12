@@ -2,7 +2,8 @@
 # This file is part of the GROMACS molecular simulation package.
 #
 # Copyright (c) 2010,2011,2012,2013,2014 by the GROMACS development team.
-# Copyright (c) 2015,2017,2018,2019,2020, by the GROMACS development team, led by
+# Copyright (c) 2015,2017,2018,2019,2020 by the GROMACS development team.
+# Copyright (c) 2021, by the GROMACS development team, led by
 # Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
 # and including many others, as listed in the AUTHORS file in the
 # top-level source directory and at http://www.gromacs.org.
@@ -33,40 +34,59 @@
 # To help us fund GROMACS development, we humbly ask that you cite
 # the research papers on the package. Check out http://www.gromacs.org.
 
+add_library(utility INTERFACE)
+
 file(GLOB UTILITY_SOURCES *.cpp)
 if (GMX_GPU_CUDA)
     gmx_add_libgromacs_sources(cuda_version_information.cu)
-endif()
+endif ()
+if (GMX_GPU_SYCL)
+    _gmx_add_files_to_property(SYCL_SOURCES
+                               sycl_version_information.cpp
+                               )
+endif ()
 set(LIBGROMACS_SOURCES ${LIBGROMACS_SOURCES} ${UTILITY_SOURCES} PARENT_SCOPE)
 
-# TODO: (https://gitlab.com/gromacs/gromacs/-/issues/988) Find a new convention for defining public API.
-install(FILES
-        basedefinitions.h
-        current_function.h
-        gmxassert.h
-        real.h
-        DESTINATION include/gromacs/utility)
+if (GMX_INSTALL_LEGACY_API)
+    install(FILES
+            baseversion.h
+            classhelpers.h
+            enumerationhelpers.h
+            fileptr.h
+            futil.h
+            flags.h
+            pleasecite.h
+            programcontext.h
+            range.h
+            smalloc.h
+            stringutil.h
+            unique_cptr.h
+            DESTINATION include/gromacs/utility)
+endif ()
 
-if(GMX_INSTALL_LEGACY_API)
-  install(FILES
-          arrayref.h
-          baseversion.h
-          classhelpers.h
-          enumerationhelpers.h
-          exceptions.h
-          listoflists.h
-	  fileptr.h
-	  futil.h
-	  flags.h
-	  pleasecite.h
-          programcontext.h
-          range.h
-          smalloc.h
-	  stringutil.h
-          unique_cptr.h
-          DESTINATION include/gromacs/utility)
-endif()
+# Public interface for modules, including dependencies and interfaces
+#target_include_directories(utility PUBLIC
+target_include_directories(utility INTERFACE
+                           $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
+#target_link_libraries(utility PUBLIC
+target_link_libraries(utility INTERFACE
+                      legacy_api
+                      )
+if (GMX_LIB_MPI)
+    target_link_libraries(utility INTERFACE MPI::MPI_CXX)
+else ()
+    target_include_directories(
+        utility INTERFACE
+        $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/src/external/thread_mpi/include>
+    )
+endif ()
+
+# TODO(#3288): when utility is an OBJECT target, explicitly link source dependencies.
+# Source files have the following private module dependencies.
+#target_link_libraries(utility PRIVATE common)
+# TODO(#3288): Explicitly link specific modules as legacy_modules is removed.
+#target_link_libraries(utility PRIVATE legacy_modules)
 
 if (BUILD_TESTING)
     add_subdirectory(tests)
-endif()
+endif ()

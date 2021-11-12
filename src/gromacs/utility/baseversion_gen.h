@@ -48,20 +48,24 @@
 //! \{
 
 //! Version string, containing the version, date, and abbreviated hash.
-extern const char _gmx_ver_string[];
+extern const char gmx_ver_string[];
 //! Full git hash of the latest commit.
-extern const char _gmx_full_git_hash[];
+extern const char gmx_full_git_hash[];
 //! Full git hash of the latest commit in a central \Gromacs repository.
-extern const char _gmx_central_base_hash[];
+extern const char gmx_central_base_hash[];
 /*! \brief
  *  DOI string for the \Gromacs source code populated by CMake.
  *
  *  The variable is populated with the generated DOI string
  *  by CMake when the build of a release version is
- *  requested by Jenkins. Allows identification and
+ *  requested. Allows identification and
  *  referencing of different \Gromacs releases.
  */
 extern const char gmxSourceDoiString[];
+//! Sha256 checksum of source and header files, populated for release builds.
+extern const char gmxReleaseSourceFileChecksum[];
+//! Sha256 checksum of source and header files, populated for builds from tarball.
+extern const char gmxCurrentSourceFileChecksum[];
 
 //! \}
 //! \endcond

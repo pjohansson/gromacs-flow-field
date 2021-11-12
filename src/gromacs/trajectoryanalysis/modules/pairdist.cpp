@@ -1,7 +1,7 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2014,2015,2016,2018,2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2014,2015,2016,2018,2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -98,8 +98,9 @@ enum class GroupType : int
 //! Strings corresponding to DistanceType.
 const EnumerationArray<DistanceType, const char*> c_distanceTypeNames = { { "min", "max" } };
 //! Strings corresponding to GroupType.
-const EnumerationArray<GroupType, const char*> c_groupTypeNames = { { "all", "res", "mol",
-                                                                      "none" } };
+const EnumerationArray<GroupType, const char*> c_groupTypeNames = {
+    { "all", "res", "mol", "none" }
+};
 
 /*! \brief
  * Implements `gmx pairdist` trajectory analysis module.
@@ -220,7 +221,7 @@ void PairDistance::initOptions(IOptionsContainer* options, TrajectoryAnalysisSet
     settings->setHelpText(desc);
 
     options->addOption(FileNameOption("o")
-                               .filetype(eftPlot)
+                               .filetype(OptionFileType::Plot)
                                .outputFile()
                                .required()
                                .store(&fnDist_)
@@ -415,8 +416,8 @@ TrajectoryAnalysisModuleDataPointer PairDistance::startFrames(const AnalysisData
 void PairDistance::analyzeFrame(int frnr, const t_trxframe& fr, t_pbc* pbc, TrajectoryAnalysisModuleData* pdata)
 {
     AnalysisDataHandle      dh         = pdata->dataHandle(distances_);
-    const Selection&        refSel     = TrajectoryAnalysisModuleData::parallelSelection(refSel_);
-    const SelectionList&    sel        = TrajectoryAnalysisModuleData::parallelSelections(sel_);
+    const Selection&        refSel     = pdata->parallelSelection(refSel_);
+    const SelectionList&    sel        = pdata->parallelSelections(sel_);
     PairDistanceModuleData& frameData  = *static_cast<PairDistanceModuleData*>(pdata);
     std::vector<real>&      distArray  = frameData.distArray_;
     std::vector<int>&       countArray = frameData.countArray_;

@@ -1,7 +1,7 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2014,2015,2018,2019, by the GROMACS development team, led by
+ * Copyright (c) 2014,2015,2018,2019,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -45,10 +45,10 @@
 
 #include <cstdio>
 
+#include <memory>
 #include <string>
 #include <vector>
 
-#include "gromacs/utility/classhelpers.h"
 #include "gromacs/utility/fileptr.h"
 
 namespace gmx
@@ -91,9 +91,7 @@ public:
     }
     //! \copydoc DataFileOptions(const char *)
     DataFileOptions(const std::string& filename) :
-        filename_(filename.c_str()),
-        bCurrentDir_(true),
-        bThrow_(true)
+        filename_(filename.c_str()), bCurrentDir_(true), bThrow_(true)
     {
     }
 
@@ -131,9 +129,7 @@ struct DataFileInfo
 {
     //! Initializes the structure with given values.
     DataFileInfo(const std::string& dir, const std::string& name, bool bDefault) :
-        dir(dir),
-        name(name),
-        bFromDefaultDir(bDefault)
+        dir(dir), name(name), bFromDefaultDir(bDefault)
     {
     }
 
@@ -254,7 +250,7 @@ public:
 private:
     class Impl;
 
-    PrivateImplPointer<Impl> impl_;
+    std::unique_ptr<Impl> impl_;
 };
 
 } // namespace gmx

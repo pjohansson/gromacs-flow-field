@@ -2,7 +2,7 @@
  * This file is part of the GROMACS molecular simulation package.
  *
  * Copyright (c) 2012,2013,2014,2015,2016 by the GROMACS development team.
- * Copyright (c) 2017,2018,2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2017,2018,2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -106,7 +106,7 @@ void parseCpuInfo(HardwareTopology::Machine* machine, HardwareTopology::SupportL
         int nHwThreads = 0;
 
         // Copy the logical processor information from cpuinfo
-        for (auto& l : cpuInfo.logicalProcessors())
+        for (const auto& l : cpuInfo.logicalProcessors())
         {
             machine->logicalProcessors.push_back(
                     { l.socketRankInMachine, l.coreRankInSocket, l.hwThreadRankInCore, -1 });
@@ -218,8 +218,8 @@ std::vector<const hwloc_obj*> getHwLocDescendantsByType(const hwloc_topology*  t
     // Go through children; if this object has no children obj->arity is 0,
     // and we'll return an empty vector.
     hwloc_obj_t tempNode = nullptr;
-    while ((tempNode = hwloc_get_next_child(const_cast<hwloc_topology_t>(topo),
-                                            const_cast<hwloc_obj_t>(obj), tempNode))
+    while ((tempNode = hwloc_get_next_child(
+                    const_cast<hwloc_topology_t>(topo), const_cast<hwloc_obj_t>(obj), tempNode))
            != nullptr)
     {
         std::vector<const hwloc_obj*> v2 = getHwLocDescendantsByType(topo, tempNode, type);
@@ -342,7 +342,6 @@ bool parseHwLocCache(hwloc_topology_t topo, HardwareTopology::Machine* machine)
     return !machine->caches.empty();
 }
 
-
 /*! \brief Read numa information from hwloc topology
  *
  *  \param topo    hwloc topology handle that has been initialized and loaded
@@ -463,8 +462,11 @@ bool parseHwLocNuma(hwloc_topology_t topo, HardwareTopology::Machine* machine)
         // assign stuff
         for (auto& v : machine->numa.relativeLatency)
         {
-            std::transform(v.begin(), v.end(), v.begin(),
-                           std::bind(std::multiplies<float>(), std::placeholders::_1, 1.0 / minLatency));
+            // Rescale the latencies to a relative float-point value
+            for (float& value : v)
+            {
+                value /= minLatency;
+            }
         }
         machine->numa.baseLatency = 1.0; // latencies still do not have any units in hwloc-2.x
         machine->numa.maxRelativeLatency = maxLatency / minLatency;
@@ -589,9 +591,13 @@ bool parseHwLocDevices(hwloc_topology_t topo, HardwareTopology::Machine* machine
 
         GMX_RELEASE_ASSERT(p->attr, "Attributes should not be NULL for hwloc PCI object");
 
-        machine->devices.push_back({ p->attr->pcidev.vendor_id, p->attr->pcidev.device_id,
-                                     p->attr->pcidev.class_id, p->attr->pcidev.domain,
-                                     p->attr->pcidev.bus, p->attr->pcidev.dev, p->attr->pcidev.func,
+        machine->devices.push_back({ p->attr->pcidev.vendor_id,
+                                     p->attr->pcidev.device_id,
+                                     p->attr->pcidev.class_id,
+                                     p->attr->pcidev.domain,
+                                     p->attr->pcidev.bus,
+                                     p->attr->pcidev.dev,
+                                     p->attr->pcidev.func,
                                      numaId });
     }
     return !pcidevs.empty();
@@ -731,16 +737,12 @@ HardwareTopology::Machine::Machine()
 
 
 HardwareTopology::HardwareTopology() :
-    supportLevel_(SupportLevel::None),
-    machine_(),
-    isThisSystem_(true)
+    supportLevel_(SupportLevel::None), machine_(), isThisSystem_(true)
 {
 }
 
 HardwareTopology::HardwareTopology(int logicalProcessorCount) :
-    supportLevel_(SupportLevel::None),
-    machine_(),
-    isThisSystem_(true)
+    supportLevel_(SupportLevel::None), machine_(), isThisSystem_(true)
 {
     if (logicalProcessorCount > 0)
     {

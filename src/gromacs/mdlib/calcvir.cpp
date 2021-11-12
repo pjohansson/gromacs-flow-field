@@ -4,7 +4,7 @@
  * Copyright (c) 1991-2000, University of Groningen, The Netherlands.
  * Copyright (c) 2001-2004, The GROMACS development team.
  * Copyright (c) 2013,2014,2015,2016,2018 by the GROMACS development team.
- * Copyright (c) 2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -51,16 +51,6 @@
 #include "gromacs/pbcutil/pbc.h"
 #include "gromacs/utility/gmxassert.h"
 
-#define XXXX 0
-#define XXYY 1
-#define XXZZ 2
-#define YYXX 3
-#define YYYY 4
-#define YYZZ 5
-#define ZZXX 6
-#define ZZYY 7
-#define ZZZZ 8
-
 static void upd_vir(rvec vir, real dvx, real dvy, real dvz)
 {
     vir[XX] -= 0.5 * dvx;
@@ -84,7 +74,7 @@ static void calc_x_times_f(int nxf, const rvec x[], const rvec f[], gmx_bool bSc
 
         if (bScrewPBC)
         {
-            int isx = IS2X(i);
+            int isx = gmx::shiftIndexToXDim(i);
             /* We should correct all odd x-shifts, but the range of isx is -2 to 2 */
             if (isx == 1 || isx == -1)
             {
@@ -104,7 +94,7 @@ void calc_vir(int nxf, const rvec x[], const rvec f[], tensor vir, bool bScrewPB
 {
     matrix x_times_f;
 
-    int nthreads = gmx_omp_nthreads_get_simple_rvec_task(emntDefault, nxf * 9);
+    int nthreads = gmx_omp_nthreads_get_simple_rvec_task(ModuleMultiThread::Default, nxf * 9);
 
     GMX_ASSERT(nthreads >= 1, "Avoids uninitialized x_times_f (warning)");
 
@@ -126,7 +116,11 @@ void calc_vir(int nxf, const rvec x[], const rvec f[], tensor vir, bool bScrewPB
             int start = (nxf * thread) / nthreads;
             int end   = std::min(nxf * (thread + 1) / nthreads, nxf);
 
-            calc_x_times_f(end - start, x + start, f + start, bScrewPBC, box,
+            calc_x_times_f(end - start,
+                           x + start,
+                           f + start,
+                           bScrewPBC,
+                           box,
                            thread == 0 ? x_times_f : xf_buf[thread * 3]);
         }
 

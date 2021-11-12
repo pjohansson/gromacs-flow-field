@@ -1,7 +1,7 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -48,6 +48,7 @@
 #include "config.h"
 
 #include "gromacs/ewald/pme_force_sender_gpu.h"
+#include "gromacs/gpu_utils/devicebuffer_datatype.h"
 #include "gromacs/utility/arrayref.h"
 #include "gromacs/utility/gmxassert.h"
 
@@ -62,8 +63,9 @@ class PmeForceSenderGpu::Impl
 };
 
 /*!\brief Constructor stub. */
-PmeForceSenderGpu::PmeForceSenderGpu(const DeviceStream& /*pmeStream */,
+PmeForceSenderGpu::PmeForceSenderGpu(GpuEventSynchronizer* /*pmeForcesReady */,
                                      MPI_Comm /* comm     */,
+                                     const DeviceContext& /* deviceContext */,
                                      gmx::ArrayRef<PpRanks> /* ppRanks */) :
     impl_(nullptr)
 {
@@ -75,14 +77,27 @@ PmeForceSenderGpu::PmeForceSenderGpu(const DeviceStream& /*pmeStream */,
 PmeForceSenderGpu::~PmeForceSenderGpu() = default;
 
 /*!\brief init PME-PP GPU communication stub */
-void PmeForceSenderGpu::sendForceBufferAddressToPpRanks(rvec* /* d_f */)
+void PmeForceSenderGpu::setForceSendBuffer(DeviceBuffer<RVec> /* d_f */)
 {
     GMX_ASSERT(!impl_,
                "A CPU stub for PME-PP GPU communication initialization was called instead of the "
                "correct implementation.");
 }
 
-void PmeForceSenderGpu::sendFToPpCudaDirect(int /* ppRank */)
+void PmeForceSenderGpu::sendFToPpCudaDirect(int /* ppRank */,
+                                            int /* numAtoms */,
+                                            bool /* sendForcesDirectToPpGpu */)
+{
+    GMX_ASSERT(!impl_,
+               "A CPU stub for PME-PP GPU communication was called instead of the correct "
+               "implementation.");
+}
+
+void PmeForceSenderGpu::sendFToPpCudaMpi(DeviceBuffer<RVec> /* sendbuf */,
+                                         int /* offset */,
+                                         int /* numBytes */,
+                                         int /* ppRank */,
+                                         MPI_Request* /* request */)
 {
     GMX_ASSERT(!impl_,
                "A CPU stub for PME-PP GPU communication was called instead of the correct "

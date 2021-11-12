@@ -167,7 +167,7 @@ Variables affecting compilation/linking
 
 .. cmake:: GMX_BUILD_FOR_COVERAGE
 
-   Special variable set ``ON`` by Jenkins when doing a build for the coverage
+   Special variable set ``ON`` by CI when doing a build for the coverage
    job.  Allows the build system to set options to produce as useful coverage
    metrics as possible.  Currently, it disables all asserts to avoid them
    showing up as poor conditional coverage.
@@ -176,20 +176,6 @@ Variables affecting compilation/linking
 
    .. todo:: This could likely be replaced by a (yet another) build type.
 
-.. cmake:: GMX_BUILD_MDRUN_ONLY
-
-   If set ``ON``, the build system is configured to only build and install a
-   single :file:`mdrun` executable.  To be fully functional, the installed
-   :file:`mdrun` requires a standard |Gromacs| installation (with
-   ``GMX_BUILD_MDRUN_ONLY=OFF``) in the same installation prefix, as the
-   mdrun-only build does not install any data files or scripts, only the
-   binary.  This is intended for cases where one wants to/needs to compile one
-   or more instances of :file:`mdrun` with different build options (e.g., MPI
-   or SIMD) than the full installation with the other utilities.
-   Defaults to ``OFF``, in which case a single :file:`gmx` executable is built
-   and installed, together with all the supporting files.  :command:`mdrun` can
-   be executed as :command:`gmx mdrun`.
-
 .. cmake:: GMX_BUILD_OWN_FFTW
 
 .. cmake:: GMX_BUILD_SHARED_EXE
@@ -197,9 +183,9 @@ Variables affecting compilation/linking
 .. cmake:: GMX_COMPILER_WARNINGS
 
    If set ``ON``, various compiler warnings are enabled for compilers that
-   Jenkins uses for verification.
+   CI uses for verification.
    Defaults to ``OFF`` when building from a source tarball so that users
-   compiling with versions not tested on Jenkins are not exposed to our rather
+   compiling with versions not tested in CI are not exposed to our rather
    aggressive warning flags that can trigger a lot of warnings with, e.g., new
    versions of the compilers we use.
    When building from a git repository, defaults to ``ON``.
@@ -240,18 +226,6 @@ Variables affecting compilation/linking
    deliberately use single- or double-precision types, and these are
    unaffected by this setting. See reference manual for further
    information.
-
-.. cmake:: GMX_RELAXED_DOUBLE_PRECISION
-
-   Permit a double-precision configuration to compute some quantities
-   to single-precision accuracy. Particularly on architectures where
-   only double-precision SIMD is available (e.g. Sparc machines such
-   as the K computer), it is faster to default to ``GMX_DOUBLE=ON``
-   and use SIMD than to use ``GMX_DOUBLE=OFF`` and use no
-   SIMD. However, if the user does not need full double precision,
-   then some optimizations can achieve the equivalent of
-   single-precision results (e.g. fewer Newton-Raphson iterations for
-   a reciprocal square root computation).
 
 .. cmake:: GMX_EXTRAE
 
@@ -362,7 +336,7 @@ Variables affecting the ``all`` target
   Any ``CMAKE_BUILD_TYPE`` which enables asserts (e.g. ASAN) works. Such a configured build will
   run both the compiler as well as clang-tidy when building. The name of the clang-tidy executable is set with
   ``-DCLANG_TIDY=...``, and the full path to it can be set with ``-DCLANG_TIDY_EXE=...``.
-  To apply the automatic fixes to the issue identified clang-tidy should be run seperately (running clang-tidy
+  To apply the automatic fixes to the issue identified clang-tidy should be run separately (running clang-tidy
   with ``-fix-errors`` as part of the build can corrupt header files). To fix a specific file run
   ``clang-tidy -fix-errors -header-filter '.*' {file}``, to fix all files in parallel
   ``run-clang-tidy.py -fix -header-filter '.*' '(?<!/selection/parser\.cpp|selection/scanner\.cpp)$'``,
@@ -470,7 +444,7 @@ check-source
    Runs a custom Python checker script to check for various source-level
    issues.  Uses Doxygen XML documentation as well as rudimentary parsing of
    some parts of the source files.
-   This target is used as part of the Jenkins documentation job.
+   This target is used as part of the CI.
    All CMake code is currently in :file:`docs/doxygen/`.
    See :doc:`gmxtree`.
 completion
@@ -487,7 +461,7 @@ dep-graphs*
 doxygen-*
    Targets that run Doxygen to generate the documentation.
    The ``doxygen-all`` target runs as part of the ``webpage`` target, which in
-   turn runs as part of the Jenkins documentation job.
+   turn runs as part of the CI.
    All CMake code is in :file:`docs/doxygen/`.
    See :doc:`doxygen`.
 gmxapi-cppdocs
@@ -526,7 +500,7 @@ tests
 webpage
    Collection target that runs the other documentation targets to generate the
    full set of HTML (and linked) documentaion.
-   This target is used as part of the Jenkins documentation job.
+   This target is used as part of the CI.
    All CMake code is in :file:`docs/`.
 webpage-sphinx
    Runs Sphinx to generate most content for the HTML documentation (the set of
@@ -566,7 +540,9 @@ The build system uses a few different mechanisms to influence the compilation:
     headers fall in this category.  See Doxygen documentation for
     :file:`gmxpre.h`.
 
-  All the above files get generated in :file:`src/`.
+  The above files are available through the INTERFACE_INCLUDE_DIR of
+  the ``common`` CMake target. I.e. to ``#include "config.h"``, be sure to
+  ``target_link_libraries(mymodule PRIVATE common)``
 
   Additionally, the following file is generated by the build system:
 

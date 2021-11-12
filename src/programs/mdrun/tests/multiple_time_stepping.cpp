@@ -1,7 +1,7 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2020, by the GROMACS development team, led by
+ * Copyright (c) 2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -87,8 +87,8 @@ TEST_P(MtsComparisonTest, WithinTolerances)
     auto mtsScheme      = std::get<1>(params);
 
     // Note that there should be no relevant limitation on MPI ranks and OpenMP threads
-    SCOPED_TRACE(formatString("Comparing for '%s' no MTS with MTS scheme '%s'",
-                              simulationName.c_str(), mtsScheme.c_str()));
+    SCOPED_TRACE(formatString(
+            "Comparing for '%s' no MTS with MTS scheme '%s'", simulationName.c_str(), mtsScheme.c_str()));
 
     const bool isPullTest = (mtsScheme.find("pull") != std::string::npos);
 
@@ -104,7 +104,8 @@ TEST_P(MtsComparisonTest, WithinTolerances)
             "rcoulomb     = 0.9\n"
             "rvdw         = 0.9\n"
             "constraints  = h-bonds\n",
-            numSteps, isPullTest ? "reaction-field" : "PME");
+            numSteps,
+            isPullTest ? "reaction-field" : "PME");
 
     if (isPullTest)
     {
@@ -125,26 +126,31 @@ TEST_P(MtsComparisonTest, WithinTolerances)
     const int nstfout       = 2 * numSteps;
     auto      refMdpOptions = sharedMdpOptions
                          + gmx::formatString(
-                                   "mts       = no\n"
-                                   "nstcalcenergy = %d\n"
-                                   "nstenergy = %d\n"
-                                   "nstxout   = 0\n"
-                                   "nstvout   = 0\n"
-                                   "nstfout   = %d\n",
-                                   numSteps, numSteps, nstfout);
+                                 "mts       = no\n"
+                                 "nstcalcenergy = %d\n"
+                                 "nstenergy = %d\n"
+                                 "nstxout   = 0\n"
+                                 "nstvout   = 0\n"
+                                 "nstfout   = %d\n",
+                                 numSteps,
+                                 numSteps,
+                                 nstfout);
 
     auto mtsMdpOptions = sharedMdpOptions
                          + gmx::formatString(
-                                   "mts        = yes\n"
-                                   "mts-levels = 2\n"
-                                   "mts-level2-forces = %s\n"
-                                   "mts-level2-factor = 2\n"
-                                   "nstcalcenergy = %d\n"
-                                   "nstenergy  = %d\n"
-                                   "nstxout    = 0\n"
-                                   "nstvout    = 0\n"
-                                   "nstfout    = %d\n",
-                                   mtsScheme.c_str(), numSteps, numSteps, nstfout);
+                                 "mts        = yes\n"
+                                 "mts-levels = 2\n"
+                                 "mts-level2-forces = %s\n"
+                                 "mts-level2-factor = 2\n"
+                                 "nstcalcenergy = %d\n"
+                                 "nstenergy  = %d\n"
+                                 "nstxout    = 0\n"
+                                 "nstvout    = 0\n"
+                                 "nstfout    = %d\n",
+                                 mtsScheme.c_str(),
+                                 numSteps,
+                                 numSteps,
+                                 nstfout);
 
     // At step 0 the energy and virial should only differ due to rounding errors
     EnergyTermsToCompare energyTermsToCompareStep0 = energyTermsToCompare(0.001, 0.01);
@@ -190,25 +196,27 @@ TEST_P(MtsComparisonTest, WithinTolerances)
     runMdrun(&runner_);
 
     // Compare simulation results at step 0, which should be indentical
-    compareEnergies(simulator1EdrFileName, simulator2EdrFileName, energyTermsToCompareStep0,
-                    MaxNumFrames(1));
+    compareEnergies(
+            simulator1EdrFileName, simulator2EdrFileName, energyTermsToCompareStep0, MaxNumFrames(1));
     compareTrajectories(simulator1TrajectoryFileName, simulator2TrajectoryFileName, trajectoryComparison);
 
     // Compare energies at the last step (and step 0 again) with lower tolerance
-    compareEnergies(simulator1EdrFileName, simulator2EdrFileName, energyTermsToCompareAllSteps,
+    compareEnergies(simulator1EdrFileName,
+                    simulator2EdrFileName,
+                    energyTermsToCompareAllSteps,
                     MaxNumFrames::compareAllFrames());
 }
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
         MultipleTimeSteppingIsNearSingleTimeStepping,
         MtsComparisonTest,
         ::testing::Combine(::testing::Values("ala"),
                            ::testing::Values("longrange-nonbonded",
                                              "longrange-nonbonded nonbonded pair dihedral")));
 
-INSTANTIATE_TEST_CASE_P(MultipleTimeSteppingIsNearSingleTimeSteppingPull,
-                        MtsComparisonTest,
-                        ::testing::Combine(::testing::Values("spc2"), ::testing::Values("pull")));
+INSTANTIATE_TEST_SUITE_P(MultipleTimeSteppingIsNearSingleTimeSteppingPull,
+                         MtsComparisonTest,
+                         ::testing::Combine(::testing::Values("spc2"), ::testing::Values("pull")));
 
 } // namespace
 } // namespace test

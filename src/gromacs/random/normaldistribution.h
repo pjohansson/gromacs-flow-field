@@ -1,7 +1,7 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2015,2016,2019, by the GROMACS development team, led by
+ * Copyright (c) 2015,2016,2019,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -51,6 +51,7 @@
 #include <cmath>
 
 #include <limits>
+#include <memory>
 
 #include "gromacs/random/uniformrealdistribution.h"
 #include "gromacs/utility/classhelpers.h"
@@ -125,8 +126,7 @@ public:
          * \param stddev   Standard deviation of normal distribution
          */
         explicit param_type(result_type mean = 0.0, result_type stddev = 1.0) :
-            mean_(mean),
-            stddev_(stddev)
+            mean_(mean), stddev_(stddev)
         {
         }
 
@@ -151,16 +151,13 @@ public:
         bool operator!=(const param_type& x) const { return !operator==(x); }
     };
 
-public:
     /*! \brief Construct new distribution with given floating-point parameters.
      *
      * \param mean     Mean of normal distribution
      * \param stddev   Standard deviation of normal distribution
      */
     explicit NormalDistribution(result_type mean = 0.0, result_type stddev = 1.0) :
-        param_(param_type(mean, stddev)),
-        hot_(false),
-        saved_(0)
+        param_(param_type(mean, stddev)), hot_(false), saved_(0)
     {
     }
 

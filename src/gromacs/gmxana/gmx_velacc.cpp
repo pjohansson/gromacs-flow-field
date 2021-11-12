@@ -4,7 +4,7 @@
  * Copyright (c) 1991-2000, University of Groningen, The Netherlands.
  * Copyright (c) 2001-2004, The GROMACS development team.
  * Copyright (c) 2013,2014,2015,2016,2017 by the GROMACS development team.
- * Copyright (c) 2018,2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2018,2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -143,8 +143,11 @@ static void calc_spectrum(int n, const real c[], real dt, const char* fn, gmx_ou
     {
         gmx_fatal(FARGS, "Invalid fft return status %d", status);
     }
-    fp = xvgropen(fn, "Vibrational Power Spectrum",
-                  bRecip ? "\\f{12}w\\f{4} (cm\\S-1\\N)" : "\\f{12}n\\f{4} (ps\\S-1\\N)", "a.u.", oenv);
+    fp = xvgropen(fn,
+                  "Vibrational Power Spectrum",
+                  bRecip ? "\\f{12}w\\f{4} (cm\\S-1\\N)" : "\\f{12}n\\f{4} (ps\\S-1\\N)",
+                  "a.u.",
+                  oenv);
     /* This is difficult.
      * The length of the ACF is dt (as passed to this routine).
      * We pass the vacf with N time steps from 0 to dt.
@@ -158,7 +161,7 @@ static void calc_spectrum(int n, const real c[], real dt, const char* fn, gmx_ou
      * The timestep between saving the trajectory is
      * 1e7 is to convert nanometer to cm
      */
-    recip_fac = bRecip ? (1e7 / SPEED_OF_LIGHT) : 1.0;
+    recip_fac = bRecip ? (1e7 / gmx::c_speedOfLight) : 1.0;
     for (i = 0; (i < n); i += 2)
     {
         nu    = i / (2 * dt);
@@ -216,8 +219,6 @@ int gmx_velacc(int argc, char* argv[])
     real*             normm = nullptr;
     gmx_output_env_t* oenv;
 
-#define NHISTO 360
-
     t_filenm fnm[] = { { efTRN, "-f", nullptr, ffREAD },
                        { efTPS, nullptr, nullptr, ffOPTRD },
                        { efNDX, nullptr, nullptr, ffOPTRD },
@@ -229,8 +230,8 @@ int gmx_velacc(int argc, char* argv[])
 
     npargs = asize(pa);
     ppa    = add_acf_pargs(&npargs, pa);
-    if (!parse_common_args(&argc, argv, PCA_CAN_VIEW | PCA_CAN_TIME, NFILE, fnm, npargs, ppa,
-                           asize(desc), desc, 0, nullptr, &oenv))
+    if (!parse_common_args(
+                &argc, argv, PCA_CAN_VIEW | PCA_CAN_TIME, NFILE, fnm, npargs, ppa, asize(desc), desc, 0, nullptr, &oenv))
     {
         sfree(ppa);
         return 0;
@@ -340,9 +341,15 @@ int gmx_velacc(int argc, char* argv[])
     {
         /* Compute time step between frames */
         dt = (t1 - t0) / (counter - 1);
-        do_autocorr(opt2fn("-o", NFILE, fnm), oenv,
+        do_autocorr(opt2fn("-o", NFILE, fnm),
+                    oenv,
                     bMass ? "Momentum Autocorrelation Function" : "Velocity Autocorrelation Function",
-                    counter, gnx, c1, dt, eacVector, TRUE);
+                    counter,
+                    gnx,
+                    c1,
+                    dt,
+                    eacVector,
+                    TRUE);
 
         do_view(oenv, opt2fn("-o", NFILE, fnm), "-nxy");
 

@@ -76,7 +76,8 @@ void export_system(py::module& m)
     // required to maintain and to pass to the API.
     py::class_<::gmxapi::Session, std::shared_ptr<::gmxapi::Session>> session(m, "MDSession");
     session.def("run", &::gmxapi::Session::run, "Run the simulation workflow");
-    session.def("close", &::gmxapi::Session::close,
+    session.def("close",
+                &::gmxapi::Session::close,
                 "Shut down the execution environment and close the session.");
 
     // Export system container class
@@ -84,7 +85,8 @@ void export_system(py::module& m)
     system.def("launch", &launch, "Launch the configured workflow in the provided context.");
 
     // Module-level function
-    m.def("from_tpr", &gmxpy::from_tpr,
+    m.def("from_tpr",
+          &gmxpy::from_tpr,
           "Return a system container initialized from the given input record.");
 }
 

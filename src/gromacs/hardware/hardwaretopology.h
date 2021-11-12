@@ -1,7 +1,7 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2015,2016,2018,2019, by the GROMACS development team, led by
+ * Copyright (c) 2015,2016,2018,2019,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -126,8 +126,8 @@ public:
     /*! \libinternal \brief Information about a single numa node */
     struct Numa
     {
-        std::vector<NumaNode> nodes;                     //!< Information about each numa node
-        float                 baseLatency;               //!< Scale factor for relative latencies
+        std::vector<NumaNode>           nodes;       //!< Information about each numa node
+        float                           baseLatency; //!< Scale factor for relative latencies
         std::vector<std::vector<float>> relativeLatency; //!< 2D matrix of relative latencies between nodes
         float                           maxRelativeLatency; //!< Largest relative latency
     };
@@ -186,7 +186,6 @@ public:
         std::vector<Device>           devices;           //!< Devices on PCI bus
     };
 
-public:
     /*! \brief Detects the hardware topology. */
     static HardwareTopology detect();
 

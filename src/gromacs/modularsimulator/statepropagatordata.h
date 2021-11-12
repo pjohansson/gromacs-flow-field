@@ -1,7 +1,7 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -71,6 +71,7 @@ class FreeEnergyPerturbationData;
 class GlobalCommunicationHelper;
 class LegacySimulatorData;
 class ModularSimulatorAlgorithmBuilderHelper;
+class ObservablesReducer;
 
 /*! \internal
  * \ingroup module_modularsimulator
@@ -104,13 +105,17 @@ public:
                         FILE*              fplog,
                         const t_commrec*   cr,
                         t_state*           globalState,
+                        t_state*           localState,
                         bool               useGPU,
                         bool               canMoleculesBeDistributedOverPBC,
                         bool               writeFinalConfiguration,
                         const std::string& finalConfigurationFilename,
                         const t_inputrec*  inputrec,
                         const t_mdatoms*   mdatoms,
-                        const gmx_mtop_t*  globalTop);
+                        const gmx_mtop_t&  globalTop);
+
+    //! Destructor (allows forward declaration of internal type)
+    ~StatePropagatorData();
 
     // Allow access to state
     //! Get write access to position vector
@@ -148,6 +153,12 @@ public:
     Element* element();
     //! Initial set up for the associated element
     void setup();
+
+    //! Update the reference temperature
+    void updateReferenceTemperature(ArrayRef<const real>                temperatures,
+                                    ReferenceTemperatureChangeAlgorithm algorithm);
+    //! Helper class handling reference temperature change
+    class ReferenceTemperatureHelper;
 
     //! Read everything that can be stored in t_trxframe from a checkpoint file
     static void readCheckpointToTrxFrame(t_trxframe* trxFrame, ReadCheckpointData readCheckpointData);
@@ -197,6 +208,8 @@ private:
 
     //! The element
     std::unique_ptr<Element> element_;
+    //! Instance of reference temperature helper
+    std::unique_ptr<ReferenceTemperatureHelper> referenceTemperatureHelper_;
 
     //! Move x_ to previousX_
     void copyPosition();
@@ -208,10 +221,18 @@ private:
     void doCheckpointData(CheckpointData<operation>* checkpointData);
 
     // Access to legacy state
-    //! Get a deep copy of the current state in legacy format
-    std::unique_ptr<t_state> localState();
-    //! Update the current state with a state in legacy format
-    void setLocalState(std::unique_ptr<t_state> state);
+    //! Give ownership of local state resources in legacy format
+    t_state* localState();
+    //! Take ownership of local state resources in legacy format
+    void setLocalState(t_state* state);
+    /*! \brief Deep copy the local state into the provided copy and
+     * return it
+     *
+     * In order to minimize reallocations, this function takes as a sink
+     * a local state object owned by the caller, copies the current local
+     * state into it, and returns the same object via a move.
+     */
+    std::unique_ptr<t_state> copyLocalState(std::unique_ptr<t_state> copy);
     //! Get a pointer to the global state
     t_state* globalState();
     //! Get a force pointer
@@ -232,6 +253,8 @@ private:
     // Access to ISimulator data
     //! Full simulation state (only non-nullptr on master rank).
     t_state* globalState_;
+    //! Local simulation state
+    t_state* localState_;
 };
 
 /*! \internal
@@ -274,7 +297,7 @@ public:
             bool                 writeFinalConfiguration,
             std::string          finalConfigurationFilename,
             const t_inputrec*    inputrec,
-            const gmx_mtop_t*    globalTop);
+            const gmx_mtop_t&    globalTop);
 
     /*! \brief Register run function for step / time
      *
@@ -322,7 +345,8 @@ public:
      * \param statePropagatorData  Pointer to the \c StatePropagatorData object
      * \param energyData  Pointer to the \c EnergyData object
      * \param freeEnergyPerturbationData  Pointer to the \c FreeEnergyPerturbationData object
-     * \param globalCommunicationHelper  Pointer to the \c GlobalCommunicationHelper object
+     * \param globalCommunicationHelper   Pointer to the \c GlobalCommunicationHelper object
+     * \param observablesReducer          Pointer to the \c ObservablesReducer object
      *
      * \return  Pointer to the element to be added. Element needs to have been stored using \c storeElement
      */
@@ -331,7 +355,8 @@ public:
                                                     StatePropagatorData*        statePropagatorData,
                                                     EnergyData*                 energyData,
                                                     FreeEnergyPerturbationData* freeEnergyPerturbationData,
-                                                    GlobalCommunicationHelper* globalCommunicationHelper);
+                                                    GlobalCommunicationHelper* globalCommunicationHelper,
+                                                    ObservablesReducer*        observablesReducer);
 
 private:
     //! Pointer to the associated StatePropagatorData
@@ -348,6 +373,11 @@ private:
 
     //! Pointer to keep a backup of the state for later writeout
     std::unique_ptr<t_state> localStateBackup_;
+    /*! \brief Whether the contents of localStateBackup_ are logically valid
+     *
+     * This ensures that we don't make a second backup without consuming the
+     * first. */
+    bool localStateBackupValid_ = false;
     //! Step at which next writeout occurs
     Step writeOutStep_;
     //! Backup current state
@@ -399,7 +429,7 @@ private:
     //! Handles communication.
     const t_commrec* cr_;
     //! Full system topology.
-    const gmx_mtop_t* top_global_;
+    const gmx_mtop_t& top_global_;
 };
 
 } // namespace gmx

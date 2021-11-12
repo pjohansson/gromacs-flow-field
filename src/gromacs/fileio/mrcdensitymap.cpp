@@ -1,7 +1,7 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -84,8 +84,8 @@ std::vector<char> readCharBufferFromFile(const std::string& filename)
     gmx_fseek(gmx_fio_getfp(mrcFile), 0, SEEK_SET);
     // Read whole file into buffer the size of the file
     std::vector<char> fileContentBuffer(fileSize);
-    size_t readSize = fread(fileContentBuffer.data(), sizeof(char), fileContentBuffer.size(),
-                            gmx_fio_getfp(mrcFile));
+    size_t            readSize = fread(
+            fileContentBuffer.data(), sizeof(char), fileContentBuffer.size(), gmx_fio_getfp(mrcFile));
     gmx_fio_close(mrcFile);
 
     if (fileContentBuffer.size() != readSize)
@@ -223,7 +223,8 @@ MultiDimArray<std::vector<float>, dynamicExtents3D> MrcDensityMapOfFloatFromFile
 {
     MultiDimArray<std::vector<float>, dynamicExtents3D> result(
             getDynamicExtents3D(impl_->reader().header()));
-    std::copy(std::begin(impl_->reader().constView()), std::end(impl_->reader().constView()),
+    std::copy(std::begin(impl_->reader().constView()),
+              std::end(impl_->reader().constView()),
               begin(result.asView()));
     return result;
 }
@@ -250,8 +251,7 @@ public:
 };
 
 MrcDensityMapOfFloatWriter::Impl::Impl(const MrcDensityMapHeader& header, ArrayRef<const float> data) :
-    header_(header),
-    data_(data)
+    header_(header), data_(data)
 {
 }
 

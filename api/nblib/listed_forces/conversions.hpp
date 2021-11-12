@@ -58,7 +58,7 @@ namespace nblib
 
 /*! this trait maps nblib InteractionTypes to the corresponding gmx enum
  *
- * @tparam InteractionType
+ * \tparam InteractionType
  */
 template<class InteractionType>
 struct ListedIndex
@@ -91,7 +91,7 @@ struct ListedIndex<G96BondType> : std::integral_constant<int, F_G96BONDS>
 };
 
 template<>
-struct ListedIndex<HarmonicAngleType> : std::integral_constant<int, F_ANGLES>
+struct ListedIndex<HarmonicAngle> : std::integral_constant<int, F_ANGLES>
 {
 };
 
@@ -124,6 +124,7 @@ void transferParameters([[maybe_unused]] const InteractionData& interactionData,
 {
 }
 
+//! \brief Harmonic bond parameter conversion function
 template<>
 void transferParameters(const ListedTypeData<HarmonicBondType>& interactions, gmx_ffparams_t& gmx_params)
 {
@@ -131,23 +132,25 @@ void transferParameters(const ListedTypeData<HarmonicBondType>& interactions, gm
     {
         t_iparams param;
         param.harmonic.krA = hbond.forceConstant();
-        param.harmonic.rA  = hbond.equilDistance();
+        param.harmonic.rA  = hbond.equilConstant();
         gmx_params.iparams.push_back(param);
     }
 }
 
+//! \brief Harmonic angle parameter conversion function
 template<>
-void transferParameters(const ListedTypeData<HarmonicAngleType>& interactions, gmx_ffparams_t& gmx_params)
+void transferParameters(const ListedTypeData<HarmonicAngle>& interactions, gmx_ffparams_t& gmx_params)
 {
     for (const auto& angle : interactions.parameters)
     {
         t_iparams param;
         param.harmonic.krA = angle.forceConstant();
-        param.harmonic.rA  = angle.equilDistance() / DEG2RAD;
+        param.harmonic.rA  = angle.equilConstant() / DEG2RAD;
         gmx_params.iparams.push_back(param);
     }
 }
 
+//! \brief Proper dihedral parameter conversion function
 template<>
 void transferParameters(const ListedTypeData<ProperDihedral>& interactions, gmx_ffparams_t& gmx_params)
 {

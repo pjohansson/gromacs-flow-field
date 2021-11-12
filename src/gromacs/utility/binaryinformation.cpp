@@ -52,7 +52,7 @@
 #    include <fftw3.h>
 #endif
 
-#ifdef HAVE_LIBMKL
+#if HAVE_LIBMKL
 #    include <mkl.h>
 #endif
 
@@ -86,6 +86,7 @@
 #include "gromacs/utility/textwriter.h"
 
 #include "cuda_version_information.h"
+#include "sycl_version_information.h"
 
 namespace
 {
@@ -120,6 +121,8 @@ void printCopyright(gmx::TextWriter* writer)
                                                 "Aldert van Buuren",
                                                 "Rudi van Drunen",
                                                 "Anton Feenstra",
+                                                "Oliver Fleetwood",
+                                                "Gaurav Garg",
                                                 "Gilles Gouaillardet",
                                                 "Alan Gray",
                                                 "Gerrit Groenhof",
@@ -156,7 +159,8 @@ void printCopyright(gmx::TextWriter* writer)
     static const char* const CopyrightText[] = {
         "Copyright (c) 1991-2000, University of Groningen, The Netherlands.",
         "Copyright (c) 2001-2019, The GROMACS development team at",
-        "Uppsala University, Stockholm University and", "the Royal Institute of Technology, Sweden.",
+        "Uppsala University, Stockholm University and",
+        "the Royal Institute of Technology, Sweden.",
         "check out http://www.gromacs.org for more information."
     };
 
@@ -202,8 +206,8 @@ void printCopyright(gmx::TextWriter* writer)
     }
 }
 
-// Construct a string that describes the library that provides FFT support to this build
-const char* getFftDescriptionString()
+//! Construct a string that describes the library that provides CPU FFT support to this build
+const char* getCpuFftDescriptionString()
 {
 // Define the FFT description string
 #if GMX_FFT_FFTW3 || GMX_FFT_ARMPL_FFTW3
@@ -227,6 +231,35 @@ const char* getFftDescriptionString()
 #endif
 };
 
+//! Construct a string that describes the library that provides GPU FFT support to this build
+const char* getGpuFftDescriptionString()
+{
+    if (GMX_GPU)
+    {
+        if (GMX_GPU_CUDA)
+        {
+            return "cuFFT";
+        }
+        else if (GMX_GPU_OPENCL)
+        {
+            return "clFFT";
+        }
+        else if (GMX_GPU_SYCL)
+        {
+            return "unknown";
+        }
+        else
+        {
+            GMX_RELEASE_ASSERT(false, "Unknown GPU configuration");
+            return "impossible";
+        }
+    }
+    else
+    {
+        return "none";
+    }
+};
+
 void gmx_print_version_info(gmx::TextWriter* writer)
 {
     writer->writeLine(formatString("GROMACS version:    %s", gmx_version()));
@@ -240,6 +273,45 @@ void gmx_print_version_info(gmx::TextWriter* writer)
     {
         writer->writeLine(formatString("Branched from:      %s", base_hash));
     }
+    const char* const releaseSourceChecksum = gmxReleaseSourceChecksum();
+    const char* const currentSourceChecksum = gmxCurrentSourceChecksum();
+    if (releaseSourceChecksum[0] != '\0')
+    {
+        if (std::strcmp(releaseSourceChecksum, "NoChecksumFile") == 0)
+        {
+            writer->writeLine(formatString(
+                    "The source code this program was compiled from has not been verified because "
+                    "the reference checksum was missing during compilation. This means you have an "
+                    "incomplete GROMACS distribution, please make sure to download an intact "
+                    "source distribution and compile that before proceeding."));
+            writer->writeLine(formatString("Computed checksum: %s", currentSourceChecksum));
+        }
+        else if (std::strcmp(releaseSourceChecksum, "NoPythonAvailable") == 0)
+        {
+            writer->writeLine(
+                    formatString("Build source could not be verified, because the checksum could "
+                                 "not be computed."));
+        }
+        else if (std::strcmp(releaseSourceChecksum, currentSourceChecksum) != 0)
+        {
+            writer->writeLine(formatString(
+                    "This program has been built from source code that has been altered and does "
+                    "not match the code released as part of the official GROMACS version %s. If "
+                    "you did not intend to use an altered GROMACS version, make sure to download "
+                    "an intact source distribution and compile that before proceeding.",
+                    gmx_version()));
+            writer->writeLine(formatString(
+                    "If you have modified the source code, you are strongly encouraged to set your "
+                    "custom version suffix (using -DGMX_VERSION_STRING_OF_FORK) which will can "
+                    "help later with scientific reproducibility but also when reporting bugs."));
+            writer->writeLine(formatString("Release checksum: %s", releaseSourceChecksum));
+            writer->writeLine(formatString("Computed checksum: %s", currentSourceChecksum));
+        }
+        else
+        {
+            writer->writeLine(formatString("Verified release checksum is %s", releaseSourceChecksum));
+        }
+    }
 
 
 #if GMX_DOUBLE
@@ -252,7 +324,11 @@ void gmx_print_version_info(gmx::TextWriter* writer)
 #if GMX_THREAD_MPI
     writer->writeLine("MPI library:        thread_mpi");
 #elif GMX_MPI
+#    if HAVE_CUDA_AWARE_MPI
+    writer->writeLine("MPI library:        MPI (CUDA-aware)");
+#    else
     writer->writeLine("MPI library:        MPI");
+#    endif
 #else
     writer->writeLine("MPI library:        none");
 #endif
@@ -264,7 +340,8 @@ void gmx_print_version_info(gmx::TextWriter* writer)
 #endif
     writer->writeLine(formatString("GPU support:        %s", getGpuImplementationString()));
     writer->writeLine(formatString("SIMD instructions:  %s", GMX_SIMD_STRING));
-    writer->writeLine(formatString("FFT library:        %s", getFftDescriptionString()));
+    writer->writeLine(formatString("CPU FFT library:    %s", getCpuFftDescriptionString()));
+    writer->writeLine(formatString("GPU FFT library:    %s", getGpuFftDescriptionString()));
 #if GMX_TARGET_X86
     writer->writeLine(formatString("RDTSCP usage:       %s", GMX_USE_RDTSCP ? "enabled" : "disabled"));
 #endif
@@ -281,8 +358,8 @@ void gmx_print_version_info(gmx::TextWriter* writer)
 #if HAVE_EXTRAE
     unsigned major, minor, revision;
     Extrae_get_version(&major, &minor, &revision);
-    writer->writeLine(formatString("Tracing support:    enabled. Using Extrae-%d.%d.%d", major,
-                                   minor, revision));
+    writer->writeLine(formatString(
+            "Tracing support:    enabled. Using Extrae-%d.%d.%d", major, minor, revision));
 #else
     writer->writeLine("Tracing support:    disabled");
 #endif
@@ -292,15 +369,15 @@ void gmx_print_version_info(gmx::TextWriter* writer)
      * them. Can wait for later, as the master branch has ready code to do all
      * that. */
     writer->writeLine(formatString("C compiler:         %s", BUILD_C_COMPILER));
-    writer->writeLine(formatString("C compiler flags:   %s %s", BUILD_CFLAGS,
-                                   CMAKE_BUILD_CONFIGURATION_C_FLAGS));
+    writer->writeLine(formatString(
+            "C compiler flags:   %s %s", BUILD_CFLAGS, CMAKE_BUILD_CONFIGURATION_C_FLAGS));
     writer->writeLine(formatString("C++ compiler:       %s", BUILD_CXX_COMPILER));
-    writer->writeLine(formatString("C++ compiler flags: %s %s", BUILD_CXXFLAGS,
-                                   CMAKE_BUILD_CONFIGURATION_CXX_FLAGS));
-#ifdef HAVE_LIBMKL
+    writer->writeLine(formatString(
+            "C++ compiler flags: %s %s", BUILD_CXXFLAGS, CMAKE_BUILD_CONFIGURATION_CXX_FLAGS));
+#if HAVE_LIBMKL
     /* MKL might be used for LAPACK/BLAS even if FFTs use FFTW, so keep it separate */
-    writer->writeLine(formatString("Linked with Intel MKL version %d.%d.%d.", __INTEL_MKL__,
-                                   __INTEL_MKL_MINOR__, __INTEL_MKL_UPDATE__));
+    writer->writeLine(formatString(
+            "Intel MKL version:  %d.%d.%d", __INTEL_MKL__, __INTEL_MKL_MINOR__, __INTEL_MKL_UPDATE__));
 #endif
 #if GMX_GPU_OPENCL
     writer->writeLine(formatString("OpenCL include dir: %s", OPENCL_INCLUDE_DIR));
@@ -309,10 +386,20 @@ void gmx_print_version_info(gmx::TextWriter* writer)
 #endif
 #if GMX_GPU_CUDA
     writer->writeLine(formatString("CUDA compiler:      %s", CUDA_COMPILER_INFO));
-    writer->writeLine(formatString("CUDA compiler flags:%s %s", CUDA_COMPILER_FLAGS,
-                                   CMAKE_BUILD_CONFIGURATION_CXX_FLAGS));
+    writer->writeLine(formatString(
+            "CUDA compiler flags:%s %s", CUDA_COMPILER_FLAGS, CMAKE_BUILD_CONFIGURATION_CXX_FLAGS));
     writer->writeLine("CUDA driver:        " + gmx::getCudaDriverVersionString());
     writer->writeLine("CUDA runtime:       " + gmx::getCudaRuntimeVersionString());
+#endif
+#if GMX_SYCL_DPCPP
+    writer->writeLine(formatString("SYCL DPC++ flags:   %s", SYCL_DPCPP_COMPILER_FLAGS));
+    writer->writeLine("SYCL DPC++ version: " + gmx::getSyclCompilerVersion());
+#endif
+#if GMX_SYCL_HIPSYCL
+    writer->writeLine(formatString("hipSYCL launcher:   %s", SYCL_HIPSYCL_COMPILER_LAUNCHER));
+    writer->writeLine(formatString("hipSYCL flags:      %s", SYCL_HIPSYCL_COMPILER_FLAGS));
+    writer->writeLine(formatString("hipSYCL targets:    %s", SYCL_HIPSYCL_TARGETS));
+    writer->writeLine("hipSYCL version:    " + gmx::getSyclCompilerVersion());
 #endif
 }
 
@@ -387,8 +474,8 @@ void printBinaryInformation(TextWriter*                      writer,
         // necessary to read stuff above the copyright notice.
         // The line above the copyright notice puts the copyright notice is
         // context, though.
-        writer->writeLine(formatString("%sGROMACS:      %s, version %s%s%s", prefix, name,
-                                       gmx_version(), precisionString, suffix));
+        writer->writeLine(formatString(
+                "%sGROMACS:      %s, version %s%s%s", prefix, name, gmx_version(), precisionString, suffix));
     }
     const char* const binaryPath = programContext.fullBinaryPath();
     if (!gmx::isNullOrEmpty(binaryPath))
@@ -398,8 +485,11 @@ void printBinaryInformation(TextWriter*                      writer,
     const gmx::InstallationPrefixInfo installPrefix = programContext.installationPrefix();
     if (!gmx::isNullOrEmpty(installPrefix.path))
     {
-        writer->writeLine(formatString("%sData prefix:  %s%s%s", prefix, installPrefix.path,
-                                       installPrefix.bSourceLayout ? " (source tree)" : "", suffix));
+        writer->writeLine(formatString("%sData prefix:  %s%s%s",
+                                       prefix,
+                                       installPrefix.path,
+                                       installPrefix.bSourceLayout ? " (source tree)" : "",
+                                       suffix));
     }
     const std::string workingDir = Path::getWorkingDirectory();
     if (!workingDir.empty())
@@ -413,8 +503,8 @@ void printBinaryInformation(TextWriter*                      writer,
     const char* const commandLine = programContext.commandLine();
     if (!gmx::isNullOrEmpty(commandLine))
     {
-        writer->writeLine(formatString("%sCommand line:%s\n%s  %s%s", prefix, suffix, prefix,
-                                       commandLine, suffix));
+        writer->writeLine(formatString(
+                "%sCommand line:%s\n%s  %s%s", prefix, suffix, prefix, commandLine, suffix));
     }
     if (settings.bExtendedInfo_)
     {

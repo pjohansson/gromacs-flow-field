@@ -1,7 +1,7 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -117,7 +117,8 @@ TEST_P(SimpleMdrunTest, WithinTolerances)
         fprintf(stdout,
                 "Test system '%s' cannot run with %d ranks.\n"
                 "The supported numbers are: %s\n",
-                simulationName.c_str(), numRanksAvailable,
+                simulationName.c_str(),
+                numRanksAvailable,
                 reportNumbersOfPpRanksSupported(simulationName).c_str());
         return;
     }
@@ -159,7 +160,7 @@ TEST_P(SimpleMdrunTest, WithinTolerances)
             auto frame = reader.frame();
             auto force = frame.f();
             int  atom  = 0;
-            for (auto& f : force)
+            for (const auto& f : force)
             {
                 std::string forceName = frame.frameName() + " F[" + toString(atom) + "]";
 
@@ -183,9 +184,12 @@ std::vector<std::string> systemsToTest_g = { "angles1" };
 std::vector<std::string> md_g            = { "md", "md-vv" };
 //! \}
 
-INSTANTIATE_TEST_CASE_P(Angles1,
-                        SimpleMdrunTest,
-                        ::testing::Combine(::testing::ValuesIn(systemsToTest_g), ::testing::ValuesIn(md_g)));
+INSTANTIATE_TEST_SUITE_P(Angles1,
+                         SimpleMdrunTest,
+                         ::testing::Combine(::testing::ValuesIn(systemsToTest_g),
+                                            ::testing::ValuesIn(md_g)));
+#else
+GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(SimpleMdrunTest);
 #endif
 } // namespace
 } // namespace test

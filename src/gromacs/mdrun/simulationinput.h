@@ -1,7 +1,7 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2020, by the GROMACS development team, led by
+ * Copyright (c) 2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -48,7 +48,7 @@
 
 #include "gromacs/mdrun/simulationinputhandle.h"
 #include "gromacs/mdtypes/checkpointdata.h"
-#include "gromacs/utility/mdmodulenotification.h"
+#include "gromacs/utility/mdmodulesnotifiers.h"
 
 // Forward declarations for types from other modules that are opaque to the public API.
 // TODO: Document the sources of these symbols or import a (self-documenting) fwd header.
@@ -140,7 +140,7 @@ void                     applyGlobalTopology(const SimulationInput&, gmx_mtop_t*
  *       SimulationInput implementation.
  *
  * \todo Consider refactoring to decouple the checkpoint facility from its consumers
- *       (state, observablesHistory, mdModulesNotifier, and parts of ir).
+ *       (state, observablesHistory, mdModulesNotifiers, and parts of ir).
  *
  * \warning It is the caller’s responsibility to make sure that
  * preconditions are satisfied for the parameter objects.
@@ -157,7 +157,7 @@ void applyLocalState(const SimulationInput&         simulationInput,
                      t_state*                       state,
                      ObservablesHistory*            observablesHistory,
                      bool                           reproducibilityRequested,
-                     const MdModulesNotifier&       notifier,
+                     const MDModulesNotifiers&      notifiers,
                      gmx::ReadCheckpointDataHolder* modularSimulatorCheckpointData,
                      bool                           useModularSimulator);
 

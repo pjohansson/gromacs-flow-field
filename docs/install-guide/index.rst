@@ -55,10 +55,9 @@ Quick and dirty cluster installation
 
 On a cluster where users are expected to be running across multiple
 nodes using MPI, make one installation similar to the above, and
-another using ``-DGMX_MPI=on`` and which is `building only
-mdrun`_, because that is the only component of |Gromacs| that uses
-MPI. The latter will install a single simulation engine binary,
-i.e. ``mdrun_mpi`` when the default suffix is used. Hence it is safe
+another using ``-DGMX_MPI=on``.
+The latter will install binaries and libraries named using
+a default suffix of ``_mpi`` ie ``gmx_mpi``. Hence it is safe
 and common practice to install this into the same location where
 the non-MPI build is installed.
 
@@ -71,11 +70,10 @@ appropriate value instead of ``xxx`` :
 
 * ``-DCMAKE_C_COMPILER=xxx`` equal to the name of the C99 `Compiler`_ you wish to use (or the environment variable ``CC``)
 * ``-DCMAKE_CXX_COMPILER=xxx`` equal to the name of the C++17 `compiler`_ you wish to use (or the environment variable ``CXX``)
-* ``-DGMX_MPI=on`` to build using `MPI support`_ (generally good to combine with `building only mdrun`_)
+* ``-DGMX_MPI=on`` to build using `MPI support`_
 * ``-DGMX_GPU=CUDA`` to build with NVIDIA CUDA support enabled.
 * ``-DGMX_GPU=OpenCL`` to build with OpenCL_ support enabled.
 * ``-DGMX_SIMD=xxx`` to specify the level of `SIMD support`_ of the node on which |Gromacs| will run
-* ``-DGMX_BUILD_MDRUN_ONLY=on`` for `building only mdrun`_, e.g. for compute cluster back-end nodes
 * ``-DGMX_DOUBLE=on`` to build |Gromacs| in double precision (slower, and not normally useful)
 * ``-DCMAKE_PREFIX_PATH=xxx`` to add a non-standard location for CMake to `search for libraries, headers or programs`_
 * ``-DCMAKE_INSTALL_PREFIX=xxx`` to install |Gromacs| to a `non-standard location`_ (default ``/usr/local/gromacs``)
@@ -111,17 +109,20 @@ compiler. We recommend gcc, because it is free, widely available and
 frequently provides the best performance.
 
 You should strive to use the most recent version of your
-compiler. Since we require full C++17 support the minimum supported
-compiler versions are
+compiler. Since we require full C++17 support the minimum
+compiler versions supported by the GROMACS team are
 
 * GNU (gcc/libstdc++) 7
-* Intel (icc) 19.1
-* LLVM (clang/libc++) 5
-* Microsoft (MSVC) 2017 15.7
+* LLVM (clang/libc++) 7
+* Microsoft (MSVC) 2019
 
 Other compilers may work (Cray, Pathscale, older clang) but do
 not offer competitive performance. We recommend against PGI because
 the performance with C++ is very bad.
+
+The Intel classic compiler (icc/icpc) is no longer supported in
+|Gromacs|. Use Intel's newer clang-based compiler from oneAPI, or
+gcc.
 
 The xlc compiler is not supported and version 16.1 does not compile on
 POWER architectures for |Gromacs|\ -\ |version|. We recommend to use
@@ -137,23 +138,18 @@ libraries and require no further configuration. If your vendor's
 compiler also manages the standard library library via compiler flags,
 these will be honored. For configuration of other compilers, read on.
 
-On Linux, both the Intel and clang compiler use the libstdc++ which
+On Linux, the clang compilers use the libstdc++ which
 comes with gcc as the default C++ library. For |Gromacs|, we require
 the compiler to support libstc++ version 7.1 or higher. To select a
 particular libstdc++ library, provide the path to g++ with
 ``-DGMX_GPLUSPLUS_PATH=/path/to/g++``.
 
-On Windows with the Intel compiler, the MSVC standard library is used,
-and at least MSVC 2017 15.7 is required. Load the environment variables with
-vcvarsall.bat.
-
 To build with clang and llvm's libcxx standard library, use
 ``-DCMAKE_CXX_FLAGS=-stdlib=libc++``.
 
-If you are running on Mac OS X, the best option is the Intel
-compiler. Both clang and gcc will work, but they produce lower
-performance and each have some shortcomings. clang 3.8 now offers
-support for OpenMP, and so may provide decent performance.
+If you are running on Mac OS X, the best option is gcc. The Apple
+clang compiler provided by MacPorts will work, but does not support
+OpenMP, so will probably not provide best performance.
 
 For all non-x86 platforms, your best option is typically to use gcc or
 the vendor's default or recommended compiler, and check for
@@ -217,28 +213,41 @@ workstation using its built-in thread-MPI. No user action is required
 in order to enable this.
 
 If you wish to run in parallel on multiple machines across a network,
-you will need to have
-
-* an MPI library installed that supports the MPI 1.3
-  standard, and
-* wrapper compilers that will compile code using that library.
+you will need to have an MPI library installed that supports the MPI
+2.0 standard. That's true for any MPI library version released since
+about 2009, but the |Gromacs| team recommends the latest version (for
+best performance) of either your vendor's library, OpenMPI_ or MPICH_.
 
 To compile with MPI set your compiler to the normal (non-MPI) compiler
 and add ``-DGMX_MPI=on`` to the cmake options. It is possible to set
 the compiler to the MPI compiler wrapper but it is neither necessary
 nor recommended.
 
-The |Gromacs| team recommends OpenMPI_ version
-1.6 (or higher), MPICH_ version 1.4.1 (or
-higher), or your hardware vendor's MPI installation. The most recent
-version of either of these is likely to be the best. More specialized
-networks might depend on accelerations only available in the vendor's
-library. LAM-MPI_ might work, but since it has
-been deprecated for years, it is not supported.
+CUDA-Aware MPI support
+~~~~~~~~~~~~~~~~~~~~~~
 
-For example, depending on your actual MPI library, use ``cmake
--DMPI_C_COMPILER=mpicc -DGMX_MPI=on``.
+In simulations using multiple NVIDIA GPUs, an MPI implementation with CUDA support
+(also called "CUDA-aware") allows communication to be performed directly between the
+distinct GPU memory spaces without staging through CPU memory, often
+resulting in higher bandwidth and lower latency communication.  For
+more details, see `Introduction to CUDA-aware MPI
+<https://developer.nvidia.com/blog/introduction-cuda-aware-mpi/>`_.
 
+To use CUDA-aware MPI for direct GPU communication we recommend
+using the latest OpenMPI version (>=4.1.0) with the latest UCX version
+(>=1.10), since most GROMACS internal testing on CUDA-aware support has 
+been performed using these versions. OpenMPI with CUDA-aware support can 
+be built following the procedure in `these OpenMPI build instructions
+<https://www.open-mpi.org/faq/?category=buildcuda>`_.
+
+With ``GPU_MPI=ON``, GROMACS attempts to automatically detect CUDA support
+in the underlying MPI library at compile time, and enables direct GPU 
+communication when this is detected.  However, there are some cases when
+GROMACS may fail to detect existing CUDA-aware support, in which case
+it can be manually enabled by setting environment variable ``GMX_FORCE_CUDA_AWARE_MPI=1``
+at runtime (although such cases still lack substantial
+testing, so we urge the user to carefully check correctness of results
+against those using default build options, and report any issues).
 
 CMake
 ^^^^^
@@ -570,12 +579,9 @@ lead to performance loss, e.g. on Intel Skylake-X/SP and AMD Zen.
    Additionally, with GPU accelerated runs ``AVX2_256`` can also be
    faster on high-end Skylake CPUs with both 512-bit FMA units enabled.
 9. ``AVX_512_KNL`` Knights Landing Xeon Phi processors
-10. ``Sparc64_HPC_ACE`` Fujitsu machines like the K computer have this.
-11. ``IBM_VMX`` Power6 and similar Altivec processors have this.
-12. ``IBM_VSX`` Power7, Power8, Power9 and later have this.
-13. ``ARM_NEON`` 32-bit ARMv7 with NEON support.
-14. ``ARM_NEON_ASIMD`` 64-bit ARMv8 and later.
-15. ``ARM_SVE`` 64-bit ARMv8 and later with the Scalable Vector Extensions (SVE).
+10. ``IBM_VSX`` Power7, Power8, Power9 and later have this.
+11. ``ARM_NEON_ASIMD`` 64-bit ARMv8 and later.
+12. ``ARM_SVE`` 64-bit ARMv8 and later with the Scalable Vector Extensions (SVE).
     The SVE vector length is fixed at CMake configure time. The default vector
     length is automatically detected, and this can be changed via the
     ``GMX_SIMD_ARM_SVE_LENGTH`` CMake variable.
@@ -732,7 +738,7 @@ To trigger an OpenCL_ build the following CMake flags must be set
     cmake .. -DGMX_GPU=OpenCL
 
 To build with support for Intel integrated GPUs, it is required
-to add ``-DGMX_OPENCL_NB_CLUSTER_SIZE=4`` to the cmake command line,
+to add ``-DGMX_GPU_NB_CLUSTER_SIZE=4`` to the cmake command line,
 so that the GPU kernels match the characteristics of the hardware.
 The `Neo driver <https://github.com/intel/compute-runtime/releases>`_
 is recommended.
@@ -818,18 +824,16 @@ earlier hardware, because this will lead to programs (especially
 mdrun) that run slowly on the new hardware. Building two full
 installations and locally managing how to call the correct one
 (e.g. using a module system) is the recommended
-approach. Alternatively, as at the moment the |Gromacs| tools do not
-make strong use of SIMD acceleration, it can be convenient to create
-an installation with tools portable across different x86 machines, but
-with separate mdrun binaries for each architecture. To achieve this,
+approach. Alternatively, one can use different suffixes to install 
+several versions of |Gromacs| in the same location. To achieve this,
 one can first build a full installation with the
 least-common-denominator SIMD instruction set, e.g. ``-DGMX_SIMD=SSE2``,
-then build separate mdrun binaries for each architecture present in
+in order for simple commands like ``gmx grompp`` to work on all machines,
+then build specialized ``gmx`` binaries for each architecture present in
 the heterogeneous environment. By using custom binary and library
-suffixes for the mdrun-only builds, these can be installed to the
-same location as the "generic" tools installation.
-`Building just the mdrun binary`_ is possible by setting the
-``-DGMX_BUILD_MDRUN_ONLY=ON`` option.
+suffixes (with CMake variables ``-DGMX_BINARY_SUFFIX=xxx`` and
+``-DGMX_LIBS_SUFFIX=xxx``), these can be installed to the same
+location.
 
 Linear algebra libraries
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -871,6 +875,54 @@ non-standard location. Building QM/MM-capable version requires
 double-precision version of |Gromacs| compiled with MPI support:
 
 * ``-DGMX_DOUBLE=ON -DGMX_MPI -DGMX_MIMIC=ON``
+
+.. _installing with CP2K:
+
+Building with CP2K QM/MM support
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+CP2K QM/MM interface integration will require linking against libcp2k
+library, that incorporates CP2K functionality into |Gromacs|. 
+
+1. Download, compile and install CP2K (version 8.1 or higher is required).
+CP2K latest distribution can be downloaded `here <https://github.com/cp2k/cp2k/releases/>`_.
+For CP2K specific instructions please `follow <https://github.com/cp2k/cp2k/blob/master/INSTALL.md>`_.
+You can also check instructions on the `oficial CP2K web-page <https://www.cp2k.org/howto>`_.
+
+2. Make :file:`libcp2k.a` library by executing the following command::
+    make ARCH=<your arch file> VERSION=<your version like psmp> libcp2k
+
+The library archive (*e.g.* :file:`libcp2k.a`) should appear in the :file:`{<cp2k dir>}/lib/{<arch>}/{<version>}/` directory.
+
+3. Configure |Gromacs| with :command:`cmake`, adding the following flags.
+
+Build should be static:
+* ``-DBUILD_SHARED_LIBS=OFF -DGMXAPI=OFF -DGMX_INSTALL_NBLIB_API=OFF``
+
+Double precision in general is better than single for QM/MM 
+(however both options are viable):
+* ``-DGMX_DOUBLE=ON``
+
+FFT, BLAS and LAPACK libraries should be the same between CP2K and |Gromacs|.
+Use the following flags to do so:
+
+* ``-DGMX_FFT_LIBRARY=<your library like fftw3> -DFFTWF_LIBRARY=<path to library> -DFFTWF_INCLUDE_DIR=<path to directory with headers>``
+* ``-DGMX_BLAS_USER=<path to your BLAS>`` 
+* ``-DGMX_LAPACK_USER=<path to your LAPACK>``
+
+4. Compilation of QM/MM interface is controled by the following flags.
+
+``-DGMX_CP2K=ON``
+    Activates QM/MM interface compilation
+``-DCP2K_DIR="<path to cp2k>/lib/local/psmp``
+    Directory with libcp2k.a library
+``-DCP2K_LINKER_FLAGS="<combination of LDFLAGS and LIBS>"``
+    Other libraries used by CP2K. Typically that should be combination 
+    of LDFLAGS and LIBS from the ARCH file used for CP2K compilation.
+    Sometimes ARCH file could have several lines defining LDFLAGS and LIBS
+    or even split one line into several using "\". In that case all of them
+    should be concatenated into one long string without any extra slashes 
+    or quotes.
 
 .. _suffixes:
 
@@ -964,17 +1016,6 @@ supported by ``cmake`` (e.g. ``ninja``) also work well.
 
 .. _building just the mdrun binary:
 
-Building only mdrun
-~~~~~~~~~~~~~~~~~~~
-
-This is now deprecated, but still supported with the ``cmake`` option
-``-DGMX_BUILD_MDRUN_ONLY=ON``, which will build a different version of
-``libgromacs`` and the ``mdrun`` program.  Naturally, now ``make
-install`` installs only those products. By default, mdrun-only builds
-will default to static linking against |Gromacs| libraries, because
-this is generally a good idea for the targets for which an mdrun-only
-build is desirable.
-
 Installing |Gromacs|
 ^^^^^^^^^^^^^^^^^^^^
 
@@ -1060,42 +1101,11 @@ but then you should include a detailed description of
 your hardware, and the output of ``gmx mdrun -version`` (which contains
 valuable diagnostic information in the header).
 
-Testing for MDRUN_ONLY executables
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-A build with ``-DGMX_BUILD_MDRUN_ONLY`` cannot be tested with
-``make check`` from the build tree, because most of the tests
-require a full build to run things like ``grompp``. To test such an
-mdrun fully requires installing it to the same location as a normal
-build of |Gromacs|, downloading the regression tests tarball manually
-as described above, sourcing the correct ``GMXRC`` and running the
-perl script manually. For example, from your |Gromacs| source
-directory:
-
-::
-
-    mkdir build-normal
-    cd build-normal
-    # First, build and install normally to allow full testing of the standalone simulator.
-    cmake .. -DGMX_MPI=ON -DCMAKE_INSTALL_PREFIX=/your/installation/prefix/here
-    make -j 4
-    make install
-    cd ..
-    mkdir build-mdrun-only
-    cd build-mdrun-only
-    # Next, build and install the GMX_BUILD_MDRUN_ONLY version (optional).
-    cmake .. -DGMX_MPI=ON -DGMX_BUILD_MDRUN_ONLY=ON -DCMAKE_INSTALL_PREFIX=/your/installation/prefix/here
-    make -j 4
-    make install
-    cd /to/your/unpacked/regressiontests
-    source /your/installation/prefix/here/bin/GMXRC
-    ./gmxtest.pl all -np 2
-
 Non-standard suffix
 ~~~~~~~~~~~~~~~~~~~
 
-If your mdrun program has been suffixed in a non-standard way, then
-the ``./gmxtest.pl -mdrun`` option will let you specify that name to the
+If your ``gmx`` program has been suffixed in a non-standard way, then
+the ``./gmxtest.pl -suffix`` option will let you specify that suffix to the
 test machinery. You can use ``./gmxtest.pl -double`` to test the
 double-precision version. You can use ``./gmxtest.pl -crosscompiling``
 to stop the test harness attempting to check that the programs can
@@ -1131,6 +1141,25 @@ We are still working on a set of benchmark systems for testing
 the performance of |Gromacs|. Until that is ready, we recommend that
 you try a few different parallelization options, and experiment with
 tools such as ``gmx tune_pme``.
+
+Validating |Gromacs| for source code modifications
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+When building |Gromacs| from a release tarball, the build process automatically
+checks if any file contributing to the build process have been modified since they have
+been packed in the archive. This results in the marking of the version as either ``MODIFIED``
+(if the source files have been modified) or ``UNCHECKED`` (if no validation was possible, e.g.
+if no Python installation was found). The actual checking is performed by comparing a checksum
+stored in the release tarball against one generated by the ``createFileHash.py`` Python script
+during the build configuration. When running a |Gromacs| binary, the checksum is also printed
+in the log file, together with a message if there is a mismatch or no validation has been possible.
+
+This allows users to check whether the binary they are using was built from source code that is
+identical to the source code released by the |Gromacs| team. Thus unintentional modifications
+to the source code for building binaries that are used for running production simulations
+are easily detectable. Additionally, by manually setting a version tag using the
+GMX_VERSION_STRING_OF_FORK cmake option, users can mark a modified |Gromacs| release
+code with their custom version string suffix.
 
 Having difficulty?
 ^^^^^^^^^^^^^^^^^^
@@ -1225,49 +1254,10 @@ Oracle Developer Studio is not a currently supported compiler (and
 does not currently compile |Gromacs| correctly, perhaps because the
 thread-MPI atomics are incorrectly implemented in |Gromacs|).
 
-Fujitsu PRIMEHPC
-^^^^^^^^^^^^^^^^
-
-This is the architecture of the K computer, which uses Fujitsu
-Sparc64VIIIfx chips. On this platform, |Gromacs| has
-accelerated group kernels using the HPC-ACE instructions, no
-accelerated Verlet kernels, and a custom build toolchain. Since this
-particular chip only does double precision SIMD, the default setup
-is to build |Gromacs| in double. Since most users only need single, we have added
-an option GMX_RELAXED_DOUBLE_PRECISION to accept single precision square root
-accuracy in the group kernels; unless you know that you really need 15 digits
-of accuracy in each individual force, we strongly recommend you use this. Note
-that all summation and other operations are still done in double.
-
-The recommended configuration is to use
-
-::
-
-    cmake .. -DCMAKE_TOOLCHAIN_FILE=Toolchain-Fujitsu-Sparc64-mpi.cmake \
-             -DCMAKE_PREFIX_PATH=/your/fftw/installation/prefix \
-             -DCMAKE_INSTALL_PREFIX=/where/gromacs/should/be/installed \
-             -DGMX_MPI=ON \
-             -DGMX_BUILD_MDRUN_ONLY=ON \
-             -DGMX_RELAXED_DOUBLE_PRECISION=ON
-    make
-    make install
-
 Intel Xeon Phi
 ^^^^^^^^^^^^^^
 
 Xeon Phi processors, hosted or self-hosted, are supported.
-Only symmetric (aka native) mode is supported on Knights Corner. The
-performance depends among other factors on the system size, and for
-now the performance might not be faster than CPUs. When building for it,
-the recommended configuration is
-
-::
-
-    cmake .. -DCMAKE_TOOLCHAIN_FILE=Platform/XeonPhi
-    make
-    make install
-
-
 The Knights Landing-based Xeon Phi processors behave like standard x86 nodes,
 but support a special SIMD instruction set. When cross-compiling for such nodes,
 use the ``AVX_512_KNL`` SIMD flavor.
@@ -1292,11 +1282,12 @@ much everywhere, it is important that we tell you where we really know
 it works because we have tested it.
 Every commit in our git source code repository
 is currently tested with a range of configuration options on x86 with
-gcc versions 7 and 8,
-clang versions 8 and 9,
+gcc versions including 7 and 11,
+clang versions including 7 and 13,
+CUDA versions 11.0 and 11.4.2,
 and
-a beta version of oneAPI containing Intel's compiler.
-For this testing, we use Ubuntu 18.04 or 20.04 operating system.
+a version of oneAPI containing Intel's clang-based compiler.
+For this testing, we use Ubuntu 20.04 operating system.
 Other compiler, library, and OS versions are tested less frequently.
 For details, you can have a look at the
 `continuous integration server used by GROMACS <https://gitlab.com/gromacs/gromacs/>`_,

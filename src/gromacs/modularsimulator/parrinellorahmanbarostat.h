@@ -1,7 +1,7 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -58,6 +58,7 @@ enum class CheckpointDataOperation;
 class EnergyData;
 class LegacySimulatorData;
 class MDAtoms;
+class ObservablesReducer;
 class StatePropagatorData;
 
 /*! \internal
@@ -70,7 +71,7 @@ class StatePropagatorData;
  *     scaling factor, and
  *   * scales the box and the positions of the system.
  */
-class ParrinelloRahmanBarostat final : public ISimulatorElement, public ICheckpointHelperClient
+class ParrinelloRahmanBarostat final : public ISimulatorElement, public ICheckpointHelperClient, public IEnergySignallerClient
 {
 public:
     //! Constructor
@@ -99,11 +100,10 @@ public:
 
     //! Getter for the box velocities
     [[nodiscard]] const rvec* boxVelocities() const;
-    //! Contribution to the conserved energy (called by energy data)
-    [[nodiscard]] real conservedEnergyContribution() const;
 
     //! Connect this to propagator
-    void connectWithPropagator(const PropagatorBarostatConnection& connectionData);
+    void connectWithMatchingPropagator(const PropagatorConnection& connectionData,
+                                       const PropagatorTag&        propagatorTag);
 
     //! ICheckpointHelperClient write checkpoint implementation
     void saveCheckpointState(std::optional<WriteCheckpointData> checkpointData, const t_commrec* cr) override;
@@ -119,18 +119,23 @@ public:
      * \param statePropagatorData  Pointer to the \c StatePropagatorData object
      * \param energyData  Pointer to the \c EnergyData object
      * \param freeEnergyPerturbationData  Pointer to the \c FreeEnergyPerturbationData object
-     * \param globalCommunicationHelper  Pointer to the \c GlobalCommunicationHelper object
+     * \param globalCommunicationHelper   Pointer to the \c GlobalCommunicationHelper object
+     * \param observablesReducer          Pointer to the \c ObservablesReducer object
+     * \param propagatorTag  Tag of the propagator to connect to
      * \param offset  The step offset at which the barostat is applied
      *
      * \return  Pointer to the element to be added. Element needs to have been stored using \c storeElement
      */
-    static ISimulatorElement* getElementPointerImpl(LegacySimulatorData* legacySimulatorData,
-                                                    ModularSimulatorAlgorithmBuilderHelper* builderHelper,
-                                                    StatePropagatorData*        statePropagatorData,
-                                                    EnergyData*                 energyData,
-                                                    FreeEnergyPerturbationData* freeEnergyPerturbationData,
-                                                    GlobalCommunicationHelper* globalCommunicationHelper,
-                                                    int                        offset);
+    static ISimulatorElement*
+    getElementPointerImpl(LegacySimulatorData*                    legacySimulatorData,
+                          ModularSimulatorAlgorithmBuilderHelper* builderHelper,
+                          StatePropagatorData*                    statePropagatorData,
+                          EnergyData*                             energyData,
+                          FreeEnergyPerturbationData gmx_unused* freeEnergyPerturbationData,
+                          GlobalCommunicationHelper gmx_unused* globalCommunicationHelper,
+                          ObservablesReducer*                   observablesReducer,
+                          Offset                                offset,
+                          const PropagatorTag&                  propagatorTag);
 
 private:
     //! The frequency at which the barostat is applied
@@ -154,6 +159,11 @@ private:
     //! Box velocity
     tensor boxVelocity_;
 
+    //! Current conserved energy contribution
+    real conservedEnergyContribution_;
+    //! Step of current conserved energy contribution
+    Step conservedEnergyContributionStep_;
+
     // TODO: Clarify relationship to data objects and find a more robust alternative to raw pointers (#3583)
     //! Pointer to the micro state
     StatePropagatorData* statePropagatorData_;
@@ -170,6 +180,14 @@ private:
     //! Helper function to read from / write to CheckpointData
     template<CheckpointDataOperation operation>
     void doCheckpointData(CheckpointData<operation>* checkpointData);
+
+    //! IEnergySignallerClient implementation
+    std::optional<SignallerCallback> registerEnergyCallback(EnergySignallerEvent event) override;
+    //! The next communicated energy calculation step
+    Step nextEnergyCalculationStep_;
+
+    //! Contribution to the conserved energy
+    [[nodiscard]] real conservedEnergyContribution() const;
 
     // Access to ISimulator data
     //! Handles logging.

@@ -1,7 +1,7 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2018,2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2018,2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -42,6 +42,7 @@
 #include "gromacs/mdtypes/md_enums.h"
 #include "gromacs/topology/idef.h"
 #include "gromacs/utility/arrayref.h"
+#include "gromacs/utility/enumerationhelpers.h"
 #include "gromacs/utility/gmxassert.h"
 #include "gromacs/utility/real.h"
 
@@ -49,14 +50,14 @@ struct t_commrec;
 struct t_lambda;
 
 // The non-bonded energy terms accumulated for energy group pairs
-enum
+enum class NonBondedEnergyTerms : int
 {
-    egCOULSR,
-    egLJSR,
-    egBHAMSR,
-    egCOUL14,
-    egLJ14,
-    egNR
+    CoulombSR,
+    LJSR,
+    BuckinghamSR,
+    Coulomb14,
+    LJ14,
+    Count
 };
 
 // Struct for accumulating non-bonded energies between energy group pairs
@@ -64,14 +65,16 @@ struct gmx_grppairener_t
 {
     gmx_grppairener_t(int numEnergyGroups) : nener(numEnergyGroups * numEnergyGroups)
     {
-        for (auto& elem : ener)
+        for (auto& term : energyGroupPairTerms)
         {
-            elem.resize(nener);
+            term.resize(nener);
         }
     }
 
-    int                                 nener; /* The number of energy group pairs */
-    std::array<std::vector<real>, egNR> ener;  /* Energy terms for each pair of groups */
+    void clear();
+
+    int nener; /* The number of energy group pairs */
+    gmx::EnumerationArray<NonBondedEnergyTerms, std::vector<real>> energyGroupPairTerms; /* Energy terms for each pair of groups */
 };
 
 //! Accumulates free-energy foreign lambda energies and dH/dlamba
@@ -195,13 +198,13 @@ struct gmx_enerdata_t
     gmx_enerdata_t(int numEnergyGroups, int numFepLambdas);
 
     //! The energies for all different interaction types
-    real term[F_NRE] = { 0 };
+    std::array<real, F_NRE> term = { 0 };
     //! Energy group pair non-bonded energies
     struct gmx_grppairener_t grpp;
     //! Contributions to dV/dlambda with linear dependence on lambda
-    double dvdl_lin[efptNR] = { 0 };
+    gmx::EnumerationArray<FreeEnergyPerturbationCouplingType, double> dvdl_lin = { 0 };
     //! Contributions to dV/dlambda with non-linear dependence on lambda
-    double dvdl_nonlin[efptNR] = { 0 };
+    gmx::EnumerationArray<FreeEnergyPerturbationCouplingType, double> dvdl_nonlin = { 0 };
     /* The idea is that dvdl terms with linear lambda dependence will be added
      * automatically to enerpart_lambda. Terms with non-linear lambda dependence
      * should explicitly determine the energies at foreign lambda points
@@ -209,11 +212,6 @@ struct gmx_enerdata_t
 
     //! Foreign lambda energies and dH/dl
     ForeignLambdaTerms foreignLambdaTerms;
-
-    //! Alternate, temporary array for storing foreign lambda energies
-    real foreign_term[F_NRE] = { 0 };
-    //! Alternate, temporary  array for storing foreign lambda group pair energies
-    struct gmx_grppairener_t foreign_grpp;
 };
 
 #endif

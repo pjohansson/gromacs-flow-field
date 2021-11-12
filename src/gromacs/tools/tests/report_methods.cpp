@@ -1,7 +1,7 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2018,2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2018,2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -68,9 +68,9 @@ class ReportMethodsTest : public ::testing::Test
 protected:
     // TODO this is changed in newer googletest versions
     //! Prepare shared resources.
-    static void SetUpTestCase() { s_tprFileHandle = new TprAndFileManager("lysozyme"); }
+    static void SetUpTestSuite() { s_tprFileHandle = new TprAndFileManager("lysozyme"); }
     //! Clean up shared resources.
-    static void TearDownTestCase()
+    static void TearDownTestSuite()
     {
         delete s_tprFileHandle;
         s_tprFileHandle = nullptr;
@@ -176,8 +176,7 @@ TEST_F(ReportMethodsTest, ToolEndToEndTest)
 {
     const char* const command[] = { "report-methods", "-s", s_tprFileHandle->tprName().c_str() };
     CommandLine       cmdline(command);
-    EXPECT_EQ(0, gmx::test::CommandLineTestHelper::runModuleFactory(&gmx::ReportMethodsInfo::create,
-                                                                    &cmdline));
+    EXPECT_EQ(0, gmx::test::CommandLineTestHelper::runModuleFactory(&gmx::ReportMethodsInfo::create, &cmdline));
 }
 
 } // namespace test

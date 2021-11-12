@@ -4,7 +4,7 @@
  * Copyright (c) 1991-2000, University of Groningen, The Netherlands.
  * Copyright (c) 2001-2004, The GROMACS development team.
  * Copyright (c) 2013,2014,2015,2017,2018 by the GROMACS development team.
- * Copyright (c) 2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -49,6 +49,7 @@
 #include "gromacs/gmxpreprocess/toputil.h"
 #include "gromacs/math/functions.h"
 #include "gromacs/math/units.h"
+#include "gromacs/math/utilities.h"
 #include "gromacs/math/vec.h"
 #include "gromacs/topology/block.h"
 #include "gromacs/topology/symtab.h"
@@ -145,7 +146,7 @@ static bool chk_hbonds(int i, t_atoms* pdba, rvec x[], const bool ad[], bool hbo
                 d2 = distance2(x[i], x[j]);
                 rvec_sub(x[i], xh, nh);
                 rvec_sub(x[aj], xh, oh);
-                a = RAD2DEG * acos(cos_angle(nh, oh));
+                a = gmx::c_rad2Deg * acos(cos_angle(nh, oh));
                 if ((d2 < dist2) && (a > angle))
                 {
                     hbond[i] = TRUE;
@@ -179,15 +180,16 @@ void set_histp(t_atoms* pdba, rvec* x, t_symtab* symtab, real angle, real dist)
                                       "NZ", "OG",  "OG1", "OH", "NE1", "OW" };
 #define NPD asize(prot_don)
 
-    bool *    donor, *acceptor;
-    bool*     hbond;
-    bool      bHDd, bHEd;
-    rvec      xh1, xh2;
-    int       natom;
-    int       i, j, nd, na, hisind, type = -1;
-    int       nd1, ne2, cg, cd2, ce1;
-    t_blocka* hb;
-    char*     atomnm;
+    bool *          donor, *acceptor;
+    bool*           hbond;
+    bool            bHDd, bHEd;
+    rvec            xh1, xh2;
+    int             natom;
+    int             i, j, nd, na, hisind;
+    HistidineStates type = HistidineStates::Count;
+    int             nd1, ne2, cg, cd2, ce1;
+    t_blocka*       hb;
+    char*           atomnm;
 
     natom = pdba->nr;
 
@@ -287,25 +289,28 @@ void set_histp(t_atoms* pdba, rvec* x, t_symtab* symtab, real angle, real dist)
                     {
                         if (bHEd)
                         {
-                            type = ehisH;
+                            type = HistidineStates::H;
                         }
                         else
                         {
-                            type = ehisA;
+                            type = HistidineStates::A;
                         }
                     }
                     else
                     {
-                        type = ehisB;
+                        type = HistidineStates::B;
                     }
-                    fprintf(stderr, "Will use %s for residue %d\n", hh[type], pdba->resinfo[hisind].nr);
+                    fprintf(stderr,
+                            "Will use %s for residue %d\n",
+                            enumValueToString(type),
+                            pdba->resinfo[hisind].nr);
                 }
                 else
                 {
                     gmx_fatal(FARGS, "Incomplete ring in HIS%d", pdba->resinfo[hisind].nr);
                 }
 
-                pdba->resinfo[hisind].rtp = put_symtab(symtab, hh[type]);
+                pdba->resinfo[hisind].rtp = put_symtab(symtab, enumValueToString(type));
             }
         }
     }

@@ -1,7 +1,7 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2016,2017,2018,2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2016,2017,2018,2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -340,21 +340,30 @@ void pme_gpu_destroy_3dfft(const PmeGpu* pmeGpu);
 /*! \libinternal \brief
  * A GPU spline computation and charge spreading function.
  *
- * \param[in]  pmeGpu                 The PME GPU structure.
- * \param[in]  xReadyOnDevice         Event synchronizer indicating that the coordinates are ready in the device memory;
- *                                    can be nullptr when invoked on a separate PME rank or from PME tests.
- * \param[out] h_grids                The host-side grid buffers (used only if the result of the spread is expected on the host,
- *                                    e.g. testing or host-side FFT)
- * \param[in]  computeSplines         Should the computation of spline parameters and gridline indices be performed.
- * \param[in]  spreadCharges          Should the charges/coefficients be spread on the grid.
- * \param[in]  lambda                 The lambda value of the current system state.
+ * \param[in]  pmeGpu                    The PME GPU structure.
+ * \param[in]  xReadyOnDevice            Event synchronizer indicating that the coordinates are
+ *                                       ready in the device memory; can be nullptr when invoked
+ *                                       on a separate PME rank or from PME tests.
+ * \param[out] h_grids                   The host-side grid buffers (used only if the result
+ *                                       of the spread is expected on the host, e.g. testing
+ *                                       or host-side FFT)
+ * \param[in]  computeSplines            Should the computation of spline parameters and gridline
+ *                                       indices be performed.
+ * \param[in]  spreadCharges             Should the charges/coefficients be spread on the grid.
+ * \param[in]  lambda                    The lambda value of the current system state.
+ * \param[in]  useGpuDirectComm          Whether direct GPU PME-PP communication is active
+ * \param[in]  pmeCoordinateReceiverGpu  Coordinate receiver object, which must be valid when
+ *                                       direct GPU PME-PP communication is active
  */
-GPU_FUNC_QUALIFIER void pme_gpu_spread(const PmeGpu*         GPU_FUNC_ARGUMENT(pmeGpu),
-                                       GpuEventSynchronizer* GPU_FUNC_ARGUMENT(xReadyOnDevice),
-                                       float**               GPU_FUNC_ARGUMENT(h_grids),
-                                       bool                  GPU_FUNC_ARGUMENT(computeSplines),
-                                       bool                  GPU_FUNC_ARGUMENT(spreadCharges),
-                                       real GPU_FUNC_ARGUMENT(lambda)) GPU_FUNC_TERM;
+GPU_FUNC_QUALIFIER void
+pme_gpu_spread(const PmeGpu*                  GPU_FUNC_ARGUMENT(pmeGpu),
+               GpuEventSynchronizer*          GPU_FUNC_ARGUMENT(xReadyOnDevice),
+               float**                        GPU_FUNC_ARGUMENT(h_grids),
+               bool                           GPU_FUNC_ARGUMENT(computeSplines),
+               bool                           GPU_FUNC_ARGUMENT(spreadCharges),
+               real                           GPU_FUNC_ARGUMENT(lambda),
+               bool                           GPU_FUNC_ARGUMENT(useGpuDirectComm),
+               gmx::PmeCoordinateReceiverGpu* GPU_FUNC_ARGUMENT(pmeCoordinateReceiverGpu)) GPU_FUNC_TERM;
 
 /*! \libinternal \brief
  * 3D FFT R2C/C2R routine.
@@ -405,8 +414,8 @@ GPU_FUNC_QUALIFIER void pme_gpu_set_kernelparam_coordinates(const PmeGpu* GPU_FU
  * \param[in] pmeGpu         The PME GPU structure.
  * \returns                  Pointer to force data
  */
-GPU_FUNC_QUALIFIER void* pme_gpu_get_kernelparam_forces(const PmeGpu* GPU_FUNC_ARGUMENT(pmeGpu))
-        GPU_FUNC_TERM_WITH_RETURN(nullptr);
+GPU_FUNC_QUALIFIER DeviceBuffer<gmx::RVec> pme_gpu_get_kernelparam_forces(const PmeGpu* GPU_FUNC_ARGUMENT(pmeGpu))
+        GPU_FUNC_TERM_WITH_RETURN(DeviceBuffer<gmx::RVec>{});
 
 /*! \brief Return pointer to the sync object triggered after the PME force calculation completion
  * \param[in] pmeGpu         The PME GPU structure.

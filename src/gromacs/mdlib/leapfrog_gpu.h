@@ -1,7 +1,7 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -47,19 +47,17 @@
 #include "config.h"
 
 #if GMX_GPU_CUDA
-#    include "gromacs/gpu_utils/devicebuffer.cuh"
 #    include "gromacs/gpu_utils/gputraits.cuh"
 #endif
 #if GMX_GPU_SYCL
-#    include "gromacs/gpu_utils/devicebuffer_sycl.h"
 #    include "gromacs/gpu_utils/gputraits_sycl.h"
 #endif
 
+#include <memory>
+
+#include "gromacs/gpu_utils/devicebuffer_datatype.h"
 #include "gromacs/gpu_utils/hostallocator.h"
-#include "gromacs/pbcutil/pbc.h"
-#include "gromacs/pbcutil/pbc_aiuc.h"
 #include "gromacs/utility/arrayref.h"
-#include "gromacs/utility/classhelpers.h"
 
 class DeviceContext;
 class DeviceStream;
@@ -100,10 +98,11 @@ class LeapFrogGpu
 public:
     /*! \brief Constructor.
      *
-     * \param[in] deviceContext  Device context (dummy in CUDA).
-     * \param[in] deviceStream   Device stream to use.
+     * \param[in] deviceContext       Device context (dummy in CUDA).
+     * \param[in] deviceStream        Device stream to use.
+     * \param[in] numTempScaleValues  Number of temperature scale groups.
      */
-    LeapFrogGpu(const DeviceContext& deviceContext, const DeviceStream& deviceStream);
+    LeapFrogGpu(const DeviceContext& deviceContext, const DeviceStream& deviceStream, int numTempScaleValues);
     ~LeapFrogGpu();
 
     /*! \brief Integrate
@@ -122,15 +121,15 @@ public:
      * \param[in]     dtPressureCouple         Period between pressure coupling steps
      * \param[in]     prVelocityScalingMatrix  Parrinello-Rahman velocity scaling matrix
      */
-    void integrate(const DeviceBuffer<float3>        d_x,
-                   DeviceBuffer<float3>              d_xp,
-                   DeviceBuffer<float3>              d_v,
-                   const DeviceBuffer<float3>        d_f,
-                   const real                        dt,
-                   const bool                        doTemperatureScaling,
+    void integrate(DeviceBuffer<Float3>              d_x,
+                   DeviceBuffer<Float3>              d_xp,
+                   DeviceBuffer<Float3>              d_v,
+                   DeviceBuffer<Float3>              d_f,
+                   float                             dt,
+                   bool                              doTemperatureScaling,
                    gmx::ArrayRef<const t_grp_tcstat> tcstat,
-                   const bool                        doParrinelloRahman,
-                   const float                       dtPressureCouple,
+                   bool                              doParrinelloRahman,
+                   float                             dtPressureCouple,
                    const matrix                      prVelocityScalingMatrix);
 
     /*! \brief Set the integrator
@@ -139,15 +138,11 @@ public:
      * and temperature coupling groups. Copies inverse masses and temperature coupling groups
      * to the GPU.
      *
-     * \param[in] numAtoms            Number of atoms in the system.
-     * \param[in] inverseMasses       Inverse masses of atoms.
-     * \param[in] numTempScaleValues  Number of temperature scale groups.
-     * \param[in] tempScaleGroups     Maps the atom index to temperature scale value.
+     * \param[in] numAtoms        Number of atoms in the system.
+     * \param[in] inverseMasses   Inverse masses of atoms.
+     * \param[in] tempScaleGroups Maps the atom index to temperature scale value.
      */
-    void set(const int             numAtoms,
-             const real*           inverseMasses,
-             int                   numTempScaleValues,
-             const unsigned short* tempScaleGroups);
+    void set(int numAtoms, const real* inverseMasses, const unsigned short* tempScaleGroups);
 
     /*! \brief Class with hardware-specific interfaces and implementations.*/
     class Impl;
@@ -157,8 +152,7 @@ private:
     const DeviceContext& deviceContext_;
     //! GPU stream
     const DeviceStream& deviceStream_;
-    //! GPU kernel launch config
-    KernelLaunchConfig kernelLaunchConfig_;
+
     //! Number of atoms
     int numAtoms_;
 
@@ -173,7 +167,6 @@ private:
     int numTempScaleValues_ = 0;
     /*! \brief Array with temperature scaling factors.
      * This is temporary solution to remap data from t_grp_tcstat into plain array.
-     * Not used in SYCL.
      * \todo Replace with better solution.
      */
     gmx::HostVector<float> h_lambdas_;
@@ -193,7 +186,7 @@ private:
     int numTempScaleGroupsAlloc_ = -1;
 
     //! Vector with diagonal elements of the Parrinello-Rahman pressure coupling velocity rescale factors
-    float3 prVelocityScalingMatrixDiagonal_;
+    Float3 prVelocityScalingMatrixDiagonal_;
 };
 
 } // namespace gmx

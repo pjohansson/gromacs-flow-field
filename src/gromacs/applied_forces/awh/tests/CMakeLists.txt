@@ -1,7 +1,7 @@
 #
 # This file is part of the GROMACS molecular simulation package.
 #
-# Copyright (c) 2017,2020, by the GROMACS development team, led by
+# Copyright (c) 2017,2020,2021, by the GROMACS development team, led by
 # Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
 # and including many others, as listed in the AUTHORS file in the
 # top-level source directory and at http://www.gromacs.org.
@@ -34,8 +34,10 @@
 
 gmx_add_unit_test(AwhTest awh-test
     CPP_SOURCE_FILES
+        awh_setup.cpp
         bias.cpp
 	biasgrid.cpp
+        biassharing.cpp
         biasstate.cpp
         bias_fep_lambda_state.cpp
         )

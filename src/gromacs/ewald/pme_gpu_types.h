@@ -1,7 +1,7 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2016,2017,2018,2019,2020, by the GROMACS development team, led by
+ * Copyright (c) 2016,2017,2018,2019,2020,2021, by the GROMACS development team, led by
  * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
  * and including many others, as listed in the AUTHORS file in the
  * top-level source directory and at http://www.gromacs.org.
@@ -100,7 +100,7 @@ static_assert(sizeof(DeviceBuffer<int>) == 8,
  */
 struct PmeGpuConstParams
 {
-    /*! \brief Electrostatics coefficient = ONE_4PI_EPS0 / pme->epsilon_r */
+    /*! \brief Electrostatics coefficient = c_one4PiEps0 / pme->epsilon_r */
     float elFactor;
     /*! \brief Virial and energy GPU array. Size is c_virialAndEnergyCount (7) floats.
      * The element order is virxx, viryy, virzz, virxy, virxz, viryz, energy. */
@@ -171,7 +171,7 @@ struct PmeGpuAtomParams
      * The forces change and need to be copied from (and possibly to) the GPU for every PME
      * computation, but reallocation happens only at DD.
      */
-    HIDE_FROM_OPENCL_COMPILER(DeviceBuffer<float>) d_forces;
+    HIDE_FROM_OPENCL_COMPILER(DeviceBuffer<gmx::RVec>) d_forces;
     /*! \brief Global GPU memory array handle with ivec atom gridline indices.
      * Computed on GPU in the spline calculation part.
      */
@@ -224,6 +224,15 @@ struct PmeGpuKernelParamsBase
      * before launching spreading.
      */
     struct PmeGpuDynamicParams current;
+
+    /*! \brief Whether pipelining with PP communications is active
+     * char rather than bool to avoid problem with OpenCL compiler */
+    char usePipeline;
+    /*! \brief Start atom for this stage of pipeline */
+    int pipelineAtomStart;
+    /*! \brief End atom for this stage of pipeline */
+    int pipelineAtomEnd;
+
     /* These texture objects are only used in CUDA and are related to the grid size. */
     /*! \brief Texture object for accessing grid.d_fractShiftsTable */
     HIDE_FROM_OPENCL_COMPILER(DeviceTexture) fractShiftsTableTexture;
