@@ -47,6 +47,9 @@
 #include "gromacs/mdtypes/md_enums.h"
 #include "gromacs/utility/enumerationhelpers.h"
 
+// [FLOW]
+#include "gromacs/flow/accelerate.h"
+
 class gmx_ekindata_t;
 struct gmx_enerdata_t;
 struct gmx_global_stat;
@@ -156,7 +159,8 @@ void integrateVVFirstStep(int64_t                   step,
                           gmx::EnumerationArray<TrotterSequence, std::vector<int>> trotter_seq,
                           t_nrnb*                                                  nrnb,
                           FILE*                                                    fplog,
-                          gmx_wallcycle*                                           wcycle);
+                          gmx_wallcycle*                                           wcycle,
+                          const AccelerationFlowOpts& acceleration_flowopt);
 
 
 /*! \brief Make the second step of Velocity Verlet integration
@@ -229,7 +233,8 @@ void integrateVVSecondStep(int64_t                   step,
                            gmx::SimulationSignaller* nullSignaller,
                            gmx::EnumerationArray<TrotterSequence, std::vector<int>> trotter_seq,
                            t_nrnb*                                                  nrnb,
-                           gmx_wallcycle*                                           wcycle);
+                           gmx_wallcycle*                                           wcycle,
+                           const AccelerationFlowOpts& acceleration_flowopts);
 
 
 #endif // GMX_MDLIB_UPDATE_VV_H

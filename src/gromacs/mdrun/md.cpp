@@ -807,6 +807,7 @@ void gmx::LegacySimulator::do_md()
     // Prepare for (optional) flow field output by setting up the container
     // and reading all parameter values.
     FlowData flowcr;
+    const auto acceleration_flowopts = AccelerationFlowOpts();
 
     if (opt2bSet("-flow", nfile, fnm))
     {
@@ -1276,7 +1277,8 @@ void gmx::LegacySimulator::do_md()
                                  trotter_seq,
                                  nrnb,
                                  fplog,
-                                 wcycle);
+                                 wcycle,
+                                 acceleration_flowopts);
             if (vsite != nullptr && needVirtualVelocitiesThisStep)
             {
                 // Positions were calculated earlier
@@ -1521,7 +1523,8 @@ void gmx::LegacySimulator::do_md()
                                   &nullSignaller,
                                   trotter_seq,
                                   nrnb,
-                                  wcycle);
+                                  wcycle,
+                                  acceleration_flowopts);
         }
         else
         {
@@ -1610,7 +1613,6 @@ void gmx::LegacySimulator::do_md()
                         (simulationWork.useMts && step % ir->mtsLevels[1].stepFactor == 0)
                                 ? f.view().forceMtsCombinedWithPadding()
                                 : f.view().forceWithPadding();
-                const auto acceleration_flowopts = AccelerationFlowOpts();
                 upd.update_coords(*ir,
                                   step,
                                   md->homenr,
