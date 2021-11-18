@@ -623,6 +623,13 @@ static void updateMDLeapfrogGeneral(int                                 start,
             factorNH = 0.5 * nsttcouple * dt * nh_vxi[gt];
         }
 
+        // [FLOW]
+        // For group acceleration *only*, ensure that we are either using 
+        // non-local acceleration (i.e. full simulation box) or that 
+        // the atom is inside the locally defined acceleration box
+        const bool atomInLocalBox = acceleration_flowopts.contains(x[n], box);
+        const bool addGroupAcceleration = (!acceleration_flowopts.doLocalAcceleration) || atomInLocalBox;
+
         for (int d = 0; d < DIM; d++)
         {
             real vNew = (lg * vRel[d]
@@ -636,9 +643,11 @@ static void updateMDLeapfrogGeneral(int                                 start,
                     /* Apply the constant acceleration */
 
                     // [FLOW]
-                    // If checking for local acceleration, check coordinates here
+                    if (addGroupAcceleration)
+                    {
+                        vNew += acceleration[ga][d] * dt;
+                    }
 
-                    vNew += acceleration[ga][d] * dt;
                     break;
                 case AccelerationType::cosine:
                     if (d == XX)
