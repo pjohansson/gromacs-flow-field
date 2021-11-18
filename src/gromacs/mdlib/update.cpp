@@ -78,6 +78,9 @@
 #include "gromacs/utility/gmxassert.h"
 #include "gromacs/utility/smalloc.h"
 
+// [FLOW]
+#include "gromacs/flow/accelerate.h"
+
 using namespace gmx; // TODO: Remove when this file is moved into gmx namespace
 
 struct gmx_sd_const_t
@@ -127,7 +130,8 @@ public:
                        const matrix                                     M,
                        int                                              UpdatePart,
                        const t_commrec*                                 cr,
-                       bool                                             haveConstraints);
+                       bool                                             haveConstraints,
+                       const AccelerationFlowOpts&                      acceleration_flowopts);
 
     void finish_update(const t_inputrec&                   inputRecord,
                        bool                                havePartiallyFrozenAtoms,
@@ -225,7 +229,8 @@ void Update::update_coords(const t_inputrec&                 inputRecord,
                            const matrix                                     M,
                            int                                              updatePart,
                            const t_commrec*                                 cr,
-                           const bool                                       haveConstraints)
+                           const bool                                       haveConstraints,
+                           const AccelerationFlowOpts&                      acceleration_flowopts)
 {
     return impl_->update_coords(inputRecord,
                                 step,
@@ -241,7 +246,8 @@ void Update::update_coords(const t_inputrec&                 inputRecord,
                                 M,
                                 updatePart,
                                 cr,
-                                haveConstraints);
+                                haveConstraints,
+                                acceleration_flowopts);
 }
 
 void Update::finish_update(const t_inputrec& inputRecord,
@@ -555,6 +561,7 @@ static void updateMDLeapfrogGeneral(int                                 start,
                                     gmx::ArrayRef<const unsigned short> cTC,
                                     gmx::ArrayRef<const unsigned short> cAcceleration,
                                     const rvec* gmx_restrict            acceleration,
+                                    const AccelerationFlowOpts&         acceleration_flowopts,
                                     gmx::ArrayRef<const rvec>           invMassPerDim,
                                     const gmx_ekindata_t*               ekind,
                                     const matrix                        box,
@@ -631,6 +638,10 @@ static void updateMDLeapfrogGeneral(int                                 start,
                 case AccelerationType::none: break;
                 case AccelerationType::group:
                     /* Apply the constant acceleration */
+
+                    // [FLOW]
+                    // If checking for local acceleration, check coordinates here
+
                     vNew += acceleration[ga][d] * dt;
                     break;
                 case AccelerationType::cosine:
@@ -664,6 +675,7 @@ static void do_update_md(int                                  start,
                          const bool                           useConstantAcceleration,
                          gmx::ArrayRef<const unsigned short>  cAcceleration,
                          const rvec*                          acceleration,
+                         const AccelerationFlowOpts&          acceleration_flowopts,
                          gmx::ArrayRef<const real> gmx_unused invmass,
                          gmx::ArrayRef<const rvec>            invMassPerDim,
                          const gmx_ekindata_t*                ekind,
@@ -711,6 +723,7 @@ static void do_update_md(int                                  start,
                                                             cTC,
                                                             cAcceleration,
                                                             acceleration,
+                                                            acceleration_flowopts,
                                                             invMassPerDim,
                                                             ekind,
                                                             box,
@@ -732,6 +745,7 @@ static void do_update_md(int                                  start,
                                                              cTC,
                                                              cAcceleration,
                                                              acceleration,
+                                                             acceleration_flowopts,
                                                              invMassPerDim,
                                                              ekind,
                                                              box,
@@ -753,6 +767,7 @@ static void do_update_md(int                                  start,
                                                               cTC,
                                                               cAcceleration,
                                                               acceleration,
+                                                              acceleration_flowopts,
                                                               invMassPerDim,
                                                               ekind,
                                                               box,
@@ -1598,7 +1613,8 @@ void Update::Impl::update_coords(const t_inputrec&                 inputRecord,
                                  const matrix                                     M,
                                  int                                              updatePart,
                                  const t_commrec*                                 cr,
-                                 const bool                                       haveConstraints)
+                                 const bool                                       haveConstraints,
+                                 const AccelerationFlowOpts&                      acceleration_flowopts)
 {
     /* Running the velocity half does nothing except for velocity verlet */
     if ((updatePart == etrtVELOCITY1 || updatePart == etrtVELOCITY2) && !EI_VV(inputRecord.eI))
@@ -1655,6 +1671,7 @@ void Update::Impl::update_coords(const t_inputrec&                 inputRecord,
                                  inputRecord.useConstantAcceleration,
                                  cAcceleration_,
                                  inputRecord.opts.acceleration,
+                                 acceleration_flowopts,
                                  invMass,
                                  invMassPerDim,
                                  ekind,

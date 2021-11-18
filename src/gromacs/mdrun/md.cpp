@@ -157,6 +157,7 @@
 #include "shellfc.h"
 
 // [FLOW_FIELD]
+#include "gromacs/flow/accelerate.h"
 #include "gromacs/flow/flow_field.h"
 
 using gmx::SimulationSignaller;
@@ -1609,6 +1610,7 @@ void gmx::LegacySimulator::do_md()
                         (simulationWork.useMts && step % ir->mtsLevels[1].stepFactor == 0)
                                 ? f.view().forceMtsCombinedWithPadding()
                                 : f.view().forceWithPadding();
+                const auto acceleration_flowopts = AccelerationFlowOpts();
                 upd.update_coords(*ir,
                                   step,
                                   md->homenr,
@@ -1623,7 +1625,8 @@ void gmx::LegacySimulator::do_md()
                                   M,
                                   etrtPOSITION,
                                   cr,
-                                  constr != nullptr);
+                                  constr != nullptr,
+                                  acceleration_flowopts);
 
                 wallcycle_stop(wcycle, WallCycleCounter::Update);
 

@@ -47,6 +47,9 @@
 #include "gromacs/utility/arrayref.h"
 #include "gromacs/utility/real.h"
 
+// [FLOW]
+#include "gromacs/flow/accelerate.h"
+
 class ekinstate_t;
 class gmx_ekindata_t;
 struct gmx_enerdata_t;
@@ -138,7 +141,8 @@ public:
                        const matrix                                     M,
                        int                                              updatePart,
                        const t_commrec*                                 cr,
-                       bool                                             haveConstraints);
+                       bool                                             haveConstraints,
+                       const AccelerationFlowOpts&                      acceleration_flowopts);
 
     /*! \brief Finalize the coordinate update.
      *
