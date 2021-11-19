@@ -1631,6 +1631,23 @@ static void do_inputrec(gmx::ISerializer* serializer, t_inputrec* ir, int file_v
             }
         }
     }
+    // [FLOW]
+    {
+        serializer->doBool(&ir->acceleration_doLocal);
+
+        if (serializer->reading())
+        {
+            snew(ir->acceleration_local_origin, DIM);
+            snew(ir->acceleration_local_extent, DIM);
+        }
+
+        if (ir->acceleration_doLocal)
+        {
+
+            serializer->doRealArray(ir->acceleration_local_origin, DIM);
+            serializer->doRealArray(ir->acceleration_local_extent, DIM);
+        }
+    }
     serializer->doIntArray(ir->opts.egp_flags, ir->opts.ngener * ir->opts.ngener);
 
     /* First read the lists with annealing and npoints for each group */

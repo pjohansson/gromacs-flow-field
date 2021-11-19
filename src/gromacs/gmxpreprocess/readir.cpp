@@ -94,6 +94,9 @@
 #include "gromacs/utility/stringutil.h"
 #include "gromacs/utility/textwriter.h"
 
+// [FLOW]
+#include "gromacs/flow/accelerate.h"
+
 #define NOGID 255
 
 using gmx::BasicVector;
@@ -111,7 +114,9 @@ struct gmx_inputrec_strings
             acceleration[STRLEN], freeze[STRLEN], frdim[STRLEN], energy[STRLEN], user1[STRLEN],
             user2[STRLEN], vcm[STRLEN], x_compressed_groups[STRLEN], couple_moltype[STRLEN],
             orirefitgrp[STRLEN], egptable[STRLEN], egpexcl[STRLEN], wall_atomtype[STRLEN],
-            wall_density[STRLEN], deform[STRLEN], QMMM[STRLEN], imd_grp[STRLEN];
+            wall_density[STRLEN], deform[STRLEN], QMMM[STRLEN], imd_grp[STRLEN],
+            // [FLOW]
+            acc_local_origin[STRLEN], acc_local_extent[STRLEN];
     gmx::EnumerationArray<FreeEnergyPerturbationCouplingType, std::string> fep_lambda;
     char                                                                   lambda_weights[STRLEN];
     std::vector<std::string>                                               pullGroupNames;
@@ -1772,6 +1777,30 @@ static void convertReals(warninp_t wi, gmx::ArrayRef<const std::string> inputs, 
     }
 }
 
+// [FLOW]
+//! \brief Read exactly N values from a string into output real*.
+static void convertRealsN(warninp_t wi, const char* input, const char* name, const size_t N, real* output)
+{
+    const auto values = gmx::splitString(input);
+
+    if (values.size() != N)
+    {
+        auto message = gmx::formatString(
+                "Invalid value for mdp option %s. %s should consist of %lu real "
+                "numbers separated by whitespace (got %lu).",
+                name,
+                name,
+                N, 
+                values.size()
+        );
+
+        warning_error(wi, message);
+        return;
+    }
+
+    convertReals(wi, values, name, output);
+}
+
 static void convertRvecs(warninp_t wi, gmx::ArrayRef<const std::string> inputs, const char* name, rvec* outputs)
 {
     int i = 0, d = 0;
@@ -2370,6 +2399,16 @@ void get_ir(const char*     mdparin,
     printStringNewline(&inp, "Non-equilibrium MD stuff");
     setStringEntry(&inp, "acc-grps", inputrecStrings->accelerationGroups, nullptr);
     setStringEntry(&inp, "accelerate", inputrecStrings->acceleration, nullptr);
+
+    // [FLOW] Start of local acceleration options
+    printStringNoNewline(&inp, "FLOW: Accelerate atoms inside a set local area only");
+    printStringNoNewline(&inp, "Area begins at an origin and is of a system absolute size (extent)");
+    printStringNoNewline(&inp, "Negative extent along any dimension means use entire length");
+    ir->acceleration_doLocal = (getEnum<Boolean>(&inp, "accelerate-local", wi) == Boolean::Yes);
+    setStringEntry(&inp, "accelerate-local-origin", inputrecStrings->acc_local_origin, nullptr);
+    setStringEntry(&inp, "accelerate-local-extent", inputrecStrings->acc_local_extent, nullptr);
+    // [FLOW] End of local acceleration options 
+
     setStringEntry(&inp, "freezegrps", inputrecStrings->freeze, nullptr);
     setStringEntry(&inp, "freezedim", inputrecStrings->frdim, nullptr);
     ir->cos_accel = get_ereal(&inp, "cos-acceleration", 0, wi);
@@ -2843,6 +2882,15 @@ void get_ir(const char*     mdparin,
     if (ir->bDoAwh)
     {
         gmx::checkAwhParams(*ir->awhParams, *ir, wi);
+    }
+
+    // [FLOW]
+    if (ir->acceleration_doLocal)
+    {
+        snew(ir->acceleration_local_origin, DIM);
+        snew(ir->acceleration_local_extent, DIM);
+        convertRealsN(wi, inputrecStrings->acc_local_origin, "accelerate-local-origin", DIM, ir->acceleration_local_origin);
+        convertRealsN(wi, inputrecStrings->acc_local_extent, "accelerate-local-extent", DIM, ir->acceleration_local_extent);
     }
 
     sfree(dumstr[0]);

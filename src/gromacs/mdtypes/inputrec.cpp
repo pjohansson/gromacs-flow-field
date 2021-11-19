@@ -1068,6 +1068,11 @@ void pr_inputrec(FILE* fp, int indent, const char* title, const t_inputrec* ir, 
         PR("userreal2", ir->userreal2);
         PR("userreal3", ir->userreal3);
         PR("userreal4", ir->userreal4);
+        
+        // [FLOW]
+        PS("accelerate-local", ir->acceleration_doLocal ? "yes" : "no");
+        pr_rvec(fp, indent, "accelerate-local-origin", ir->acceleration_local_origin, DIM, true);
+        pr_rvec(fp, indent, "accelerate-local-extent", ir->acceleration_local_extent, DIM, true);
 
         if (!bMDPformat)
         {

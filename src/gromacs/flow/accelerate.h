@@ -11,12 +11,12 @@ struct AccelerationFlowOpts {
     :doLocalAcceleration{true}, rmin{rmin}, rmax{rmax} {}
 
     /*! \brief Check if a position is inside the acceleration box.
-     * 
-     * Note: Always returns true if `doLocalAcceleration == false`.
      *
      * \param[in]   r       Position to check
      * \param[in]   box     Box size of system. Used to put r in the box before checking
      * \param[out]  result  Whether the position is inside or not
+     * 
+     * Note: Always returns true if `doLocalAcceleration == false`.
      */
     bool contains(const rvec r, const matrix box) const 
     {
