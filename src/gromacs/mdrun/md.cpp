@@ -807,7 +807,7 @@ void gmx::LegacySimulator::do_md()
     // Prepare for (optional) flow field output by setting up the container
     // and reading all parameter values.
     FlowData flowcr;
-    const auto acceleration_flowopts = AccelerationFlowOpts();
+    const auto acceleration_flowopts = AccelerationFlowOpts(ir);
 
     if (opt2bSet("-flow", nfile, fnm))
     {
@@ -817,6 +817,11 @@ void gmx::LegacySimulator::do_md()
         {
             print_flow_collection_information(flowcr, ir->delta_t);
         }
+    }
+
+    if (MASTER(cr))
+    {
+        acceleration_flowopts.print_info();
     }
 
     step     = ir->init_step;
