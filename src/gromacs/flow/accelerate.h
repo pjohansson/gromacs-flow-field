@@ -48,11 +48,12 @@ struct AccelerationFlowOpts {
                 continue;
             }
 
-            auto p = fmod(r[d], box[d][d]);
+            auto p = r[d];
             while (p < 0.0)
             {
                 p += box[d][d];
             }
+            p = fmod(p, box[d][d]);
 
             if ((p < rmin[d]) || (p > rmax[d]))
             {
