@@ -577,6 +577,11 @@ struct t_inputrec // NOLINT (clang-analyzer-optin.performance.Padding)
 
     //! KVT for storing simulation parameters that are not part of the mdp file.
     std::unique_ptr<gmx::KeyValueTreeObject> internalParameters;
+
+    // [FLOW]
+    bool acceleration_doLocal = false;
+    real* acceleration_local_origin = nullptr;
+    real* acceleration_local_extent = nullptr;
 };
 
 int ir_optimal_nstcalcenergy(const t_inputrec* ir);
