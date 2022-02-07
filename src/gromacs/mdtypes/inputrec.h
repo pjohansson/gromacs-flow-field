@@ -583,6 +583,7 @@ struct t_inputrec // NOLINT (clang-analyzer-optin.performance.Padding)
     bool acceleration_doLocal = false;
     real* acceleration_local_origin = nullptr;
     real* acceleration_local_extent = nullptr;
+    real acceleration_tau = 0.0;
 };
 
 int ir_optimal_nstcalcenergy(const t_inputrec* ir);

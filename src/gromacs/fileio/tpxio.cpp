@@ -1646,6 +1646,7 @@ static void do_inputrec(gmx::ISerializer* serializer, t_inputrec* ir, int file_v
 
             serializer->doRealArray(ir->acceleration_local_origin, DIM);
             serializer->doRealArray(ir->acceleration_local_extent, DIM);
+            serializer->doReal(&ir->acceleration_tau);
         }
     }
     serializer->doIntArray(ir->opts.egp_flags, ir->opts.ngener * ir->opts.ngener);

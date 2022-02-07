@@ -562,6 +562,7 @@ static void updateMDLeapfrogGeneral(int                                 start,
                                     gmx::ArrayRef<const unsigned short> cAcceleration,
                                     const rvec* gmx_restrict            acceleration,
                                     const AccelerationFlowOpts&         acceleration_flowopts,
+                                    const real                          acceleration_multiplier,
                                     gmx::ArrayRef<const rvec>           invMassPerDim,
                                     const gmx_ekindata_t*               ekind,
                                     const matrix                        box,
@@ -649,7 +650,7 @@ static void updateMDLeapfrogGeneral(int                                 start,
                     // [FLOW]
                     if (addGroupAcceleration)
                     {
-                        vNew += acceleration[ga][d] * dt;
+                        vNew += acceleration_multiplier * acceleration[ga][d] * dt;
                     }
 
                     break;
@@ -708,6 +709,8 @@ static void do_update_md(int                                  start,
 
     /* NEMD (also cosine) acceleration is applied in updateMDLeapFrogGeneral */
     const bool doAcceleration = (useConstantAcceleration || ekind->cosacc.cos_accel != 0);
+    // [FLOW]: Calculate acceleration multiplier from the given step
+    const real acceleration_multiplier = acceleration_flowopts.calc_acceleration_multiplier(step);
 
     if (doNoseHoover || doPROffDiagonal || doAcceleration)
     {
@@ -733,6 +736,7 @@ static void do_update_md(int                                  start,
                                                             cAcceleration,
                                                             acceleration,
                                                             acceleration_flowopts,
+                                                            acceleration_multiplier,
                                                             invMassPerDim,
                                                             ekind,
                                                             box,
@@ -755,6 +759,7 @@ static void do_update_md(int                                  start,
                                                              cAcceleration,
                                                              acceleration,
                                                              acceleration_flowopts,
+                                                             acceleration_multiplier,
                                                              invMassPerDim,
                                                              ekind,
                                                              box,
@@ -777,6 +782,7 @@ static void do_update_md(int                                  start,
                                                               cAcceleration,
                                                               acceleration,
                                                               acceleration_flowopts,
+                                                              acceleration_multiplier,
                                                               invMassPerDim,
                                                               ekind,
                                                               box,

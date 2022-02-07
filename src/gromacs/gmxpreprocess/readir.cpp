@@ -2401,12 +2401,16 @@ void get_ir(const char*     mdparin,
     setStringEntry(&inp, "accelerate", inputrecStrings->acceleration, nullptr);
 
     // [FLOW] Start of local acceleration options
-    printStringNoNewline(&inp, "FLOW: Accelerate atoms inside a set local area only");
+    printStringNewline(&inp, "FLOW: Accelerate atoms inside a set local area only");
+    ir->acceleration_doLocal = (getEnum<Boolean>(&inp, "accelerate-local", wi) == Boolean::Yes);
     printStringNoNewline(&inp, "Area begins at an origin and is of a system absolute size (extent)");
     printStringNoNewline(&inp, "Negative extent along any dimension means use entire length");
-    ir->acceleration_doLocal = (getEnum<Boolean>(&inp, "accelerate-local", wi) == Boolean::Yes);
     setStringEntry(&inp, "accelerate-local-origin", inputrecStrings->acc_local_origin, nullptr);
     setStringEntry(&inp, "accelerate-local-extent", inputrecStrings->acc_local_extent, nullptr);
+    printStringNoNewline(&inp, "For tau positive: increase acceleration from 0 at t=0 to full at t=tau");
+    ir->acceleration_tau     = get_ereal(&inp, "accelerate-tau", 0.0, wi);
+
+    printStringNewline(&inp, "Other Gromacs Non-equilibrium options");
     // [FLOW] End of local acceleration options 
 
     setStringEntry(&inp, "freezegrps", inputrecStrings->freeze, nullptr);
