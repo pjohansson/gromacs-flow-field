@@ -1069,6 +1069,7 @@ void pr_inputrec(FILE* fp, int indent, const char* title, const t_inputrec* ir, 
         PS("accelerate-local", ir->acceleration_doLocal ? "yes" : "no");
         pr_rvec(fp, indent, "accelerate-local-origin", ir->acceleration_local_origin, DIM, true);
         pr_rvec(fp, indent, "accelerate-local-extent", ir->acceleration_local_extent, DIM, true);
+        PR("accelerate-tau", ir->acceleration_tau);
 
         if (!bMDPformat)
         {
