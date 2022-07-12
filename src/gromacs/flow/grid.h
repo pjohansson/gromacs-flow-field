@@ -1,0 +1,138 @@
+#include <array>
+#include <optional>
+#include <stdexcept>
+#include <vector>
+
+#include "gromacs/math/vectypes.h"
+#include "gromacs/utility/cstringutil.h"
+
+#ifndef MD_FLOW_FIELD_GRID
+#define MD_FLOW_FIELD_GRID
+
+namespace flow {
+
+template<typename T = double>
+class Grid3d {
+public:
+    //! Empty constructor
+    Grid3d() {}
+
+    //! Default constructor of grid, does not set values
+    Grid3d(const gmx::IVec                shape,
+           const gmx::RVec                spacing,
+           const std::optional<gmx::RVec> opt_origin)
+    :shape{shape},
+     spacing{spacing}
+    {
+        if ((shape[XX] < 1) || (shape[YY] < 1) || (shape[ZZ] < 1))
+        {
+            char buf[STRLEN];
+            snprintf(
+                buf,
+                STRLEN,
+                "Grid3d::Grid3d: shape (%d, %d, %d) "
+                "must be positive along all directions",
+                shape[XX], shape[YY], shape[ZZ]
+            );
+
+            throw std::invalid_argument(buf);
+        }
+
+        if (opt_origin)
+        {
+            origin = opt_origin.value();
+        }
+
+        for (size_t i = 0; i < DIM; ++i)
+        {
+            box[i] = static_cast<real>(shape[i]) * spacing[i];
+        }
+
+        const auto num_elements = shape[XX] * shape[YY] * shape[ZZ];
+        values.resize(num_elements);
+    }
+
+    //! Assign `value` to all cells in grid
+    void assign(const T value)
+    {
+        for (auto& v : values)
+        {
+            v = value;
+        }
+    }
+
+    //! Grid cell reference accessors
+    //!
+    //! Throws `std::out_of_range` if 3D position is not within grid.
+    const T& at(const int ix, const int iy, const int iz) const;
+    T& at(const int ix, const int iy, const int iz);
+
+    //! Grid cell reference accessors from particle positions
+    //!
+    //! Cell access saturates at the grid edges: positions outside
+    //! access the cell at the closest edge.
+    const T& at_pos(const rvec r) const;
+    T& at_pos(const rvec r);
+
+    //! Check whether a position is contained within the grid
+    bool contains(const rvec r) const
+    {
+        return (
+            r[XX] >= origin[XX]
+            && r[XX] <= origin[XX] + box[XX]
+            && r[YY] >= origin[YY]
+            && r[YY] <= origin[YY] + box[YY]
+            && r[ZZ] >= origin[ZZ]
+            && r[ZZ] <= origin[ZZ] + box[ZZ]
+        );
+    }
+
+    //! Number of cells along each axis
+    gmx::IVec shape;
+
+    //! Size of cells along each axis
+    gmx::RVec spacing;
+
+    //! Position of grid corner in system
+    gmx::RVec origin = {0.0, 0.0, 0.0};
+
+    //! Physical size of grid
+    gmx::RVec box;
+
+    //! Values inside the 3D grid
+    //!
+    //! Stored in Z-Y-X order.
+    std::vector<T> values;
+
+private:
+    //! Get the 1D index in the `values` array for a 3D grid position
+    //!
+    //! Throws `std::out_of_range` if 3D position is not within grid.
+    size_t _index(const size_t ix, const size_t iy, const size_t iz) const
+    {
+        const auto nx = static_cast<size_t>(shape[XX]);
+        const auto ny = static_cast<size_t>(shape[YY]);
+        const auto nz = static_cast<size_t>(shape[ZZ]);
+
+        if ((ix >= nx) || (iy >= ny) || (iz >= nz))
+        {
+            char buf[STRLEN];
+            snprintf(
+                buf,
+                STRLEN,
+                "Grid3d::_index: position (%lu, %lu, %lu) not within "
+                "grid of size (%lu, %lu, %lu)",
+                ix, iy, iz,
+                nx, ny, nz
+            );
+
+            throw std::out_of_range(buf);
+        }
+
+        return iz + iy * nz + ix * (ny * nz);
+    }
+};
+
+} // namespace flow
+
+#endif // MD_FLOW_FIELD_GRID
