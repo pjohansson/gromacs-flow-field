@@ -815,8 +815,8 @@ int Mdrunner::mdrunner()
                     gpuAccelerationOfNonbondedIsUseful(mdlog, *inputrec, GMX_THREAD_MPI),
                     hw_opt.nthreads_tmpi);
             useGpuForPme = decideWhetherToUseGpusForPmeWithThreadMpi(
-                    useGpuForNonbonded, pmeTarget, numDevicesToUse, userGpuTaskAssignment, *hwinfo_,
-                    *inputrec, hw_opt.nthreads_tmpi, domdecOptions.numPmeRanks);
+                    useGpuForNonbonded, pmeTarget, pmeFftTarget, numDevicesToUse, userGpuTaskAssignment,
+                    *hwinfo_, *inputrec, hw_opt.nthreads_tmpi, domdecOptions.numPmeRanks);
         }
         GMX_CATCH_ALL_AND_EXIT_WITH_FATAL_ERROR
 
@@ -835,7 +835,7 @@ int Mdrunner::mdrunner()
         // master and spawned threads joins at the end of this block.
     }
 
-    GMX_RELEASE_ASSERT(ms || simulationCommunicator != MPI_COMM_NULL,
+    GMX_RELEASE_ASSERT(!GMX_MPI || ms || simulationCommunicator != MPI_COMM_NULL,
                        "Must have valid communicator unless running a multi-simulation");
     CommrecHandle crHandle = init_commrec(simulationCommunicator);
     t_commrec*    cr       = crHandle.get();
@@ -891,8 +891,8 @@ int Mdrunner::mdrunner()
                 nonbondedTarget, userGpuTaskAssignment, emulateGpuNonbonded, canUseGpuForNonbonded,
                 gpuAccelerationOfNonbondedIsUseful(mdlog, *inputrec, !GMX_THREAD_MPI), gpusWereDetected);
         useGpuForPme = decideWhetherToUseGpusForPme(
-                useGpuForNonbonded, pmeTarget, userGpuTaskAssignment, *hwinfo_, *inputrec,
-                cr->sizeOfDefaultCommunicator, domdecOptions.numPmeRanks, gpusWereDetected);
+                useGpuForNonbonded, pmeTarget, pmeFftTarget, userGpuTaskAssignment, *hwinfo_,
+                *inputrec, cr->sizeOfDefaultCommunicator, domdecOptions.numPmeRanks, gpusWereDetected);
         useGpuForBonded = decideWhetherToUseGpusForBonded(useGpuForNonbonded, useGpuForPme,
                                                           bondedTarget, *inputrec, mtop,
                                                           domdecOptions.numPmeRanks, gpusWereDetected);
@@ -1231,6 +1231,19 @@ int Mdrunner::mdrunner()
         // The builder's job is done, so destruct it
         ddBuilder.reset(nullptr);
         // Note that local state still does not exist yet.
+    }
+    // Ensure that all atoms within the same update group are in the
+    // same periodic image. Otherwise, a simulation that did not use
+    // update groups (e.g. a single-rank simulation) cannot always be
+    // correctly restarted in a way that does use update groups
+    // (e.g. a multi-rank simulation).
+    if (isSimulationMasterRank)
+    {
+        const bool useUpdateGroups = cr->dd ? ddUsesUpdateGroups(*cr->dd) : false;
+        if (useUpdateGroups)
+        {
+            putUpdateGroupAtomsInSamePeriodicImage(*cr->dd, mtop, globalState->box, globalState->x);
+        }
     }
 
     // The GPU update is decided here because we need to know whether the constraints or
