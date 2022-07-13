@@ -1,13 +1,9 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 1991-2000, University of Groningen, The Netherlands.
- * Copyright (c) 2001-2004, The GROMACS development team.
- * Copyright (c) 2013,2014,2015,2016,2017 by the GROMACS development team.
- * Copyright (c) 2018,2019,2020,2021, by the GROMACS development team, led by
- * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
- * and including many others, as listed in the AUTHORS file in the
- * top-level source directory and at http://www.gromacs.org.
+ * Copyright 1991- The GROMACS Authors
+ * and the project initiators Erik Lindahl, Berk Hess and David van der Spoel.
+ * Consult the AUTHORS/COPYING files and https://www.gromacs.org for details.
  *
  * GROMACS is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
@@ -21,7 +17,7 @@
  *
  * You should have received a copy of the GNU Lesser General Public
  * License along with GROMACS; if not, see
- * http://www.gnu.org/licenses, or write to the Free Software Foundation,
+ * https://www.gnu.org/licenses, or write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA.
  *
  * If you want to redistribute modifications to GROMACS, please
@@ -30,10 +26,10 @@
  * consider code for inclusion in the official distribution, but
  * derived work must not be called official GROMACS. Details are found
  * in the README & COPYING files - if they are missing, get the
- * official version at http://www.gromacs.org.
+ * official version at https://www.gromacs.org.
  *
  * To help us fund GROMACS development, we humbly ask that you cite
- * the research papers on the package. Check out http://www.gromacs.org.
+ * the research papers on the package. Check out https://www.gromacs.org.
  */
 /*! \libinternal \file
  *
@@ -74,19 +70,6 @@ class DeviceStream;
 enum class GpuTaskCompletion;
 class PmeGpuProgram;
 class GpuEventSynchronizer;
-
-/*! \brief Hack to selectively enable some parts of PME during unit testing.
- *
- * Set to \c false by default. If any of the tests sets it to \c true, it will
- * make the compatibility check consider PME to be supported in SYCL builds.
- *
- * Currently we don't have proper PME implementation with SYCL, but we still want
- * to run tests for some of the kernels.
- *
- * \todo Remove after #3927 is done and PME is fully enabled in SYCL builds.
- */
-//NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
-extern bool g_allowPmeWithSyclForTesting;
 
 namespace gmx
 {
@@ -142,6 +125,29 @@ enum class PmeRunMode
 /*! \brief Return the smallest allowed PME grid size for \p pmeOrder */
 int minimalPmeGridSize(int pmeOrder);
 
+/*! \brief Calculates the number of grid lines used as halo region for PME decomposition.
+ *
+ * This function is only used for PME GPU decomposition case
+ *
+ * \param[in] pmeOrder                      PME interpolation order
+ * \param[in] haloExtentForAtomDisplacement extent of halo region in nm to account for atom
+ *                                          displacement
+ * \param[in] gridSpacing                   spacing between grid lines
+ *
+ * \returns  extended halo region used in GPU PME decomposition
+ */
+int numGridLinesForExtendedHaloRegion(int pmeOrder, real haloExtentForAtomDisplacement, real gridSpacing);
+
+/*! \brief
+ * Gets grid spacing from simulation box and grid dimension
+ *
+ * \param[in]     box       Simulation box
+ * \param[in]     gridDim   Fourier grid dimension
+ *
+ * \returns  Grid spacing value
+ */
+real getGridSpacingFromBox(const matrix box, const ivec gridDim);
+
 //! Return whether the grid of \c pme is identical to \c grid_size.
 bool gmx_pme_grid_matches(const gmx_pme_t& pme, const ivec grid_size);
 
@@ -161,6 +167,9 @@ bool gmx_pme_check_restrictions(int  pme_order,
                                 int  nky,
                                 int  nkz,
                                 int  numPmeDomainsAlongX,
+                                int  numPmeDomainsAlongY,
+                                int  extendedHaloRegion,
+                                bool useGpuPme,
                                 bool useThreads,
                                 bool errorsAreFatal);
 
@@ -177,6 +186,8 @@ bool gmx_pme_check_restrictions(int  pme_order,
 gmx_pme_t* gmx_pme_init(const t_commrec*     cr,
                         const NumPmeDomains& numPmeDomains,
                         const t_inputrec*    ir,
+                        const matrix         box,
+                        real                 haloExtentForAtomDisplacement,
                         gmx_bool             bFreeEnergy_q,
                         gmx_bool             bFreeEnergy_lj,
                         gmx_bool             bReproducible,

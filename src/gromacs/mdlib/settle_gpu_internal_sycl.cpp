@@ -1,10 +1,9 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2019,2020,2021, by the GROMACS development team, led by
- * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
- * and including many others, as listed in the AUTHORS file in the
- * top-level source directory and at http://www.gromacs.org.
+ * Copyright 2019- The GROMACS Authors
+ * and the project initiators Erik Lindahl, Berk Hess and David van der Spoel.
+ * Consult the AUTHORS/COPYING files and https://www.gromacs.org for details.
  *
  * GROMACS is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
@@ -18,7 +17,7 @@
  *
  * You should have received a copy of the GNU Lesser General Public
  * License along with GROMACS; if not, see
- * http://www.gnu.org/licenses, or write to the Free Software Foundation,
+ * https://www.gnu.org/licenses, or write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA.
  *
  * If you want to redistribute modifications to GROMACS, please
@@ -27,10 +26,10 @@
  * consider code for inclusion in the official distribution, but
  * derived work must not be called official GROMACS. Details are found
  * in the README & COPYING files - if they are missing, get the
- * official version at http://www.gromacs.org.
+ * official version at https://www.gromacs.org.
  *
  * To help us fund GROMACS development, we humbly ask that you cite
- * the research papers on the package. Check out http://www.gromacs.org.
+ * the research papers on the package. Check out https://www.gromacs.org.
  */
 /*! \internal \file
  *
@@ -52,16 +51,15 @@
 namespace gmx
 {
 
-using cl::sycl::access::fence_space;
-using cl::sycl::access::mode;
-using cl::sycl::access::target;
+using sycl::access::fence_space;
+using mode = sycl::access_mode;
 
 //! Number of work-items in a work-group
 constexpr static int sc_workGroupSize = 256;
 
 //! \brief Function returning the SETTLE kernel lambda.
 template<bool updateVelocities, bool computeVirial>
-auto settleKernel(cl::sycl::handler&                                           cgh,
+auto settleKernel(sycl::handler&                                               cgh,
                   const int                                                    numSettles,
                   DeviceAccessor<WaterMolecule, mode::read>                    a_settles,
                   SettleParameters                                             pars,
@@ -88,8 +86,7 @@ auto settleKernel(cl::sycl::handler&                                           c
     auto sm_threadVirial = [&]() {
         if constexpr (computeVirial)
         {
-            return cl::sycl::accessor<float, 1, mode::read_write, target::local>(
-                    cl::sycl::range<1>(sc_workGroupSize * 6), cgh);
+            return sycl_2020::local_accessor<float, 1>(sycl::range<1>(sc_workGroupSize * 6), cgh);
         }
         else
         {
@@ -97,7 +94,7 @@ auto settleKernel(cl::sycl::handler&                                           c
         }
     }();
 
-    return [=](cl::sycl::nd_item<1> itemIdx) {
+    return [=](sycl::nd_item<1> itemIdx) {
         constexpr float almost_zero = real(1e-12);
         const int       settleIdx   = itemIdx.get_global_linear_id();
         const int       threadIdx = itemIdx.get_local_linear_id(); // Work-item index in work-group
@@ -144,9 +141,9 @@ auto settleKernel(cl::sycl::handler&                                           c
             float yaksyd = zakszd * xaksxd - xakszd * zaksxd;
             float zaksyd = xakszd * yaksxd - yakszd * xaksxd;
 
-            float axlng = cl::sycl::rsqrt(xaksxd * xaksxd + yaksxd * yaksxd + zaksxd * zaksxd);
-            float aylng = cl::sycl::rsqrt(xaksyd * xaksyd + yaksyd * yaksyd + zaksyd * zaksyd);
-            float azlng = cl::sycl::rsqrt(xakszd * xakszd + yakszd * yakszd + zakszd * zakszd);
+            float axlng = sycl::rsqrt(xaksxd * xaksxd + yaksxd * yaksxd + zaksxd * zaksxd);
+            float aylng = sycl::rsqrt(xaksyd * xaksyd + yaksyd * yaksyd + zaksyd * zaksyd);
+            float azlng = sycl::rsqrt(xakszd * xakszd + yakszd * yakszd + zakszd * zakszd);
 
             // TODO {1,2,3} indexes should be swapped with {.x, .y, .z} components.
             //      This way, we will be able to use vector ops more.
@@ -186,7 +183,7 @@ auto settleKernel(cl::sycl::handler&                                           c
             c1d[ZZ] = trns1[ZZ] * c1[XX] + trns2[ZZ] * c1[YY] + trns3[ZZ] * c1[ZZ];
 
 
-            const float sinphi = a1d_z * cl::sycl::rsqrt(pars.ra * pars.ra);
+            const float sinphi = a1d_z * sycl::rsqrt(pars.ra * pars.ra);
             float       tmp2   = 1.0F - sinphi * sinphi;
 
             if (almost_zero > tmp2)
@@ -194,12 +191,12 @@ auto settleKernel(cl::sycl::handler&                                           c
                 tmp2 = almost_zero;
             }
 
-            const float tmp    = cl::sycl::rsqrt(tmp2);
+            const float tmp    = sycl::rsqrt(tmp2);
             const float cosphi = tmp2 * tmp;
             const float sinpsi = (b1d[ZZ] - c1d[ZZ]) * pars.irc2 * tmp;
             tmp2               = 1.0F - sinpsi * sinpsi;
 
-            const float cospsi = tmp2 * cl::sycl::rsqrt(tmp2);
+            const float cospsi = tmp2 * sycl::rsqrt(tmp2);
 
             const float a2d_y = pars.ra * cosphi;
             const float b2d_x = -pars.rc * cospsi;
@@ -215,12 +212,12 @@ auto settleKernel(cl::sycl::handler&                                           c
                     b0d[XX] * b1d[YY] - b1d[XX] * b0d[YY] + c0d[XX] * c1d[YY] - c1d[XX] * c0d[YY];
             const float al2be2 = alpha * alpha + beta * beta;
             tmp2               = (al2be2 - gamma * gamma);
-            const float sinthe = (alpha * gamma - beta * tmp2 * cl::sycl::rsqrt(tmp2))
-                                 * cl::sycl::rsqrt(al2be2 * al2be2);
+            const float sinthe =
+                    (alpha * gamma - beta * tmp2 * sycl::rsqrt(tmp2)) * sycl::rsqrt(al2be2 * al2be2);
 
             /*  --- Step4  A3' --- */
             tmp2         = 1.0F - sinthe * sinthe;
-            float costhe = tmp2 * cl::sycl::rsqrt(tmp2);
+            float costhe = tmp2 * sycl::rsqrt(tmp2);
 
             Float3 a3d, b3d, c3d;
 
@@ -312,7 +309,7 @@ auto settleKernel(cl::sycl::handler&                                           c
         if constexpr (computeVirial)
         {
             // This is to ensure that all threads saved the data before reduction starts
-            subGroupBarrier(itemIdx);
+            itemIdx.barrier(fence_space::local_space);
             constexpr int blockSize    = sc_workGroupSize;
             const int     subGroupSize = itemIdx.get_sub_group().get_max_local_range()[0];
             // Reduce up to one virial per thread block
@@ -334,6 +331,10 @@ auto settleKernel(cl::sycl::handler&                                           c
                 }
                 if (dividedAt > subGroupSize / 2)
                 {
+                    itemIdx.barrier(fence_space::local_space);
+                }
+                else
+                {
                     subGroupBarrier(itemIdx);
                 }
             }
@@ -352,17 +353,17 @@ class SettleKernelName;
 
 //! \brief SETTLE SYCL kernel launch code.
 template<bool updateVelocities, bool computeVirial, class... Args>
-static cl::sycl::event launchSettleKernel(const DeviceStream& deviceStream, int numSettles, Args&&... args)
+static sycl::event launchSettleKernel(const DeviceStream& deviceStream, int numSettles, Args&&... args)
 {
     // Should not be needed for SYCL2020.
     using kernelNameType = SettleKernelName<updateVelocities, computeVirial>;
 
     const int numSettlesRoundedUp =
             static_cast<int>((numSettles + sc_workGroupSize - 1) / sc_workGroupSize) * sc_workGroupSize;
-    const cl::sycl::nd_range<1> rangeAllSettles(numSettlesRoundedUp, sc_workGroupSize);
-    cl::sycl::queue             q = deviceStream.stream();
+    const sycl::nd_range<1> rangeAllSettles(numSettlesRoundedUp, sc_workGroupSize);
+    sycl::queue             q = deviceStream.stream();
 
-    cl::sycl::event e = q.submit([&](cl::sycl::handler& cgh) {
+    sycl::event e = q.submit([&](sycl::handler& cgh) {
         auto kernel = settleKernel<updateVelocities, computeVirial>(
                 cgh, numSettles, std::forward<Args>(args)...);
         cgh.parallel_for<kernelNameType>(rangeAllSettles, kernel);
@@ -373,7 +374,7 @@ static cl::sycl::event launchSettleKernel(const DeviceStream& deviceStream, int 
 
 /*! \brief Select templated kernel and launch it. */
 template<class... Args>
-static inline cl::sycl::event launchSettleKernel(bool updateVelocities, bool computeVirial, Args&&... args)
+static inline sycl::event launchSettleKernel(bool updateVelocities, bool computeVirial, Args&&... args)
 {
     return dispatchTemplatedFunction(
             [&](auto updateVelocities_, auto computeVirial_) {

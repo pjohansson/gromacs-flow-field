@@ -1,10 +1,9 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2021, by the GROMACS development team, led by
- * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
- * and including many others, as listed in the AUTHORS file in the
- * top-level source directory and at http://www.gromacs.org.
+ * Copyright 2021- The GROMACS Authors
+ * and the project initiators Erik Lindahl, Berk Hess and David van der Spoel.
+ * Consult the AUTHORS/COPYING files and https://www.gromacs.org for details.
  *
  * GROMACS is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
@@ -18,7 +17,7 @@
  *
  * You should have received a copy of the GNU Lesser General Public
  * License along with GROMACS; if not, see
- * http://www.gnu.org/licenses, or write to the Free Software Foundation,
+ * https://www.gnu.org/licenses, or write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA.
  *
  * If you want to redistribute modifications to GROMACS, please
@@ -27,10 +26,10 @@
  * consider code for inclusion in the official distribution, but
  * derived work must not be called official GROMACS. Details are found
  * in the README & COPYING files - if they are missing, get the
- * official version at http://www.gromacs.org.
+ * official version at https://www.gromacs.org.
  *
  * To help us fund GROMACS development, we humbly ask that you cite
- * the research papers on the package. Check out http://www.gromacs.org.
+ * the research papers on the package. Check out https://www.gromacs.org.
  */
 
 /*! \internal \file
@@ -48,8 +47,7 @@
 
 #include "nbnxm_sycl_types.h"
 
-using cl::sycl::access::mode;
-using cl::sycl::access::target;
+using mode = sycl::access_mode;
 
 namespace Nbnxm
 {
@@ -66,7 +64,7 @@ namespace Nbnxm
  * \param[in]     numAtomsPerCell     Number of atoms per cell.
  * \param[in]     columnsOffset       Index if the first column in the cell.
  */
-static auto nbnxmKernelTransformXToXq(cl::sycl::handler&                       cgh,
+static auto nbnxmKernelTransformXToXq(sycl::handler&                           cgh,
                                       DeviceAccessor<Float4, mode::read_write> a_xq,
                                       DeviceAccessor<Float3, mode::read>       a_x,
                                       DeviceAccessor<int, mode::read>          a_atomIndex,
@@ -82,7 +80,7 @@ static auto nbnxmKernelTransformXToXq(cl::sycl::handler&                       c
     a_numAtoms.bind(cgh);
     a_cellIndex.bind(cgh);
 
-    return [=](cl::sycl::id<2> itemIdx) {
+    return [=](sycl::id<2> itemIdx) {
         // Map cell-level parallelism to y component of block index.
         const int cxy = itemIdx.get(1) + columnsOffset;
 
@@ -115,10 +113,10 @@ void launchNbnxmKernelTransformXToXq(const Grid&          grid,
     const unsigned int numAtomsMax = grid.numCellsColumnMax() * grid.numAtomsPerCell();
     GMX_ASSERT(numColumns <= numColumnsMax, "Grid has more columns than allowed");
 
-    const cl::sycl::range<2> globalSize{ numAtomsMax, numColumns };
-    cl::sycl::queue          q = deviceStream.stream();
+    const sycl::range<2> globalSize{ numAtomsMax, numColumns };
+    sycl::queue          q = deviceStream.stream();
 
-    q.submit([&](cl::sycl::handler& cgh) {
+    q.submit([&](sycl::handler& cgh) {
         auto kernel = nbnxmKernelTransformXToXq(cgh,
                                                 nb->atdat->xq,
                                                 d_x,

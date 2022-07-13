@@ -4,8 +4,8 @@ cmake_minimum_required(VERSION 3.16.3)
 project(sample_restraint)
 
 # This project requires a GROMACS supporting gmxapi 0.0.8 or higher. It should
-# be sufficient to source the GMXRC, but you can also set the GROMACS_DIR or
-# gmxapi_DIR environment variable to help CMake find the GROMACS installation.
+# be sufficient to source the GMXRC, but you can also set the GROMACS_DIR
+# environment variable or gmxapi_ROOT CMake variable to help CMake find the GROMACS installation.
 
 # Note that the code will need to be built separately for different versions of Python and for substantially different
 # versions of GROMACS. If building from the command line, you can specify a Python executable with the PYTHON_EXECUTABLE
@@ -13,6 +13,9 @@ project(sample_restraint)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_VISIBILITY_PRESET hidden)
+
+# Allow gmxapi_ROOT hint (available with CMake 3.12).
+cmake_policy(SET CMP0074 NEW)
 
 # CMake modules are in a subdirectory to keep this file cleaner
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
@@ -44,9 +47,9 @@ if(GMXAPI_EXTENSION_DOWNLOAD_PYBIND)
 else()
     find_package(pybind11 2.6 REQUIRED)
 endif()
-# Assuming GROMACS is in our path or that we have set either the gmxapi_DIR or GROMACS_DIR environment variables,
-# this will find the CMake configuration for the GROMACS libraries we need and define the CMake library objects
-# Gromacs::gmxapi
+# Assuming GROMACS is in our path or that we have set either gmxapi_ROOT or the
+# GROMACS_DIR environment variable, this will find the CMake configuration for
+# the GROMACS libraries we need and define the CMake library object Gromacs::gmxapi
 if(GMXAPI_EXTENSION_MASTER_PROJECT)
     find_package(gmxapi
                  0.2.1 REQUIRED CONFIG
@@ -60,23 +63,12 @@ if(GMXAPI_EXTENSION_MASTER_PROJECT)
     ######################################################
     # The following is boiler-plate recommended by GROMACS
     ######################################################
-    # In principle, this could be deduced from GROMACS_IS_DOUBLE returned by
-    # find_package(GROMACS) based on the suffix alone, but it is clearer that the
-    # user explicitly sets what they want to get, and then need to provide a suffix
-    # to match.
-    option(GMX_DOUBLE "Use double precision" OFF)
-    set(GMX_SUFFIX "" CACHE STRING "Suffix for the GROMACS installation to use (empty for default)")
 
-    # This does not allow for a non-suffixed double-precision libgromacs, but
-    # that should be rare enough for demonstration purposes.
-    if (GMX_DOUBLE AND NOT GMX_SUFFIX)
-        set(GROMACS_SUFFIX "_d")
-    else()
-        set(GROMACS_SUFFIX ${GMX_SUFFIX})
-    endif()
+    find_package(GROMACS REQUIRED
+                 NAMES gromacs gromacs_mpi gromacs_d
+                 HINTS "$ENV{GROMACS_DIR}"
+                 )
 
-    find_package(GROMACS REQUIRED)
-    gromacs_check_double(GMX_DOUBLE)
     gromacs_check_compiler(CXX)
     include_directories(${GROMACS_INCLUDE_DIRS})
     add_definitions(${GROMACS_DEFINITIONS})
@@ -152,20 +144,6 @@ if(GMXAPI_EXTENSION_MASTER_PROJECT)
     message(STATUS "Python module will be installed to GMXPLUGIN_INSTALL_PATH cache value ${GMXPLUGIN_INSTALL_PATH}")
 endif()
 
-# TODO: (Issue #3027) Handle Googletest sources both for forked projects and
-#  for GROMACS-project-internal testing.
-# Projects based on this subtree should bundle googletest sources.
-# The GROMACS project already bundles googletest sources for internal use, but
-# they will only be available to this project with some additional management by
-# the parent project CMake configuration.
-option(DOWNLOAD_GOOGLETEST "Download the latest master branch of googletest." OFF)
-mark_as_advanced(DOWNLOAD_GOOGLETEST)
-
-# Prevent overriding the parent project's compiler/linker
-# settings on Windows
-set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
-
-
 # Now move on to building the custom code.
 add_subdirectory(src)
 
@@ -174,7 +152,75 @@ add_subdirectory(docs)
 
 # Process CMake configuration for Python and C++ tests.
 include(CTest)
-if(BUILD_TESTING)
+if(BUILD_TESTING AND (NOT DEFINED GMX_BUILD_UNITTESTS OR GMX_BUILD_UNITTESTS))
+    # Projects based on this subtree should bundle googletest sources.
+    # The GROMACS project already bundles googletest sources for internal use, but
+    # they will only be available to this project with some additional management by
+    # the parent project CMake configuration.
+    option(DOWNLOAD_GOOGLETEST "Download the version of googletest used for GROMACS testing." OFF)
+    mark_as_advanced(DOWNLOAD_GOOGLETEST)
+
+
+    if(DOWNLOAD_GOOGLETEST)
+        # Download and unpack googletest at configure time. For simplicity, we pin to the same
+        # googletest ref as in
+        #    https://gitlab.com/gromacs/gromacs/-/blob/master/src/external/googletest/README.Gromacs
+        # Reference https://google.github.io/googletest/quickstart-cmake.html#set-up-a-project
+        include(FetchContent)
+        FetchContent_Declare(
+            googletest
+            URL https://github.com/google/googletest/archive/96f4ce02a3a78d63981c67acbd368945d11d7d70.zip
+        )
+        # For Windows: Prevent overriding the parent project's compiler/linker settings
+        set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+        # Note: as of CMake 3.16.3, setting policy CMP0077 to NEW does not seem to allow
+        # `set(INSTALL_GTEST OFF)` to work as desired, so we have to override the option definition.
+        option(INSTALL_GTEST "Override default behavior" OFF)
+        FetchContent_MakeAvailable(googletest)
+
+        add_library(GTest::GTest ALIAS gtest)
+        add_library(GTest::Main ALIAS gtest_main)
+    else()
+        if(GMXAPI_EXTENSION_MASTER_PROJECT)
+            # Allow project maintainers to bundle or provide googletest sources in
+            # a subdirectory `external`.
+            if (DEFINED ENV{CI})
+                # In a CI environment, assume that the supporting software can be provided.
+                if ("$ENV{CI_PROJECT_NAME}" STREQUAL "gromacs")
+                    # We are running in a GitLab CI environment for a gromacs repository.
+                    # See also admin/gitlab-ci/api-client.matrix.gitlab-ci.yml
+                    FILE(COPY
+                         $ENV{CI_PROJECT_DIR}/src/external/googletest
+                         DESTINATION ${CMAKE_CURRENT_SOURCE_DIR}/external/
+                         )
+                endif ()
+                # Note: as of CMake 3.16.3, setting policy CMP0077 to NEW does not seem to allow
+                # `set(INSTALL_GTEST OFF)` to work as desired, so we have to override the option definition.
+                option(INSTALL_GTEST "Override default behavior" OFF)
+                add_subdirectory(external/googletest)
+                add_library(GTest::GTest ALIAS gtest)
+                add_library(GTest::Main ALIAS gtest_main)
+            else()
+                # Logic could be added here for other CI environments. Otherwise, the user is
+                # responsible for helping to find GTest or copying sources to external/googletest
+                find_package(GTest REQUIRED)
+            endif ()
+        else() # building as part of a GROMACS build...
+            if(TARGET gtest)
+                add_library(GTest::GTest ALIAS gtest)
+                add_library(GTest::Main ALIAS gtest_main)
+            else()
+                find_package(GTest)
+            endif()
+            if(NOT TARGET GTest::GTest)
+                message(FATAL_ERROR "GTest::GTest target should have been supplied by the parent project.")
+            endif()
+            if(NOT TARGET GTest::Main)
+                message(FATAL_ERROR "GTest::Main target should have been supplied by the parent project.")
+            endif()
+        endif()
+    endif() # DOWNLOAD_GOOGLETEST
+
     include(GoogleTest)
     add_subdirectory(tests)
 endif()

@@ -1,13 +1,9 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 1991-2000, University of Groningen, The Netherlands.
- * Copyright (c) 2001-2004, The GROMACS development team.
- * Copyright (c) 2013,2014,2015,2016,2017, The GROMACS development team.
- * Copyright (c) 2018,2019,2020,2021, by the GROMACS development team, led by
- * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
- * and including many others, as listed in the AUTHORS file in the
- * top-level source directory and at http://www.gromacs.org.
+ * Copyright 1991- The GROMACS Authors
+ * and the project initiators Erik Lindahl, Berk Hess and David van der Spoel.
+ * Consult the AUTHORS/COPYING files and https://www.gromacs.org for details.
  *
  * GROMACS is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
@@ -21,7 +17,7 @@
  *
  * You should have received a copy of the GNU Lesser General Public
  * License along with GROMACS; if not, see
- * http://www.gnu.org/licenses, or write to the Free Software Foundation,
+ * https://www.gnu.org/licenses, or write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA.
  *
  * If you want to redistribute modifications to GROMACS, please
@@ -30,10 +26,10 @@
  * consider code for inclusion in the official distribution, but
  * derived work must not be called official GROMACS. Details are found
  * in the README & COPYING files - if they are missing, get the
- * official version at http://www.gromacs.org.
+ * official version at https://www.gromacs.org.
  *
  * To help us fund GROMACS development, we humbly ask that you cite
- * the research papers on the package. Check out http://www.gromacs.org.
+ * the research papers on the package. Check out https://www.gromacs.org.
  */
 #include "gmxpre.h"
 
@@ -69,6 +65,7 @@
 #include "gromacs/options/options.h"
 #include "gromacs/options/treesupport.h"
 #include "gromacs/pbcutil/pbc.h"
+#include "gromacs/random/seed.h"
 #include "gromacs/selection/indexutil.h"
 #include "gromacs/topology/block.h"
 #include "gromacs/topology/ifunc.h"
@@ -640,22 +637,41 @@ void check_ir(const char*                    mdparin,
 
     if (ir->bSimTemp)
     {
-        bool bAllTempZero = TRUE;
+        /* We print a warning if users input elements of temperature-lambdas that are > 1 */
+        bool bElementsGreaterThanOne = false;
+        bool bAllTempZero            = true;
         for (i = 0; i < fep->n_lambda; i++)
         {
-            sprintf(err_buf,
-                    "Entry %d for %s must be between 0 and 1, instead is %g",
-                    i,
-                    enumValueToString(FreeEnergyPerturbationCouplingType::Temperature),
-                    fep->all_lambda[static_cast<int>(FreeEnergyPerturbationCouplingType::Temperature)][i]);
-            CHECK((fep->all_lambda[static_cast<int>(FreeEnergyPerturbationCouplingType::Temperature)][i] < 0)
-                  || (fep->all_lambda[static_cast<int>(FreeEnergyPerturbationCouplingType::Temperature)][i]
-                      > 1));
+            /* We only forbid elements of temperature-lambdas that are < 0 */
+            if (fep->all_lambda[static_cast<int>(FreeEnergyPerturbationCouplingType::Temperature)][i] < 0)
+            {
+                auto message = gmx::formatString(
+                        "Entry %d for %s must be greater than 0, instead is %g",
+                        i,
+                        enumValueToString(FreeEnergyPerturbationCouplingType::Temperature),
+                        fep->all_lambda[static_cast<int>(FreeEnergyPerturbationCouplingType::Temperature)][i]);
+                warning_error(wi, message);
+            }
+            if (fep->all_lambda[static_cast<int>(FreeEnergyPerturbationCouplingType::Temperature)][i] > 1)
+            {
+                bElementsGreaterThanOne = true;
+            }
             if (fep->all_lambda[static_cast<int>(FreeEnergyPerturbationCouplingType::Temperature)][i] > 0)
             {
-                bAllTempZero = FALSE;
+                bAllTempZero = false;
             }
         }
+        if (bElementsGreaterThanOne)
+        {
+            auto warningText = gmx::formatString(
+                    "One or more entries for %s are greater than 1. Please only use this if you "
+                    "are aware of "
+                    "what you are doing. Check for inconsistencies with "
+                    "simulated-tempering-scaling.",
+                    enumValueToString(FreeEnergyPerturbationCouplingType::Temperature));
+            warning(wi, warningText);
+        }
+
         sprintf(err_buf, "if simulated tempering is on, temperature-lambdas may not be all zero");
         CHECK(bAllTempZero == TRUE);
 
@@ -707,11 +723,133 @@ void check_ir(const char*                    mdparin,
                 static_cast<int>(fep->sc_r_power));
         CHECK(fep->sc_alpha != 0 && fep->sc_r_power != 6.0);
 
-        sprintf(err_buf,
-                "Can't use positive delta-lambda (%g) if initial state/lambda does not start at "
-                "zero",
-                fep->delta_lambda);
-        CHECK(fep->delta_lambda > 0 && ((fep->init_fep_state > 0) || (fep->init_lambda > 0)));
+        /* We need special warnings if init-lambda > 1 && delta-lambda < 0 */
+        if (fep->delta_lambda < 0 && fep->init_lambda > 1)
+        {
+            if (fep->n_lambda > 1)
+            {
+                /* warn about capping if lambda vector is provided as user input */
+                int64_t stepNumber = static_cast<int64_t>((1.0 - fep->init_lambda) / fep->delta_lambda);
+
+                auto warningText = gmx::formatString(
+                        "With init-lambda = %g and delta_lambda = %g, the lambda "
+                        "components won't change before step %" PRId64 " of %" PRId64
+                        " simulation steps in total. "
+                        "Consider setting init-lambda to a value less or equal to 1.\n",
+                        fep->init_lambda,
+                        fep->delta_lambda,
+                        stepNumber,
+                        ir->nsteps);
+                warning(wi, warningText);
+            }
+            else if (fep->n_lambda <= 0)
+            {
+                /* issue an error if soft-core potentials are used */
+                if (fep->sc_alpha > 0 || fep->softcoreFunction == SoftcoreType::Gapsys)
+                {
+                    auto message = gmx::formatString(
+                            "You set init-lambda greater than 1 and provided no lambda vector as "
+                            "input. "
+                            "Therefore, coul-lambdas and vdw-lambdas will (initially) be greater "
+                            "than 1. "
+                            "This is not compatible with using soft-core potentials.\n");
+                    warning_error(wi, message);
+                }
+            }
+        }
+
+        if (fep->delta_lambda != 0)
+        {
+            /* warn about capping */
+            int64_t stepNumber = ir->nsteps;
+
+            if (fep->init_fep_state >= 0 && fep->init_fep_state < fep->n_lambda)
+            {
+                if (fep->delta_lambda > 0)
+                {
+                    stepNumber = static_cast<int64_t>((fep->n_lambda - 1 - fep->init_fep_state)
+                                                      / ((fep->n_lambda - 1) * fep->delta_lambda));
+                }
+                else if (fep->delta_lambda < 0)
+                {
+                    stepNumber = static_cast<int64_t>((0 - fep->init_fep_state)
+                                                      / ((fep->n_lambda - 1) * fep->delta_lambda));
+                }
+                if (stepNumber < ir->nsteps)
+                {
+                    auto warningText = gmx::formatString(
+                            "With init-lambda-state = %d and delta_lambda = %g, the lambda "
+                            "components "
+                            "won't change anymore after step %" PRId64
+                            " until the end of the simulation after %" PRId64 " steps.\n",
+                            fep->init_fep_state,
+                            fep->delta_lambda,
+                            stepNumber,
+                            ir->nsteps);
+                    warning(wi, warningText);
+                }
+            }
+
+            else if (fep->init_lambda >= 0)
+            {
+                if (fep->delta_lambda > 0)
+                {
+                    stepNumber = static_cast<int64_t>((1.0 - fep->init_lambda) / fep->delta_lambda);
+                    stepNumber = (stepNumber < 0 ? 0 : stepNumber);
+
+                    /* There's no upper limit (capping) if no lambda value array is specified by the
+                     * user. However, soft-core potentials may not be used with coul-lambdas or
+                     * vdw-lambdas greater than 1. Make sure to error out.
+                     */
+                    if (stepNumber < ir->nsteps && fep->n_lambda <= 0)
+                    {
+                        if (fep->sc_alpha > 0 || fep->softcoreFunction == SoftcoreType::Gapsys)
+                        {
+                            auto message = gmx::formatString(
+                                    "With init-lambda = %g and delta_lambda = %g and no explicit "
+                                    "input, "
+                                    "coul-lambdas and vdw-lambdas will be greater than 1 after "
+                                    "step %" PRId64 " of in total %" PRId64
+                                    " steps. This is not compatible with using soft-core "
+                                    "potentials. \n",
+                                    fep->init_lambda,
+                                    fep->delta_lambda,
+                                    stepNumber,
+                                    ir->nsteps);
+                            warning_error(wi, message);
+                        }
+                        /* No capping warning needed. */
+                        stepNumber = ir->nsteps;
+                    }
+                }
+                else if (fep->delta_lambda < 0)
+                {
+                    stepNumber = static_cast<int64_t>((0.0 - fep->init_lambda) / fep->delta_lambda);
+                }
+                if (stepNumber < ir->nsteps)
+                {
+                    auto warningText = gmx::formatString(
+                            "With init-lambda = %g and delta_lambda = %g, the lambda components "
+                            "won't change anymore after step %" PRId64
+                            " until the end of the simulation after %" PRId64 " steps.\n",
+                            fep->init_lambda,
+                            fep->delta_lambda,
+                            stepNumber,
+                            ir->nsteps);
+                    warning(wi, warningText);
+                }
+            }
+
+            else if (fep->n_lambda == 1)
+            {
+                auto warningText = gmx::formatString(
+                        "You have set delta-lambda non-zero "
+                        "while using a lambda vector that has one column. "
+                        "The lambda components will therefore stay the same, "
+                        "and delta-lambda has no effect.");
+                warning(wi, warningText);
+            }
+        }
 
         sprintf(err_buf,
                 "Can't use positive delta-lambda (%g) with expanded ensemble simulations",
@@ -780,22 +918,62 @@ void check_ir(const char*                    mdparin,
             }
         }
 
+        /*  Free Energy Checks -- In an ideal world, slow growth and FEP would
+            be treated differently, but that's the next step */
+
         for (j = 0; j < static_cast<int>(FreeEnergyPerturbationCouplingType::Count); j++)
         {
-            for (i = 0; i < fep->n_lambda; i++)
+            auto enumValue = static_cast<FreeEnergyPerturbationCouplingType>(j);
+            /* We must restrict elements of the lambda value array for coulomb and vdw to [0,1]
+             * if soft-core potentials are used.
+             */
+            if (((enumValue == FreeEnergyPerturbationCouplingType::Coul)
+                 || (enumValue == FreeEnergyPerturbationCouplingType::Vdw))
+                && ((fep->sc_alpha > 0) || (fep->softcoreFunction == SoftcoreType::Gapsys)))
             {
-                auto enumValue = static_cast<FreeEnergyPerturbationCouplingType>(j);
-                sprintf(err_buf,
-                        "Entry %d for %s must be between 0 and 1, instead is %g",
-                        i,
-                        enumValueToString(enumValue),
-                        fep->all_lambda[j][i]);
-                CHECK((fep->all_lambda[j][i] < 0) || (fep->all_lambda[j][i] > 1));
+                for (i = 0; i < fep->n_lambda; i++)
+                {
+                    if ((fep->all_lambda[j][i] < 0) || (fep->all_lambda[j][i] > 1))
+                    {
+                        auto message = gmx::formatString(
+                                "As you are using soft-core potentials, entry %d for %s must "
+                                "be between 0 and 1, instead is %g",
+                                i,
+                                enumValueToString(enumValue),
+                                fep->all_lambda[j][i]);
+                        warning_error(wi, message);
+                    }
+                }
+            }
+            else
+            {
+                for (i = 0; i < fep->n_lambda; i++)
+                {
+                    /* We only forbid elements of the lambda value array that are < 0 */
+                    if (fep->all_lambda[j][i] < 0)
+                    {
+                        auto message = gmx::formatString(
+                                "Entry %d for %s must be greater than 0, instead is %g",
+                                i,
+                                enumValueToString(enumValue),
+                                fep->all_lambda[j][i]);
+                        warning_error(wi, message);
+                    }
+                }
             }
         }
 
-        if ((fep->sc_alpha > 0) && (!fep->bScCoul))
+        // the following warning needs to be triggered for the cases where vdw and coul of atoms are changing, but
+        //    a) Beutler softcore is used with the softened LJ, yet not softened Coulomb
+        bool softcoreConditionCheckBeutler = (fep->softcoreFunction == SoftcoreType::Beutler)
+                                             && (fep->sc_alpha > 0) && (!fep->bScCoul);
+        //    b) Gapsys softcore is used with the softened LJ, yet not softened Coulomb
+        bool softcoreConditionCheckGapsys = (fep->softcoreFunction == SoftcoreType::Gapsys)
+                                            && (fep->scGapsysScaleLinpointLJ > 0)
+                                            && (fep->scGapsysScaleLinpointQ == 0);
+        if (softcoreConditionCheckBeutler || softcoreConditionCheckGapsys)
         {
+
             for (i = 0; i < fep->n_lambda; i++)
             {
                 sprintf(err_buf,
@@ -814,8 +992,13 @@ void check_ir(const char*                    mdparin,
             }
         }
 
-        if ((fep->bScCoul) && (EEL_PME(ir->coulombtype)))
+        if ((fep->softcoreFunction == SoftcoreType::Beutler) && (fep->bScCoul) && (EEL_PME(ir->coulombtype)))
         {
+            // PME is formulated for computing 1/r potential, whereas the Coulombic potential softened by means of Beutler softcore no longer has this functional form.
+            // This Warning is issued when PME is used for electrostatics and Beutler softcore is applied to the Coulombic interactions.
+            // For the Gapsys softcore there is no such issue, because for the interactions more distant than the Coulombic linearization point, the potential takes the standard form of 1/r.
+            // It is ensured that this linearization point does not exceed the short range electrostatic cutoff.
+
             real sigma, lambda, r_sc;
 
             sigma = 0.34;
@@ -835,19 +1018,6 @@ void check_ir(const char*                    mdparin,
                     r_sc - 1.0,
                     ir->ewald_rtol);
             warning_note(wi, warn_buf);
-        }
-
-        /*  Free Energy Checks -- In an ideal world, slow growth and FEP would
-            be treated differently, but that's the next step */
-
-        for (i = 0; i < static_cast<int>(FreeEnergyPerturbationCouplingType::Count); i++)
-        {
-            auto enumValue = static_cast<FreeEnergyPerturbationCouplingType>(i);
-            for (j = 0; j < fep->n_lambda; j++)
-            {
-                sprintf(err_buf, "%s[%d] must be between 0 and 1", enumValueToString(enumValue), j);
-                CHECK((fep->all_lambda[i][j] < 0) || (fep->all_lambda[i][j] > 1));
-            }
         }
 
         if (fep->softcoreFunction == SoftcoreType::Gapsys)
@@ -1181,28 +1351,43 @@ void check_ir(const char*                    mdparin,
                 ir->nstcomm,
                 enumValueToString(ir->etc));
         CHECK(ir->nstcomm > 1 && (ir->etc == TemperatureCoupling::Andersen));
+        if (opts->nshake != 0)
+        {
+            auto message = gmx::formatString(
+                    "%s temperature control does not work with constraints. "
+                    "Use %s instead",
+                    enumValueToString(TemperatureCoupling::Andersen),
+                    enumValueToString(TemperatureCoupling::AndersenMassive));
+            warning_error(wi, message);
+        }
     }
 
     if (ir->etc == TemperatureCoupling::Berendsen)
     {
         sprintf(warn_buf,
-                "The %s thermostat does not generate the correct kinetic energy distribution. You "
-                "might want to consider using the %s thermostat.",
+                "The %s thermostat does not generate the correct kinetic energy distribution, "
+                "and should not be used for new production simulations (in our opinion). "
+                "We would recommend the %s thermostat.",
                 enumValueToString(ir->etc),
                 enumValueToString(TemperatureCoupling::VRescale));
-        warning_note(wi, warn_buf);
-    }
-
-    if ((ir->etc == TemperatureCoupling::NoseHoover || ETC_ANDERSEN(ir->etc))
-        && ir->epc == PressureCoupling::Berendsen)
-    {
-        sprintf(warn_buf,
-                "Using Berendsen pressure coupling invalidates the "
-                "true ensemble for the thermostat");
         warning(wi, warn_buf);
     }
 
     /* PRESSURE COUPLING */
+    if (ir->epc == PressureCoupling::Berendsen)
+    {
+        sprintf(warn_buf,
+                "The %s barostat does not generate any strictly correct ensemble, "
+                "and should not be used for new production simulations (in our opinion). "
+                "For isotropic scaling we would recommend the %s barostat that also "
+                "ensures fast relaxation without oscillations, and for anisotropic "
+                "scaling you likely want to use the %s barostat.",
+                enumValueToString(ir->epc),
+                enumValueToString(PressureCoupling::CRescale),
+                enumValueToString(PressureCoupling::ParrinelloRahman));
+        warning(wi, warn_buf);
+    }
+
     if (ir->epc == PressureCoupling::Isotropic)
     {
         ir->epc = PressureCoupling::Berendsen;
@@ -2204,6 +2389,12 @@ void get_ir(const char*     mdparin,
     opts->tempi   = get_ereal(&inp, "gen-temp", 300.0, wi);
     opts->seed    = get_eint(&inp, "gen-seed", -1, wi);
 
+    if (opts->seed == -1)
+    {
+        opts->seed      = static_cast<int>(gmx::makeRandomSeed());
+        opts->bMadeSeed = true;
+    }
+
     /* Shake stuff */
     printStringNewline(&inp, "OPTIONS FOR BONDS");
     opts->nshake = get_eeenum(&inp, "constraints", constraints, wi);
@@ -2538,6 +2729,14 @@ void get_ir(const char*     mdparin,
     if (mdparout)
     {
         gmx::TextOutputFile stream(mdparout);
+
+        // Set gen-seed line to actual value instead of -1
+        if (opts->bMadeSeed)
+        {
+            int ii         = search_einp(inp, "gen-seed");
+            inp[ii].value_ = std::to_string(opts->seed);
+        }
+
         write_inpfile(&stream, mdparout, &inp, FALSE, writeMdpHeader, wi);
 
         // Transform module data into a flat key-value tree for output.
@@ -2884,7 +3083,7 @@ static void atomGroupRangeValidation(int natoms, int groupIndex, const t_blocka&
     }
 }
 
-/*! Creates the groups of atom indices for group type \p gtype
+/*! \brief Creates the groups of atom indices for group type \p gtype
  *
  * \param[in] natoms  The total number of atoms in the system
  * \param[in,out] groups  Index \p gtype in this list of list of groups will be set
@@ -4417,6 +4616,94 @@ static bool allTrue(const BasicVector<bool>& boolVector)
     return boolVector[0] && boolVector[1] && boolVector[2];
 }
 
+/* Generates an error or warning when lambda will become > 1, when appropriate */
+static void checksForFepLambaLargerOne(const t_inputrec& ir, const gmx_mtop_t& mtop, warninp_t wi)
+{
+    /* The warnings below are only relevant if we have perturbed atoms */
+    if (!haveFepPerturbedNBInteractions(mtop) && !haveFepPerturbedMasses(mtop))
+    {
+        return;
+    }
+
+    /* lambda vector components > 1 at the beginning of the simulation */
+    if (ir.fepvals->delta_lambda < 0 && ir.fepvals->init_lambda > 1 && ir.fepvals->n_lambda <= 0
+        && ir.fepvals->sc_alpha <= 0 && ir.fepvals->softcoreFunction != SoftcoreType::Gapsys)
+    {
+        auto warningText = gmx::formatString(
+                "You set init-lambda greater than 1 such that "
+                "all lambdas will (initially) be greater than 1. "
+                "Please only use this if you are aware of what you are "
+                "doing.\n");
+        warning(wi, warningText);
+    }
+
+    /* lambda vector components become > 1 in the course of the simulation */
+    if (ir.fepvals->delta_lambda > 0 && ir.fepvals->init_lambda >= 0)
+    {
+        double stepNumberWhenLambdaIsOne = (1.0 - ir.fepvals->init_lambda) / ir.fepvals->delta_lambda;
+        stepNumberWhenLambdaIsOne        = std::max(stepNumberWhenLambdaIsOne, 0.0);
+
+        if ((ir.nsteps < 0 || stepNumberWhenLambdaIsOne < ir.nsteps) && ir.fepvals->n_lambda <= 0
+            && ir.fepvals->sc_alpha <= 0 && ir.fepvals->softcoreFunction != SoftcoreType::Gapsys)
+        {
+            auto warningText = gmx::formatString(
+                    "With init-lambda = %g and delta_lambda = %g and no lambda "
+                    "vector given, "
+                    "all lambdas will be greater than 1 after step %" PRId64 " of in total %" PRId64
+                    " steps. "
+                    "Please only use this if you are aware of what you are "
+                    "doing.\n",
+                    ir.fepvals->init_lambda,
+                    ir.fepvals->delta_lambda,
+                    static_cast<int64_t>(stepNumberWhenLambdaIsOne),
+                    ir.nsteps);
+            warning(wi, warningText);
+        }
+    }
+
+    /* lambda vector components are set > 1 by the user */
+    for (int j = 0; j < static_cast<int>(FreeEnergyPerturbationCouplingType::Count); j++)
+    {
+        auto enumValue = static_cast<FreeEnergyPerturbationCouplingType>(j);
+
+        /* We have already issued an error for coul-lambdas and vdw-lambdas > 1
+         * in combination with soft-core potentials.
+         * As we only warn about lambdas > 1 if the non-bonded interactions or
+         * masses are perturbed, let's only warn for coul, vdw, mass and bonded.
+         */
+        if ((((enumValue == FreeEnergyPerturbationCouplingType::Coul)
+              || (enumValue == FreeEnergyPerturbationCouplingType::Vdw))
+             && ((ir.fepvals->sc_alpha > 0) || (ir.fepvals->softcoreFunction == SoftcoreType::Gapsys)))
+            || enumValue == FreeEnergyPerturbationCouplingType::Fep
+            || enumValue == FreeEnergyPerturbationCouplingType::Restraint
+            || enumValue == FreeEnergyPerturbationCouplingType::Temperature)
+        {
+            continue;
+        }
+
+        bool bElementsGreaterThanOne = false;
+
+        for (int i = 0; i < ir.fepvals->n_lambda; i++)
+        {
+            if (ir.fepvals->all_lambda[j][i] > 1)
+            {
+                bElementsGreaterThanOne = true;
+                break;
+            }
+        }
+
+        if (bElementsGreaterThanOne)
+        {
+            auto warningText = gmx::formatString(
+                    "One or more entries for %s are greater than 1. Please only use this "
+                    "if you are aware of "
+                    "what you are doing.",
+                    enumValueToString(enumValue));
+            warning(wi, warningText);
+        }
+    }
+}
+
 void triple_check(const char* mdparin, t_inputrec* ir, gmx_mtop_t* sys, warninp_t wi)
 {
     // Not meeting MTS requirements should have resulted in a fatal error, so we can assert here
@@ -4678,10 +4965,16 @@ void triple_check(const char* mdparin, t_inputrec* ir, gmx_mtop_t* sys, warninp_
         sfree(mgrp);
     }
 
-    if (ir->efep != FreeEnergyPerturbationType::No && ir->fepvals->sc_alpha != 0
-        && !gmx_within_tol(sys->ffparams.reppow, 12.0, 10 * GMX_DOUBLE_EPS))
+    /* Checks related to FEP and slow growth */
+    if (ir->efep != FreeEnergyPerturbationType::No)
     {
-        gmx_fatal(FARGS, "Soft-core interactions are only supported with VdW repulsion power 12");
+        if (ir->fepvals->sc_alpha != 0 && !gmx_within_tol(sys->ffparams.reppow, 12.0, 10 * GMX_DOUBLE_EPS))
+        {
+            gmx_fatal(FARGS,
+                      "Soft-core interactions are only supported with VdW repulsion power 12");
+        }
+
+        checksForFepLambaLargerOne(*ir, *sys, wi);
     }
 
     if (ir->bPull)

@@ -1,10 +1,9 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2017,2018,2019,2020,2021, by the GROMACS development team, led by
- * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
- * and including many others, as listed in the AUTHORS file in the
- * top-level source directory and at http://www.gromacs.org.
+ * Copyright 2017- The GROMACS Authors
+ * and the project initiators Erik Lindahl, Berk Hess and David van der Spoel.
+ * Consult the AUTHORS/COPYING files and https://www.gromacs.org for details.
  *
  * GROMACS is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
@@ -18,7 +17,7 @@
  *
  * You should have received a copy of the GNU Lesser General Public
  * License along with GROMACS; if not, see
- * http://www.gnu.org/licenses, or write to the Free Software Foundation,
+ * https://www.gnu.org/licenses, or write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA.
  *
  * If you want to redistribute modifications to GROMACS, please
@@ -27,10 +26,10 @@
  * consider code for inclusion in the official distribution, but
  * derived work must not be called official GROMACS. Details are found
  * in the README & COPYING files - if they are missing, get the
- * official version at http://www.gromacs.org.
+ * official version at https://www.gromacs.org.
  *
  * To help us fund GROMACS development, we humbly ask that you cite
- * the research papers on the package. Check out http://www.gromacs.org.
+ * the research papers on the package. Check out https://www.gromacs.org.
  */
 /*! \libinternal \file
  * \brief Declares functionality for deciding whether tasks will run on GPUs.
@@ -84,12 +83,10 @@ struct DevelopmentFeatureFlags
     bool enableGpuBufferOps = false;
     //! If true, forces 'mdrun -update auto' default to 'gpu'
     bool forceGpuUpdateDefault = false;
-    //! True if the GPU halo exchange development feature is enabled
-    bool enableGpuHaloExchange = false;
-    //! True if the PME PP direct communication GPU development feature is enabled
-    bool enableGpuPmePPComm = false;
-    //! True if the CUDA-aware MPI is being used for GPU direct communication feature
-    bool usingCudaAwareMpi = false;
+    //! True if the GPU-aware MPI can be used for GPU direct communication feature
+    bool canUseGpuAwareMpi = false;
+    //! True if GPU PME-decomposition is enabled
+    bool enableGpuPmeDecomposition = false;
 };
 
 
@@ -308,24 +305,44 @@ bool decideWhetherToUseGpuForUpdate(bool                           isDomainDecom
                                     const DevelopmentFeatureFlags& devFlags,
                                     const gmx::MDLogger&           mdlog);
 
+/*! \brief Decide whether direct GPU communication can be used.
+ *
+ * Takes into account the build type which determines feature support as well as GPU
+ * development feature flags, determines whether this run can use direct GPU communication.
+ * The final decision whether the run will use direct communication for either of the features
+ * which rely on it is made during task assignment / simulationWorkload initialization.
+ *
+ * \param[in]  devFlags                     GPU development / experimental feature flags.
+ * \param[in]  haveMts                      Whether the simulation uses multiple time stepping
+ * \param[in]  haveSwapCoords               Whether the swap-coords functionality is active
+ * \param[in]  mdlog                        MD logger.
+ *
+ * \returns    Whether the MPI-parallel runs can use direct GPU communication.
+ */
+bool decideWhetherDirectGpuCommunicationCanBeUsed(const DevelopmentFeatureFlags& devFlags,
+                                                  bool                           haveMts,
+                                                  bool                           haveSwapCoords,
+                                                  const gmx::MDLogger&           mdlog);
 
 /*! \brief Decide whether to use GPU for halo exchange.
  *
- * \param[in]  devFlags                     GPU development / experimental feature flags.
  * \param[in]  havePPDomainDecomposition    Whether PP domain decomposition is in use.
  * \param[in]  useGpuForNonbonded           Whether GPUs will be used for nonbonded interactions.
+ * \param[in]  canUseDirectGpuComm          Whether direct GPU communication can be used.
  * \param[in]  useModularSimulator          Whether modularsimulator is in use.
  * \param[in]  doRerun                      Whether this is a rerun.
  * \param[in]  haveEnergyMinimization       Whether energy minimization is in use.
+ * \param[in]  mdlog                        MD logger.
  *
  * \returns    Whether halo exchange can be run on GPU.
  */
-bool decideWhetherToUseGpuForHalo(const DevelopmentFeatureFlags& devFlags,
-                                  bool                           havePPDomainDecomposition,
-                                  bool                           useGpuForNonbonded,
-                                  bool                           useModularSimulator,
-                                  bool                           doRerun,
-                                  bool                           haveEnergyMinimization);
+bool decideWhetherToUseGpuForHalo(bool                 havePPDomainDecomposition,
+                                  bool                 useGpuForNonbonded,
+                                  bool                 canUseDirectGpuComm,
+                                  bool                 useModularSimulator,
+                                  bool                 doRerun,
+                                  bool                 haveEnergyMinimization,
+                                  const gmx::MDLogger& mdlog);
 
 } // namespace gmx
 

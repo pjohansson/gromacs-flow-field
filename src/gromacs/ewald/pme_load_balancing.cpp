@@ -1,11 +1,9 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2012,2013,2014,2015,2016 by the GROMACS development team.
- * Copyright (c) 2017,2018,2019,2020,2021, by the GROMACS development team, led by
- * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
- * and including many others, as listed in the AUTHORS file in the
- * top-level source directory and at http://www.gromacs.org.
+ * Copyright 2012- The GROMACS Authors
+ * and the project initiators Erik Lindahl, Berk Hess and David van der Spoel.
+ * Consult the AUTHORS/COPYING files and https://www.gromacs.org for details.
  *
  * GROMACS is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
@@ -19,7 +17,7 @@
  *
  * You should have received a copy of the GNU Lesser General Public
  * License along with GROMACS; if not, see
- * http://www.gnu.org/licenses, or write to the Free Software Foundation,
+ * https://www.gnu.org/licenses, or write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA.
  *
  * If you want to redistribute modifications to GROMACS, please
@@ -28,10 +26,10 @@
  * consider code for inclusion in the official distribution, but
  * derived work must not be called official GROMACS. Details are found
  * in the README & COPYING files - if they are missing, get the
- * official version at http://www.gromacs.org.
+ * official version at https://www.gromacs.org.
  *
  * To help us fund GROMACS development, we humbly ask that you cite
- * the research papers on the package. Check out http://www.gromacs.org.
+ * the research papers on the package. Check out https://www.gromacs.org.
  */
 /*! \internal \file
  *
@@ -220,8 +218,6 @@ void pme_loadbal_init(pme_load_balancing_t**     pme_lb_p,
 {
 
     pme_load_balancing_t* pme_lb;
-    real                  spm, sp;
-    int                   d;
 
     // Note that we don't (yet) support PME load balancing with LJ-PME only.
     GMX_RELEASE_ASSERT(EEL_PME(ir.coulombtype),
@@ -275,16 +271,7 @@ void pme_loadbal_init(pme_load_balancing_t**     pme_lb_p,
         pme_lb->setup[0].pmedata = pmedata;
     }
 
-    spm = 0;
-    for (d = 0; d < DIM; d++)
-    {
-        sp = norm(pme_lb->box_start[d]) / pme_lb->setup[0].grid[d];
-        if (sp > spm)
-        {
-            spm = sp;
-        }
-    }
-    pme_lb->setup[0].spacing = spm;
+    pme_lb->setup[0].spacing = getGridSpacingFromBox(pme_lb->box_start, pme_lb->setup[0].grid);
 
     if (ir.fourier_spacing > 0)
     {
@@ -399,7 +386,7 @@ static gmx_bool pme_loadbal_increase_cutoff(pme_load_balancing_t* pme_lb, int pm
          * per PME rank along x, which is not a strong restriction.
          */
         grid_ok = gmx_pme_check_restrictions(
-                pme_order, set.grid[XX], set.grid[YY], set.grid[ZZ], numPmeDomains.x, true, false);
+                pme_order, set.grid[XX], set.grid[YY], set.grid[ZZ], numPmeDomains.x, numPmeDomains.y, 0, false, true, false);
     } while (sp <= 1.001 * pme_lb->setup[pme_lb->cur].spacing || !grid_ok);
 
     set.rcut_coulomb = pme_lb->cut_spacing * sp;

@@ -1,10 +1,9 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2018,2019,2020,2021, by the GROMACS development team, led by
- * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
- * and including many others, as listed in the AUTHORS file in the
- * top-level source directory and at http://www.gromacs.org.
+ * Copyright 2018- The GROMACS Authors
+ * and the project initiators Erik Lindahl, Berk Hess and David van der Spoel.
+ * Consult the AUTHORS/COPYING files and https://www.gromacs.org for details.
  *
  * GROMACS is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
@@ -18,7 +17,7 @@
  *
  * You should have received a copy of the GNU Lesser General Public
  * License along with GROMACS; if not, see
- * http://www.gnu.org/licenses, or write to the Free Software Foundation,
+ * https://www.gnu.org/licenses, or write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA.
  *
  * If you want to redistribute modifications to GROMACS, please
@@ -27,10 +26,10 @@
  * consider code for inclusion in the official distribution, but
  * derived work must not be called official GROMACS. Details are found
  * in the README & COPYING files - if they are missing, get the
- * official version at http://www.gromacs.org.
+ * official version at https://www.gromacs.org.
  *
  * To help us fund GROMACS development, we humbly ask that you cite
- * the research papers on the package. Check out http://www.gromacs.org.
+ * the research papers on the package. Check out https://www.gromacs.org.
  */
 /*! \internal \file
  * \brief
@@ -75,21 +74,18 @@ using CommandLineOptionParams =
  *
  * \todo It would be preferable to just scrub the content that actually
  * varies, but we don't use enough regular expression support for that
- * yet.
- *
- * Note that the "\n" are needed so these regular expressions match
- * Windows line endings. */
-std::vector<std::string> c_regexStringsToSkip = { "^;[[:blank:]] *File '.*' was generated.*\n",
-                                                  "^;[[:blank:]]*By user:.*\n",
-                                                  "^;[[:blank:]]*On host:.*\n",
-                                                  "^;[[:blank:]]*At date:.*\n",
-                                                  "^;[[:blank:]]*:-\\).*\\(-:.*\n",
-                                                  "^;[[:blank:]]*Executable:.*\n",
-                                                  "^;[[:blank:]]*Data prefix:.*\n",
-                                                  "^;[[:blank:]]*Working dir:.*\n",
-                                                  "^;[[:blank:]]*pdb2gmx.*-test.*\n" };
+ * yet. */
+std::vector<std::string> c_regexStringsToSkip = { "^;[[:blank:]] *File '.*' was generated.*",
+                                                  "^;[[:blank:]]*By user:.*",
+                                                  "^;[[:blank:]]*On host:.*",
+                                                  "^;[[:blank:]]*At date:.*",
+                                                  "^;[[:blank:]]*:-\\).*\\(-:.*",
+                                                  "^;[[:blank:]]*Executable:.*",
+                                                  "^;[[:blank:]]*Data prefix:.*",
+                                                  "^;[[:blank:]]*Working dir:.*",
+                                                  "^;[[:blank:]]*pdb2gmx.*-test.*" };
 //! Compiled regular expressions for lines to skip when matching.
-FilteringExactTextMatch c_textMatcher(c_regexStringsToSkip);
+FilteringExactTextMatch c_textMatcher(c_regexStringsToSkip, false, true);
 
 class Pdb2gmxTest : public test::CommandLineTestBase, public ::testing::WithParamInterface<CommandLineOptionParams>
 {
@@ -98,7 +94,8 @@ public:
     {
         int outputFileType = std::get<6>(GetParam());
         // If the file type of the output configuration is one
-        // commonly used (ie. pdb, gro), then check its content.
+        // commonly used (ie. pdb, gro), then check its content,
+        // otherwise just check the output file exists.
         if (outputFileType == efPDB)
         {
             // If we're writing PDB output, we are interested in
@@ -128,8 +125,9 @@ public:
     }
 };
 
-TEST_P(Pdb2gmxTest, ProducesMatchingTopology)
+TEST_P(Pdb2gmxTest, Runs)
 {
+    checkTestNameLength();
     const auto& params    = GetParam();
     std::string cmdline[] = { "pdb2gmx",   "-ignh",
                               "-ff",       std::get<0>(params),
@@ -148,13 +146,13 @@ std::string namesOfTests(const testing::TestParamInfo<Pdb2gmxTest::ParamType>& i
 
     std::string testName = formatString(
             "ff_%s_"
-            "water_%s_"
+            "%s_"
             "vsite_%s_"
-            "chainsep_%s_"
+            "%s_"
             "merge_%s_"
-            "input_%s_"
+            "%s_"
             "format_%s_"
-            "matchfullconfiguration_%s_",
+            "match_%s",
             std::get<0>(param).c_str(),
             std::get<1>(param).c_str(),
             std::get<2>(param).c_str(),
@@ -162,7 +160,7 @@ std::string namesOfTests(const testing::TestParamInfo<Pdb2gmxTest::ParamType>& i
             std::get<4>(param).c_str(),
             std::get<5>(param).c_str(),
             ftp2ext(std::get<6>(param)),
-            std::get<7>(param) ? "true" : "false");
+            std::get<7>(param) ? "full" : "file");
 
     // Note that the returned names must be unique and may use only
     // alphanumeric ASCII characters. It's not supposed to contain
@@ -179,70 +177,62 @@ std::string namesOfTests(const testing::TestParamInfo<Pdb2gmxTest::ParamType>& i
 // CMakeLists.txt file we split them into separtae test binaries.
 
 #if OPLSAA
-INSTANTIATE_TEST_SUITE_P(ForOplsaa,
-                         Pdb2gmxTest,
-                         ::testing::Combine(::testing::Values("oplsaa"),
-                                            ::testing::Values("tip3p", "tip4p", "tip5p"),
-                                            ::testing::Values("none", "h"),
-                                            ::testing::Values("id_or_ter"),
-                                            ::testing::Values("no"),
-                                            ::testing::Values("fragment1.pdb",
-                                                              "fragment2.pdb",
-                                                              "fragment3.pdb",
-                                                              "fragment4.pdb"),
-                                            ::testing::Values(efGRO),
-                                            ::testing::Values(false)),
-                         namesOfTests);
+INSTANTIATE_TEST_SUITE_P(
+        Oplsaa,
+        Pdb2gmxTest,
+        ::testing::Combine(::testing::Values("oplsaa"),
+                           ::testing::Values("tip3p", "tip4p", "tip5p"),
+                           ::testing::Values("none", "h"),
+                           ::testing::Values("id_or_ter"),
+                           ::testing::Values("no"),
+                           ::testing::Values("A.pdb", "B.pdb", "C.pdb", "D.pdb", "E.pdb"),
+                           ::testing::Values(efGRO),
+                           ::testing::Values(false)),
+        namesOfTests);
 #endif
 
 #if GROMOS
-INSTANTIATE_TEST_SUITE_P(ForGromos43a1,
-                         Pdb2gmxTest,
-                         ::testing::Combine(::testing::Values("gromos43a1"),
-                                            ::testing::Values("spc", "spce"),
-                                            ::testing::Values("none", "h"),
-                                            ::testing::Values("id_or_ter"),
-                                            ::testing::Values("no"),
-                                            ::testing::Values("fragment1.pdb",
-                                                              "fragment2.pdb",
-                                                              "fragment3.pdb",
-                                                              "fragment4.pdb"),
-                                            ::testing::Values(efGRO),
-                                            ::testing::Values(false)),
-                         namesOfTests);
+INSTANTIATE_TEST_SUITE_P(
+        G43a1,
+        Pdb2gmxTest,
+        ::testing::Combine(::testing::Values("gromos43a1"),
+                           ::testing::Values("spc", "spce"),
+                           ::testing::Values("none", "h"),
+                           ::testing::Values("id_or_ter"),
+                           ::testing::Values("no"),
+                           ::testing::Values("A.pdb", "B.pdb", "C.pdb", "D.pdb", "E.pdb"),
+                           ::testing::Values(efGRO),
+                           ::testing::Values(false)),
+        namesOfTests);
 
-INSTANTIATE_TEST_SUITE_P(ForGromos53a6,
-                         Pdb2gmxTest,
-                         ::testing::Combine(::testing::Values("gromos53a6"),
-                                            ::testing::Values("spc", "spce"),
-                                            ::testing::Values("none", "h"),
-                                            ::testing::Values("id_or_ter"),
-                                            ::testing::Values("no"),
-                                            ::testing::Values("fragment1.pdb",
-                                                              "fragment2.pdb",
-                                                              "fragment3.pdb",
-                                                              "fragment4.pdb"),
-                                            ::testing::Values(efGRO),
-                                            ::testing::Values(false)),
-                         namesOfTests);
+INSTANTIATE_TEST_SUITE_P(
+        G53a6,
+        Pdb2gmxTest,
+        ::testing::Combine(::testing::Values("gromos53a6"),
+                           ::testing::Values("spc", "spce"),
+                           ::testing::Values("none", "h"),
+                           ::testing::Values("id_or_ter"),
+                           ::testing::Values("no"),
+                           ::testing::Values("A.pdb", "B.pdb", "C.pdb", "D.pdb", "E.pdb"),
+                           ::testing::Values(efGRO),
+                           ::testing::Values(false)),
+        namesOfTests);
 #endif
 
 #if AMBER
-INSTANTIATE_TEST_SUITE_P(ForAmber99sb_ildn,
-                         Pdb2gmxTest,
-                         ::testing::Combine(::testing::Values("amber99sb-ildn"),
-                                            ::testing::Values("tip3p"),
-                                            ::testing::Values("none", "h"),
-                                            ::testing::Values("id_or_ter"),
-                                            ::testing::Values("no"),
-                                            ::testing::Values("fragment1.pdb",
-                                                              "fragment2.pdb",
-                                                              "fragment3.pdb",
-                                                              "fragment4.pdb"),
-                                            ::testing::Values(efGRO),
-                                            ::testing::Values(false)),
-                         namesOfTests);
-INSTANTIATE_TEST_SUITE_P(ForAmber99sb_ildnWithTip4p,
+INSTANTIATE_TEST_SUITE_P(
+        Amber,
+        Pdb2gmxTest,
+        ::testing::Combine(::testing::Values("amber99sb-ildn"),
+                           ::testing::Values("tip3p"),
+                           ::testing::Values("none", "h"),
+                           ::testing::Values("id_or_ter"),
+                           ::testing::Values("no"),
+                           ::testing::Values("A.pdb", "B.pdb", "C.pdb", "D.pdb", "E.pdb"),
+                           ::testing::Values(efGRO),
+                           ::testing::Values(false)),
+        namesOfTests);
+INSTANTIATE_TEST_SUITE_P(AmberTip4p,
                          Pdb2gmxTest,
                          ::testing::Combine(::testing::Values("amber99sb-ildn"),
                                             ::testing::Values("tip4p"),
@@ -256,21 +246,19 @@ INSTANTIATE_TEST_SUITE_P(ForAmber99sb_ildnWithTip4p,
 #endif
 
 #if CHARMM
-INSTANTIATE_TEST_SUITE_P(ForCharmm27,
-                         Pdb2gmxTest,
-                         ::testing::Combine(::testing::Values("charmm27"),
-                                            ::testing::Values("tip3p"),
-                                            ::testing::Values("none", "h"),
-                                            ::testing::Values("id_or_ter"),
-                                            ::testing::Values("no"),
-                                            ::testing::Values("fragment1.pdb",
-                                                              "fragment2.pdb",
-                                                              "fragment3.pdb",
-                                                              "fragment4.pdb",
-                                                              "single-residue.pdb"),
-                                            ::testing::Values(efGRO),
-                                            ::testing::Values(false)),
-                         namesOfTests);
+INSTANTIATE_TEST_SUITE_P(
+        Charmm,
+        Pdb2gmxTest,
+        ::testing::Combine(
+                ::testing::Values("charmm27"),
+                ::testing::Values("tip3p"),
+                ::testing::Values("none", "h"),
+                ::testing::Values("id_or_ter"),
+                ::testing::Values("no"),
+                ::testing::Values("A.pdb", "B.pdb", "C.pdb", "D.pdb", "E.pdb", "monomer.pdb"),
+                ::testing::Values(efGRO),
+                ::testing::Values(false)),
+        namesOfTests);
 
 
 INSTANTIATE_TEST_SUITE_P(
@@ -294,20 +282,19 @@ INSTANTIATE_TEST_SUITE_P(
                            ::testing::Values("none"),
                            ::testing::Values("id", "ter", "id_or_ter", "id_and_ter"),
                            ::testing::Values("no"),
-                           ::testing::Values("two-fragments.pdb"),
+                           ::testing::Values("fragments.pdb"),
                            ::testing::Values(efPDB),
                            ::testing::Values(false)),
         namesOfTests);
 
-INSTANTIATE_TEST_SUITE_P(ForCharmm27CyclicSystem,
+INSTANTIATE_TEST_SUITE_P(Cyclic,
                          Pdb2gmxTest,
                          ::testing::Combine(::testing::Values("charmm27"),
                                             ::testing::Values("tip3p"),
                                             ::testing::Values("none"),
                                             ::testing::Values("id_or_ter"),
                                             ::testing::Values("no", "all"),
-                                            ::testing::Values("cyclic-rna.pdb",
-                                                              "cyclic-protein-small.pdb"),
+                                            ::testing::Values("cyc-rna.pdb", "cyc-prot.pdb"),
                                             ::testing::Values(efGRO),
                                             ::testing::Values(false)),
                          namesOfTests);

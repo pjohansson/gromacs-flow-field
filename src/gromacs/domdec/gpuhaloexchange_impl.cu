@@ -1,10 +1,9 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2019,2020,2021, by the GROMACS development team, led by
- * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
- * and including many others, as listed in the AUTHORS file in the
- * top-level source directory and at http://www.gromacs.org.
+ * Copyright 2019- The GROMACS Authors
+ * and the project initiators Erik Lindahl, Berk Hess and David van der Spoel.
+ * Consult the AUTHORS/COPYING files and https://www.gromacs.org for details.
  *
  * GROMACS is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
@@ -18,7 +17,7 @@
  *
  * You should have received a copy of the GNU Lesser General Public
  * License along with GROMACS; if not, see
- * http://www.gnu.org/licenses, or write to the Free Software Foundation,
+ * https://www.gnu.org/licenses, or write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA.
  *
  * If you want to redistribute modifications to GROMACS, please
@@ -27,10 +26,10 @@
  * consider code for inclusion in the official distribution, but
  * derived work must not be called official GROMACS. Details are found
  * in the README & COPYING files - if they are missing, get the
- * official version at http://www.gromacs.org.
+ * official version at https://www.gromacs.org.
  *
  * To help us fund GROMACS development, we humbly ask that you cite
- * the research papers on the package. Check out http://www.gromacs.org.
+ * the research papers on the package. Check out https://www.gromacs.org.
  */
 /*! \internal \file
  *
@@ -64,6 +63,7 @@
 #include "gromacs/math/vectypes.h"
 #include "gromacs/pbcutil/ishift.h"
 #include "gromacs/timing/wallcycle.h"
+#include "gromacs/utility/fatalerror.h"
 #include "gromacs/utility/gmxmpi.h"
 
 #include "domdec_internal.h"
@@ -141,6 +141,19 @@ void GpuHaloExchange::Impl::reinitHalo(float3* d_coordinatesBuffer, float3* d_fo
     const gmx_domdec_comm_t&     comm = *dd_->comm;
     const gmx_domdec_comm_dim_t& cd   = comm.cd[dimIndex_];
     const gmx_domdec_ind_t&      ind  = cd.ind[pulse_];
+
+    if (dimIndex_ > 0 && cd.numPulses() > 1)
+    {
+        gmx_fatal(
+                FARGS,
+                "GPU direct communications cannot be used for multi-dimensional halo exchanges "
+                "with more than one pulse in the second or third dimension. Please try using fewer "
+                "ranks (or change the decomposition with '-dd'), or if that does not work then "
+                "disable GPU direct communications.");
+    }
+    GMX_RELEASE_ASSERT(cd.receiveInPlace,
+                       "The CUDA DD halo implementation only supports in place receive. "
+                       "The condition should be guaranteed by the check and fatal_error above.");
 
     numHomeAtoms_ = comm.atomRanges.numHomeAtoms(); // offset for data received by this rank
 
@@ -253,6 +266,7 @@ void GpuHaloExchange::Impl::reinitHalo(float3* d_coordinatesBuffer, float3* d_fo
 
 void GpuHaloExchange::Impl::enqueueWaitRemoteCoordinatesReadyEvent(GpuEventSynchronizer* coordinatesReadyOnDeviceEvent)
 {
+#if GMX_MPI
     GMX_ASSERT(coordinatesReadyOnDeviceEvent != nullptr,
                "Co-ordinate Halo exchange requires valid co-ordinate ready event");
 
@@ -273,6 +287,9 @@ void GpuHaloExchange::Impl::enqueueWaitRemoteCoordinatesReadyEvent(GpuEventSynch
                  mpi_comm_mysim_,
                  MPI_STATUS_IGNORE);
     remoteCoordinatesReadyOnDeviceEvent->enqueueWaitEvent(*haloStream_);
+#else
+    GMX_UNUSED_VALUE(coordinatesReadyOnDeviceEvent);
+#endif
 }
 
 GpuEventSynchronizer* GpuHaloExchange::Impl::communicateHaloCoordinates(const matrix box,
@@ -329,7 +346,9 @@ GpuEventSynchronizer* GpuHaloExchange::Impl::communicateHaloCoordinates(const ma
 
     // wait for remote co-ordinates is implicit with process-MPI as non-local stream is synchronized before MPI calls
     // and MPI_Waitall call makes sure both neighboring ranks' non-local stream is synchronized before data transfer is initiated
-    if (GMX_THREAD_MPI && dimIndex_ == 0 && pulse_ == 0)
+    // For multi-dimensional halo exchanges, this needs to be done for every dimIndex_, since the remote ranks will be different
+    // for each. But different pulses within a dimension will communicate with the same remote ranks so we can restrict to the first pulse.
+    if (GMX_THREAD_MPI && pulse_ == 0)
     {
         enqueueWaitRemoteCoordinatesReadyEvent(dependencyEvent);
     }
@@ -460,6 +479,12 @@ void GpuHaloExchange::Impl::communicateHaloDataWithCudaMPI(float3* sendPtr,
     MPI_Send(sendPtr, sendSize * DIM, MPI_FLOAT, sendRank, 0, mpi_comm_mysim_);
 
     MPI_Wait(&request, MPI_STATUS_IGNORE);
+#else
+    GMX_UNUSED_VALUE(sendPtr);
+    GMX_UNUSED_VALUE(sendRank);
+    GMX_UNUSED_VALUE(recvPtr);
+    GMX_UNUSED_VALUE(recvSize);
+    GMX_UNUSED_VALUE(recvRank);
 #endif
 }
 

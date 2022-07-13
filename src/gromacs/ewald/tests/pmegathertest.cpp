@@ -1,10 +1,9 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2016,2017,2018,2019,2020,2021, by the GROMACS development team, led by
- * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
- * and including many others, as listed in the AUTHORS file in the
- * top-level source directory and at http://www.gromacs.org.
+ * Copyright 2016- The GROMACS Authors
+ * and the project initiators Erik Lindahl, Berk Hess and David van der Spoel.
+ * Consult the AUTHORS/COPYING files and https://www.gromacs.org for details.
  *
  * GROMACS is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
@@ -18,7 +17,7 @@
  *
  * You should have received a copy of the GNU Lesser General Public
  * License along with GROMACS; if not, see
- * http://www.gnu.org/licenses, or write to the Free Software Foundation,
+ * https://www.gnu.org/licenses, or write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA.
  *
  * If you want to redistribute modifications to GROMACS, please
@@ -27,10 +26,10 @@
  * consider code for inclusion in the official distribution, but
  * derived work must not be called official GROMACS. Details are found
  * in the README & COPYING files - if they are missing, get the
- * official version at http://www.gromacs.org.
+ * official version at https://www.gromacs.org.
  *
  * To help us fund GROMACS development, we humbly ask that you cite
- * the research papers on the package. Check out http://www.gromacs.org.
+ * the research papers on the package. Check out https://www.gromacs.org.
  */
 /*! \internal \file
  * \brief
@@ -52,6 +51,7 @@
 
 #include "testutils/refdata.h"
 #include "testutils/test_hardware_environment.h"
+#include "testutils/testinit.h"
 #include "testutils/testasserts.h"
 
 #include "pmetestcommon.h"
@@ -82,7 +82,7 @@ SplineData getSplineData(const int pmeOrder, const int atomCount)
     // they are bogus, but that should not affect the reproducibility,
     // which is what we're after.
 
-    //! A lot of random input spline values - should have at least (max PME order = 5) * (DIM = 3) * (total unique atom number in all test cases = 13) values
+    // A lot of random input spline values - should have at least (max PME order = 5) * (DIM = 3) * (total unique atom number in all test cases = 13) values
     static const std::vector<real> s_sampleSplineValuesFull{
         0.12F, 0.81F, 0.29F, 0.22F, 0.13F, 0.19F, 0.12F, 0.8F,  0.44F, 0.38F, 0.32F, 0.36F, 0.27F,
         0.11F, 0.17F, 0.94F, 0.07F, 0.9F,  0.98F, 0.96F, 0.07F, 0.94F, 0.77F, 0.24F, 0.84F, 0.16F,
@@ -110,7 +110,7 @@ SplineData getSplineData(const int pmeOrder, const int atomCount)
         0.3F,  0.0F,  0.6F,  0.99F, 0.69F,
     };
 
-    //! A lot of random input spline derivatives - should have at least (max PME order = 5) * (DIM = 3) * (total unique atom number in all test cases = 13) values
+    // A lot of random input spline derivatives - should have at least (max PME order = 5) * (DIM = 3) * (total unique atom number in all test cases = 13) values
     static const std::vector<real> s_sampleSplineDerivativesFull{
         0.82F, 0.88F, 0.83F, 0.11F, 0.93F, 0.32F, 0.71F, 0.37F, 0.69F, 0.88F, 0.11F, 0.38F, 0.25F,
         0.5F,  0.36F, 0.81F, 0.78F, 0.31F, 0.66F, 0.32F, 0.27F, 0.35F, 0.53F, 0.83F, 0.08F, 0.08F,
@@ -230,12 +230,26 @@ std::map<std::string, TestSystem> c_testSystems = {
         CoordinatesVector(13, { 1e6, 1e7, -1e8 }) } },
 };
 
-/*! \brief Convenience typedef of the test input parameters - unit cell box, PME interpolation
- * order, grid dimensions, grid values, overwriting/reducing the input forces, atom count.
+/*! \brief Convenience typedef of the test input parameters
+ *
+ * Parameters:
+ * - unit cell box
+ * - PME interpolation order
+ * - grid dimensions
+ * - grid values
+ * - test system
+ * - PME hardware context index
  */
-typedef std::tuple<std::string, int, IVec, std::string, std::string> GatherInputParameters;
+typedef std::tuple<std::string, int, IVec, std::string, std::string, int> GatherInputParameters;
 
-//! Help GoogleTest name our test cases
+/*! \brief Help GoogleTest name our test cases
+ *
+ * This is intended to work like a custom test-naming function that
+ * would be passed as the fourth argument to INSTANTIATE_TEST_SUITE_P,
+ * except that we are not using that macro for these tests. Only the
+ * components of GatherInputParameters that affect the reference data
+ * values affect this name. Hardware context does not affect this
+ * name. */
 std::string nameOfTest(const testing::TestParamInfo<GatherInputParameters>& info)
 {
     std::string testName = formatString(
@@ -264,32 +278,61 @@ std::string nameOfTest(const testing::TestParamInfo<GatherInputParameters>& info
     return testName;
 }
 
+/*! \brief Help GoogleTest name our test cases
+ *
+ * This is intended to work like a custom test-naming function that
+ * would be passed as the fourth argument to INSTANTIATE_TEST_SUITE_P,
+ * except that we are not using that macro for these tests. All
+ * components of GatherInputParameters affect this name. */
+std::string fullNameOfTest(const testing::TestParamInfo<GatherInputParameters>& info,
+                           const std::string&                                   testName)
+{
+    // Note that makeRefDataFileName() relies on finding "WorksOn" in
+    // the name of the test case, so it can remove the information
+    // about the hardware context and all following text from the name
+    // of the file used for refdata.
+    const int hardwareContextIndex = std::get<5>(info.param);
+    return formatString(
+            "WorksOn_%s_%s", makeHardwareContextName(hardwareContextIndex).c_str(), testName.c_str());
+}
+
 //! Test fixture
 class GatherTest : public ::testing::TestWithParam<GatherInputParameters>
 {
 public:
     GatherTest() = default;
     //! Sets the input atom data references and programs once
-    static void SetUpTestSuite()
-    {
-        s_pmeTestHardwareContexts    = createPmeTestHardwareContextList();
-        g_allowPmeWithSyclForTesting = true; // We support Gather with SYCL
-    }
+};
 
-    static void TearDownTestSuite()
-    {
-        // Revert the value back.
-        g_allowPmeWithSyclForTesting = false;
-    }
+/*! \brief Test case whose body checks that gather works
+ *
+ * Normally the declaration of this class would be produced by a call
+ * to a macro like TEST_P(GatherTest, WorksWith). That macro places
+ * the body of the test case in the TestBody() method, which here is
+ * done explicitly.
+ *
+ * Note that it is important to use parameters_ to access the values
+ * that describe the particular test case, rather than the usual
+ * GoogleTest function GetParam(), because the latter no longer
+ * works. */
+class GatherTestBody : public GatherTest
+{
+public:
+    //! Constructor
+    explicit GatherTestBody(const GatherInputParameters& parameters) : parameters_(parameters) {}
+
+    //! The test parameters with which the test case was instantiated
+    GatherInputParameters parameters_;
 
     //! The test
-    static void runTest()
+    void TestBody() override
     {
         /* Getting the input */
         int         pmeOrder;
         IVec        gridSize;
         std::string boxName, gridValuesName, testSystemName;
-        std::tie(boxName, pmeOrder, gridSize, gridValuesName, testSystemName) = GetParam();
+        int         contextIndex;
+        std::tie(boxName, pmeOrder, gridSize, gridValuesName, testSystemName, contextIndex) = parameters_;
         Matrix3x3                        box               = c_inputBoxes.at(boxName);
         const SparseRealGridValuesInput& nonZeroGridValues = c_inputGrids.at(gridValuesName);
         TestSystem                       testSystem        = c_testSystems.at(testSystemName);
@@ -305,91 +348,74 @@ public:
         inputRec.coulombtype = CoulombInteractionType::Pme;
         inputRec.epsilon_r   = 1.0;
 
-        TestReferenceData refData;
-        for (const auto& pmeTestHardwareContext : s_pmeTestHardwareContexts)
+        const PmeTestHardwareContext& pmeTestHardwareContext = getPmeTestHardwareContexts()[contextIndex];
+        CodePath                      codePath               = pmeTestHardwareContext.codePath();
+        MessageStringCollector        messages =
+                getSkipMessagesIfNecessary(*getTestHardwareEnvironment()->hwinfo(), inputRec, codePath);
+        if (!messages.isEmpty())
         {
-            pmeTestHardwareContext->activate();
-            CodePath   codePath       = pmeTestHardwareContext->codePath();
-            const bool supportedInput = pmeSupportsInputForMode(
-                    *getTestHardwareEnvironment()->hwinfo(), &inputRec, codePath);
-            if (!supportedInput)
-            {
-                /* Testing the failure for the unsupported input */
-                EXPECT_THROW_GMX(pmeInitWrapper(&inputRec, codePath, nullptr, nullptr, nullptr, box),
-                                 NotImplementedError);
-                continue;
-            }
-
-            /* Describing the test uniquely */
-            SCOPED_TRACE(
-                    formatString("Testing force gathering on %s for PME grid size %d %d %d"
-                                 ", order %d, %d atoms",
-                                 pmeTestHardwareContext->description().c_str(),
-                                 gridSize[XX],
-                                 gridSize[YY],
-                                 gridSize[ZZ],
-                                 pmeOrder,
-                                 atomCount));
-
-            PmeSafePointer                          pmeSafe = pmeInitWrapper(&inputRec,
-                                                    codePath,
-                                                    pmeTestHardwareContext->deviceContext(),
-                                                    pmeTestHardwareContext->deviceStream(),
-                                                    pmeTestHardwareContext->pmeGpuProgram(),
-                                                    box);
-            std::unique_ptr<StatePropagatorDataGpu> stateGpu =
-                    (codePath == CodePath::GPU)
-                            ? makeStatePropagatorDataGpu(*pmeSafe.get(),
-                                                         pmeTestHardwareContext->deviceContext(),
-                                                         pmeTestHardwareContext->deviceStream())
-                            : nullptr;
-
-            pmeInitAtoms(pmeSafe.get(), stateGpu.get(), codePath, testSystem.coordinates, testSystem.charges);
-
-            /* Setting some more inputs */
-            pmeSetRealGrid(pmeSafe.get(), codePath, nonZeroGridValues);
-            pmeSetGridLineIndices(pmeSafe.get(), codePath, testSystem.gridLineIndices);
-            for (int dimIndex = 0; dimIndex < DIM; dimIndex++)
-            {
-                pmeSetSplineData(pmeSafe.get(),
-                                 codePath,
-                                 splineData.splineValues[dimIndex],
-                                 PmeSplineDataType::Values,
-                                 dimIndex);
-                pmeSetSplineData(pmeSafe.get(),
-                                 codePath,
-                                 splineData.splineDerivatives[dimIndex],
-                                 PmeSplineDataType::Derivatives,
-                                 dimIndex);
-            }
-
-            /* Explicitly copying the sample forces to be able to modify them */
-            auto inputForcesFull(c_sampleForcesFull);
-            GMX_RELEASE_ASSERT(ssize(inputForcesFull) >= atomCount, "Bad input forces size");
-            auto forces = ForcesVector(inputForcesFull).subArray(0, atomCount);
-
-            /* Running the force gathering itself */
-            pmePerformGather(pmeSafe.get(), codePath, forces);
-            pmeFinalizeTest(pmeSafe.get(), codePath);
-
-            /* Check the output forces correctness */
-            TestReferenceChecker forceChecker(refData.rootChecker());
-            const auto           ulpTolerance = 3 * pmeOrder;
-            forceChecker.setDefaultTolerance(relativeToleranceAsUlp(1.0, ulpTolerance));
-            forceChecker.checkSequence(forces.begin(), forces.end(), "Forces");
+            GTEST_SKIP() << messages.toString();
         }
+        pmeTestHardwareContext.activate();
+        SCOPED_TRACE("Testing on " + pmeTestHardwareContext.description());
+
+        // Describe the test uniquely in case it fails
+        SCOPED_TRACE(
+                formatString("Testing force gathering on %s for PME grid size %d %d %d"
+                             ", order %d, %d atoms",
+                             pmeTestHardwareContext.description().c_str(),
+                             gridSize[XX],
+                             gridSize[YY],
+                             gridSize[ZZ],
+                             pmeOrder,
+                             atomCount));
+
+        PmeSafePointer                          pmeSafe = pmeInitWrapper(&inputRec,
+                                                codePath,
+                                                pmeTestHardwareContext.deviceContext(),
+                                                pmeTestHardwareContext.deviceStream(),
+                                                pmeTestHardwareContext.pmeGpuProgram(),
+                                                box);
+        std::unique_ptr<StatePropagatorDataGpu> stateGpu =
+                (codePath == CodePath::GPU)
+                        ? makeStatePropagatorDataGpu(*pmeSafe.get(),
+                                                     pmeTestHardwareContext.deviceContext(),
+                                                     pmeTestHardwareContext.deviceStream())
+                        : nullptr;
+
+        pmeInitAtoms(pmeSafe.get(), stateGpu.get(), codePath, testSystem.coordinates, testSystem.charges);
+
+        /* Setting some more inputs */
+        pmeSetRealGrid(pmeSafe.get(), codePath, nonZeroGridValues);
+        pmeSetGridLineIndices(pmeSafe.get(), codePath, testSystem.gridLineIndices);
+        for (int dimIndex = 0; dimIndex < DIM; dimIndex++)
+        {
+            pmeSetSplineData(
+                    pmeSafe.get(), codePath, splineData.splineValues[dimIndex], PmeSplineDataType::Values, dimIndex);
+            pmeSetSplineData(pmeSafe.get(),
+                             codePath,
+                             splineData.splineDerivatives[dimIndex],
+                             PmeSplineDataType::Derivatives,
+                             dimIndex);
+        }
+
+        /* Explicitly copying the sample forces to be able to modify them */
+        auto inputForcesFull(c_sampleForcesFull);
+        GMX_RELEASE_ASSERT(ssize(inputForcesFull) >= atomCount, "Bad input forces size");
+        auto forces = ForcesVector(inputForcesFull).subArray(0, atomCount);
+
+        /* Running the force gathering itself */
+        pmePerformGather(pmeSafe.get(), codePath, forces);
+        pmeFinalizeTest(pmeSafe.get(), codePath);
+
+        /* Check the output forces correctness */
+        TestReferenceData    refData(makeRefDataFileName());
+        TestReferenceChecker forceChecker(refData.rootChecker());
+        const auto           ulpTolerance = 3 * pmeOrder;
+        forceChecker.setDefaultTolerance(relativeToleranceAsUlp(1.0, ulpTolerance));
+        forceChecker.checkSequence(forces.begin(), forces.end(), "Forces");
     }
-
-    static std::vector<std::unique_ptr<PmeTestHardwareContext>> s_pmeTestHardwareContexts;
 };
-
-std::vector<std::unique_ptr<PmeTestHardwareContext>> GatherTest::s_pmeTestHardwareContexts;
-
-//! Test for PME force gathering
-TEST_P(GatherTest, WorksWith)
-{
-    EXPECT_NO_THROW_GMX(runTest());
-}
 
 //! Moved out from instantiations for readability
 const auto c_inputBoxNames = ::testing::Values("rect", "tric");
@@ -398,16 +424,21 @@ const auto c_inputGridNames = ::testing::Values("first", "second");
 //! Moved out from instantiations for readability
 const auto c_inputTestSystemNames = ::testing::Values("1 atom", "2 atoms", "13 atoms");
 
-//! Instantiation of the PME gathering test
-INSTANTIATE_TEST_SUITE_P(Pme,
-                         GatherTest,
-                         ::testing::Combine(c_inputBoxNames,
-                                            ::testing::ValuesIn(c_inputPmeOrders),
-                                            ::testing::ValuesIn(c_inputGridSizes),
-                                            c_inputGridNames,
-                                            c_inputTestSystemNames),
-                         nameOfTest);
-
 } // namespace
+
+void registerDynamicalPmeGatherTests(const Range<int> hardwareContextIndexRange)
+{
+    // Form the Cartesian product of all test values we might check
+    const auto testCombinations = ::testing::Combine(
+            c_inputBoxNames,
+            ::testing::ValuesIn(c_inputPmeOrders),
+            ::testing::ValuesIn(c_inputGridSizes),
+            c_inputGridNames,
+            c_inputTestSystemNames,
+            ::testing::Range(*hardwareContextIndexRange.begin(), *hardwareContextIndexRange.end()));
+    gmx::test::registerTests<GatherTest, GatherTestBody, decltype(testCombinations)>(
+            "Pme_GatherTest", nameOfTest, fullNameOfTest, testCombinations);
+}
+
 } // namespace test
 } // namespace gmx

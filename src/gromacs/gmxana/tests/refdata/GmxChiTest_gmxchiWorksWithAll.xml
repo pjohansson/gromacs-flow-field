@@ -8,8 +8,8 @@ Title: First 10 residues from 1AKI
 
 There are 10 residues with dihedrals
 There are 37 dihedrals
-Dihedral:  Phi   Psi  Chi1  Chi2  Chi3  Chi4  Chi5  Chi6  
-Number:     10    10     7     5     3     2     0     0  
+Dihedral:  Phi   Psi  Chi1  Chi2  Chi3  Chi4  Chi5  Chi6
+Number:     10    10     7     5     3     2     0     0
 
  *** J-Couplings from simulation (plus std. dev.) ***
 
@@ -17,10 +17,10 @@ Residue    J_NHa1   SD J_NHa2   SD J_HaC'   SD J_NHCb   SDJ_Ci-1Hai   SD  J_HaN 
 ------------------------------------------------------------------------------------------------------------
 
 Dihedrals with S2 > 0.8
-Dihedral:  Phi   Psi  Chi1  Chi2  Chi3  Chi4  Chi5  Chi6 
-Number:     10    10     7     5     3     2     0     0  
+Dihedral:  Phi   Psi  Chi1  Chi2  Chi3  Chi4  Chi5  Chi6
+Number:     10    10     7     5     3     2     0     0
 Residue LYS1
- Angle [   AI,   AJ,   AK,   AL]  #tr/ns  S^2D  
+ Angle [   AI,   AJ,   AK,   AL]  #tr/ns  S^2D
 --------------------------------------------
    Phi [    2,    1,    5,   23]    0.00    1.00
    Psi [    1,    5,   23,   24]    0.00    1.00
@@ -30,7 +30,7 @@ Residue LYS1
    Chi4[   10,   13,   16,   19]    0.00    1.00
 
 Residue VAL2
- Angle [   AI,   AJ,   AK,   AL]  #tr/ns  S^2D  
+ Angle [   AI,   AJ,   AK,   AL]  #tr/ns  S^2D
 --------------------------------------------
    Phi [   26,   25,   27,   39]    0.00    1.00
    Psi [   25,   27,   39,   40]    0.00    1.00
@@ -38,7 +38,7 @@ Residue VAL2
    Chi1[   25,   27,   29,   31]    0.00    1.00
 
 Residue PHE3
- Angle [   AI,   AJ,   AK,   AL]  #tr/ns  S^2D  
+ Angle [   AI,   AJ,   AK,   AL]  #tr/ns  S^2D
 --------------------------------------------
    Phi [   42,   41,   43,   59]    0.00    1.00
    Psi [   41,   43,   59,   60]    0.00    1.00
@@ -47,14 +47,14 @@ Residue PHE3
    Chi2[   43,   45,   48,   49]    0.00    0.99
 
 Residue GLY4
- Angle [   AI,   AJ,   AK,   AL]  #tr/ns  S^2D  
+ Angle [   AI,   AJ,   AK,   AL]  #tr/ns  S^2D
 --------------------------------------------
    Phi [   62,   61,   63,   66]    0.00    1.00
    Psi [   61,   63,   66,   67]    0.00    1.00
  Omega [   43,   59,   61,   63]    0.00    0.99
 
 Residue ARG5
- Angle [   AI,   AJ,   AK,   AL]  #tr/ns  S^2D  
+ Angle [   AI,   AJ,   AK,   AL]  #tr/ns  S^2D
 --------------------------------------------
    Phi [   69,   68,   70,   90]    0.00    0.99
    Psi [   68,   70,   90,   91]    0.00    1.00
@@ -65,7 +65,7 @@ Residue ARG5
    Chi4[   75,   78,   81,   83]    0.00    1.00
 
 Residue CYS6
- Angle [   AI,   AJ,   AK,   AL]  #tr/ns  S^2D  
+ Angle [   AI,   AJ,   AK,   AL]  #tr/ns  S^2D
 --------------------------------------------
    Phi [   93,   92,   94,  101]    0.00    1.00
    Psi [   92,   94,  101,  102]    0.00    1.00
@@ -73,7 +73,7 @@ Residue CYS6
    Chi1[   92,   94,   96,   99]    0.00    0.99
 
 Residue GLU7
- Angle [   AI,   AJ,   AK,   AL]  #tr/ns  S^2D  
+ Angle [   AI,   AJ,   AK,   AL]  #tr/ns  S^2D
 --------------------------------------------
    Phi [  104,  103,  105,  116]    0.00    1.00
    Psi [  103,  105,  116,  117]    0.00    1.00
@@ -83,7 +83,7 @@ Residue GLU7
    Chi3[  107,  110,  113,  114]    0.00    0.98
 
 Residue LEU8
- Angle [   AI,   AJ,   AK,   AL]  #tr/ns  S^2D  
+ Angle [   AI,   AJ,   AK,   AL]  #tr/ns  S^2D
 --------------------------------------------
    Phi [  119,  118,  120,  135]    0.00    0.99
    Psi [  118,  120,  135,  136]    0.00    0.98
@@ -92,14 +92,14 @@ Residue LEU8
    Chi2[  120,  122,  125,  127]    0.00    1.00
 
 Residue ALA9
- Angle [   AI,   AJ,   AK,   AL]  #tr/ns  S^2D  
+ Angle [   AI,   AJ,   AK,   AL]  #tr/ns  S^2D
 --------------------------------------------
    Phi [  138,  137,  139,  145]    0.00    0.99
    Psi [  137,  139,  145,  146]    0.00    1.00
  Omega [  120,  135,  137,  139]    0.00    1.00
 
 Residue ALA10
- Angle [   AI,   AJ,   AK,   AL]  #tr/ns  S^2D  
+ Angle [   AI,   AJ,   AK,   AL]  #tr/ns  S^2D
 --------------------------------------------
    Phi [  148,  147,  149,  155]    0.00    1.00
    Psi [  147,  149,  155,  156]    0.00    1.00

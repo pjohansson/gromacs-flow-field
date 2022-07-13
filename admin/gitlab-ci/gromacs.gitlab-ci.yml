@@ -19,7 +19,7 @@ simple-build:
     - .variables:default
     - .use-ccache
     - .use-clang:base
-    - .rules:basic-push
+    - .rules:merge-requests
   stage: pre-build
   image: ${CI_REGISTRY}/gromacs/gromacs/ci-ubuntu-20.04-llvm-12
 
@@ -75,6 +75,9 @@ simple-build:
     - awk '/warning/,/warning.*generated|^$/' buildLogFile.log testBuildLogFile.log
       | grep -v "CMake" | tee buildErrors.log || true
     - grep "cannot be built" buildLogFile.log testBuildLogFile.log | tee -a buildErrors.log || true
+    - grep "fatal error" buildLogFile.log testBuildLogFile.log | tee -a buildErrors.log || true
+    - grep "error generated when compiling" buildLogFile.log testBuildLogFile.log | tee -a buildErrors.log || true
+    - grep "error:" buildLogFile.log testBuildLogFile.log | tee -a buildErrors.log || true
     - $CMAKE --build . --target install 2>&1 | tee installBuildLogFile.log
     - if [ -s buildErrors.log ] ; then echo "Found compiler warning during build"; cat buildErrors.log; exit 1; fi
     - ctest -D ExperimentalTest --output-on-failure | tee ctestLog.log || true

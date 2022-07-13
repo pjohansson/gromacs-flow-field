@@ -1,11 +1,9 @@
 #
 # This file is part of the GROMACS molecular simulation package.
 #
-# Copyright (c) 2014,2015,2016,2017,2018 by the GROMACS development team.
-# Copyright (c) 2019,2020,2021, by the GROMACS development team, led by
-# Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
-# and including many others, as listed in the AUTHORS file in the
-# top-level source directory and at http://www.gromacs.org.
+# Copyright 2014- The GROMACS Authors
+# and the project initiators Erik Lindahl, Berk Hess and David van der Spoel.
+# Consult the AUTHORS/COPYING files and https://www.gromacs.org for details.
 #
 # GROMACS is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public License
@@ -19,7 +17,7 @@
 #
 # You should have received a copy of the GNU Lesser General Public
 # License along with GROMACS; if not, see
-# http://www.gnu.org/licenses, or write to the Free Software Foundation,
+# https://www.gnu.org/licenses, or write to the Free Software Foundation,
 # Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA.
 #
 # If you want to redistribute modifications to GROMACS, please
@@ -28,10 +26,10 @@
 # consider code for inclusion in the official distribution, but
 # derived work must not be called official GROMACS. Details are found
 # in the README & COPYING files - if they are missing, get the
-# official version at http://www.gromacs.org.
+# official version at https://www.gromacs.org.
 #
 # To help us fund GROMACS development, we humbly ask that you cite
-# the research papers on the package. Check out http://www.gromacs.org.
+# the research papers on the package. Check out https://www.gromacs.org.
 
 # Sets version information variables and provides CMake functions for
 # generating files based on them
@@ -209,7 +207,7 @@ set(GMX_VERSION_PATCH ${Gromacs_VERSION_MINOR})
 # candidates, where it signifies the most recent such release from
 # this branch; it will be empty before the first such release, as well
 # as after the final release is out.
-set(GMX_VERSION_SUFFIX "-beta1")
+set(GMX_VERSION_SUFFIX "")
 
 # Conventionally with libtool, any ABI change must change the major
 # version number, the minor version number should change if it's just
@@ -235,7 +233,7 @@ endif()
 set(GMX_VERSION_STRING "${GMX_VERSION}${GMX_VERSION_SUFFIX}")
 
 set(REGRESSIONTEST_VERSION "${GMX_VERSION_STRING}")
-set(REGRESSIONTEST_BRANCH "master")
+set(REGRESSIONTEST_BRANCH "release-2022")
 # Follow the relevant part of the release checklist at
 # https://gitlab.com/gromacs/gromacs/-/wikis/Release-checklist#how-to-build-a-regressiontests-tarball
 # in order to have it build the regressiontests tarball with all the
@@ -243,7 +241,7 @@ set(REGRESSIONTEST_BRANCH "master")
 # directory name within the regressiontests tarball, which affects the
 # md5sum of the tarball. The matching md5sum has to go here, and if it
 # isn't right the real release workflow will report a failure.
-set(REGRESSIONTEST_MD5SUM "9e122010c6e0fea35ec621a8e6561f7f" CACHE INTERNAL "MD5 sum of the regressiontests tarball for this GROMACS version")
+set(REGRESSIONTEST_MD5SUM "d0e16baf3d341a80eaf590e8461071c9" CACHE INTERNAL "MD5 sum of the regressiontests tarball for this GROMACS version")
 
 # If you are making a custom fork of GROMACS, please describe your
 # fork, perhaps with its version number, in the value of
@@ -260,7 +258,9 @@ set(GMX_VERSION_STRING_OF_FORK "" CACHE INTERNAL
     "Version string for forks of GROMACS to set to describe themselves")
 mark_as_advanced(GMX_VERSION_STRING_OF_FORK)
 if (GMX_VERSION_STRING_OF_FORK)
-    set(GMX_VERSION_STRING "${GMX_VERSION_STRING}-${GMX_VERSION_STRING_OF_FORK}")
+    # Remove dashes from GMX_VERSION_STRING_OF_FORK to avoid confusing pkg-config. Issue #4363
+    string(REPLACE "-" "_" _VERSION_STRING_OF_FORK_CLEAN "${GMX_VERSION_STRING_OF_FORK}")
+    set(GMX_VERSION_STRING "${GMX_VERSION_STRING}-${_VERSION_STRING_OF_FORK_CLEAN}")
 endif()
 
 option(GMX_BUILD_TARBALL "Build tarball without -dev version suffix" OFF)
@@ -284,8 +284,8 @@ if (GMX_VERSION_STRING_OF_FORK)
     set(GMX_MANUAL_DOI_INTERNAL "")
     set(GMX_SOURCE_DOI_INTERNAL "")
 else()
-    set(GMX_MANUAL_DOI_INTERNAL "") # Set correct doi string here
-    set(GMX_SOURCE_DOI_INTERNAL "") # Set correct doi string here
+    set(GMX_MANUAL_DOI_INTERNAL "10.5281/zenodo.6103568") # Set correct doi string here
+    set(GMX_SOURCE_DOI_INTERNAL "10.5281/zenodo.6103835") # Set correct doi string here
 endif()
 set(GMX_MANUAL_DOI ${GMX_MANUAL_DOI_INTERNAL} CACHE INTERNAL "reserved doi for GROMACS manual" FORCE)
 set(GMX_SOURCE_DOI ${GMX_SOURCE_DOI_INTERNAL} CACHE INTERNAL "reserved doi for GROMACS source code" FORCE)
@@ -443,6 +443,35 @@ unset(GMX_VERSION_CENTRAL_BASE_HASH)
 unset(GMX_RELEASE_SOURCE_FILE_CHECKSUM)
 unset(GMX_CURRENT_SOURCE_FILE_CHECKSUM)
 
+# What file the checksum should be written to
+set(CHECKSUM_FILE "${PROJECT_SOURCE_DIR}/src/reference_checksum")
+
+# Target that allows checksumming a source tree when producing a tarball.
+# Allows verification of builds from the tarball to make sure the source had
+# not been tampered with.
+# Note: The RUN_ALWAYS here is to regenerate the hash file only, it does not
+# mean that the target is run in all builds
+if (HAVE_FULL_FUNCTIONING_PYTHON)
+    # We need the full path to the directories after passing it through
+    set(FULL_PATH_DIRECTORIES "")
+    foreach(DIR ${SET_OF_DIRECTORIES_TO_CHECKSUM})
+        list(APPEND FULL_PATH_DIRECTORIES "${PROJECT_SOURCE_DIR}/${DIR}")
+    endforeach()
+    gmx_add_custom_output_target(reference_checksum RUN_ALWAYS
+        OUTPUT ${CHECKSUM_FILE}
+        COMMAND ${PYTHON_EXECUTABLE}
+            ${PROJECT_SOURCE_DIR}/admin/createFileHash.py
+            -s ${FULL_PATH_DIRECTORIES}
+            -o ${CHECKSUM_FILE}
+        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+        COMMENT "Generating reference checksum of source files")
+else()
+    add_custom_target(reference_checksum
+        COMMAND ${CMAKE_COMMAND} -E echo
+        "Can not checksum files without python3 being available"
+        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+        COMMENT "Generating reference checksum of source files")
+endif()
 
 # What file the checksum should be written to
 set(CHECKSUM_FILE "${PROJECT_SOURCE_DIR}/src/reference_checksum")

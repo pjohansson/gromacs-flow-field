@@ -10,8 +10,8 @@ SCRIPT=$PWD/scripted_gmx_docker_builds.py
 # thread and no MPI configurations.
 
 args[${#args[@]}]="--gcc 11 --clfft --mpi openmpi --rocm"
-args[${#args[@]}]="--gcc 11 --cuda 11.4.1 --clfft --mpi openmpi --heffte v2.1.0"
-args[${#args[@]}]="--gcc 7 --cuda 11.0 --clfft --mpi openmpi --heffte v2.1.0"
+args[${#args[@]}]="--gcc 11 --cuda 11.4.1 --clfft --mpi openmpi --heffte v2.2.0"
+args[${#args[@]}]="--gcc 7 --cuda 11.0 --clfft --mpi openmpi --heffte v2.2.0"
 args[${#args[@]}]="--gcc 9 --mpi openmpi --cp2k 8.2"
 args[${#args[@]}]="--llvm 11 --cuda 11.4.1"
 args[${#args[@]}]="--llvm 11 --tsan"
@@ -20,7 +20,7 @@ args[${#args[@]}]="--llvm 13 --clfft --mpi openmpi --rocm"
 args[${#args[@]}]="--oneapi 2021.4.0"
 args[${#args[@]}]="--oneapi 2021.4.0 --intel-compute-runtime"
 args[${#args[@]}]="--llvm --doxygen --mpi openmpi --venvs 3.7.7"
-args[${#args[@]}]="--llvm 12 --cuda 11.4.1 --hipsycl 4481c03 --rocm 4.3"
+args[${#args[@]}]="--llvm 12 --cuda 11.4.3 --hipsycl c1246fd --rocm 5.0"
 
 echo
 echo "Consider pulling the following images for build layer cache."

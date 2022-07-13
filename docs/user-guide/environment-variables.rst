@@ -138,6 +138,10 @@ Performance and Run Control
         to localized bonded interaction distribution; optimal value dependent on
         system and hardware, default value is 4.
 
+``GMX_DD_SINGLE_RANK``
+        Controls the use of the domain decomposition machinery when using a single MPI rank.
+        Value 0 turns DD off, 1 turns DD on. Default is automated choice based on heuristics.
+
 ``GMX_GPU_NB_EWALD_TWINCUT``
         force the use of twin-range cutoff kernel even if :mdp:`rvdw` equals
         :mdp:`rcoulomb` after PP-PME load balancing. The switch to twin-range kernels is automated,
@@ -153,13 +157,30 @@ Performance and Run Control
         Deprecated. Use ``GMX_DISABLE_GPU_TIMING`` instead.
 
 ``GMX_GPU_DD_COMMS``
-        perform domain decomposition halo exchange communication operations (on coordinate and force buffers)
-        directly on GPU memory spaces, without the staging of data through CPU memory, where possible.
+        Removed, use GMX_ENABLE_DIRECT_GPU_COMM instead.
 
 ``GMX_GPU_PME_PP_COMMS``
-        when the simulation uses a separate PME rank, perform communication operations between PP and PME rank
-        (for coordinate and force buffers) directly on GPU memory spaces, without the staging of data through CPU
-        memory, where possible. 
+        Removed, use GMX_ENABLE_DIRECT_GPU_COMM instead.
+
+``GMX_ENABLE_DIRECT_GPU_COMM``
+        Enable direct GPU communication in multi-rank parallel runs.
+	Note that domain decomposition with CUDA-aware MPI does not support
+	multiple pulses along the second and third decomposition dimension,
+	so for very small systems the feature will be disabled internally.
+
+``GMX_ENABLE_STAGED_GPU_TO_CPU_PMEPP_COMM``
+        Use a staged implementation of GPU communications for PME force
+        transfers from the PME GPU to the CPU memory of a PP rank for
+        thread-MPI. The staging is done via a GPU buffer on the PP
+        GPU. This is expected to be beneficial for servers with direct
+        communication links between GPUs.
+
+``GMX_DISABLE_STAGED_GPU_TO_CPU_PMEPP_COMM``
+        Use direct rather than staged GPU communications for PME force
+        transfers from the PME GPU to the CPU memory of a PP
+        rank. This may have advantages in PCIe-only servers, or for
+        runs with low atom counts (which are more sensitive to latency
+        than bandwidth).
 
 ``GMX_GPU_SYCL_NO_SYNCHRONIZE``
         disable synchronizations between different GPU streams in SYCL build, instead relying on SYCL runtime to
@@ -168,6 +189,12 @@ Performance and Run Control
 ``GMX_GPU_SYCL_USE_SUBDEVICES``
         partition the GPUs that support it into sub-devices, and treat each one as an independent device.
         GPUs that can not be split are ignored. Intended for use with multi-tile GPUs.
+
+``GMX_GPU_SYCL_USE_GPU_FFT``
+        enable the use of GPU FFT with DPC++ on Intel GPUs. Unless this variable is set, only Mixed Mode PME is
+        available on Intel GPUs. It has been tested with oneAPI 2022.0.1 and OpenCL backend; older oneAPI
+        versions will not work or will produce wrong results. For hipSYCL builds, GPU FFT is always enabled on AMD GPUs,
+        and not affected by this variable.
 
 ``GMX_CYCLE_ALL``
         times all code during runs.  Incompatible with threads.
@@ -230,13 +257,19 @@ Performance and Run Control
 ``GMX_FORCE_UPDATE``
         update forces when invoking ``mdrun -rerun``.
 
+``GMX_FORCE_GPU_AWARE_MPI``
+        Override the result of build- and runtime GPU-aware MPI detection and force the use of
+        direct GPU MPI communication. Aimed at cases where the user knows that the MPI library is
+        GPU-aware, but |GROMACS| is not able to detect this. Note that only CUDA builds support
+        such functionality.
+
 ``GMX_FORCE_UPDATE_DEFAULT_GPU``
         Force update to run on the GPU by default, overriding the ``mdrun -update auto`` option. Works similar to setting
         ``mdrun -update gpu``, but (1) falls back to the CPU code-path, if set with input that is not supported and
         (2) can be used to run update on GPUs in multi-rank cases. The latter case should be
         considered experimental since it lacks substantial testing. Also, GPU update is only supported with the GPU direct
-        communications and ``GMX_FORCE_UPDATE_DEFAULT_GPU`` variable should be set simultaneously with ``GMX_GPU_DD_COMMS``
-        and ``GMX_GPU_PME_PP_COMMS`` environment variables in multi-rank case. Does not override ``mdrun -update cpu``.
+        communications and ``GMX_FORCE_UPDATE_DEFAULT_GPU`` variable should be set simultaneously with
+        ``GMX_ENABLE_DIRECT_GPU_COMM`` environment variable in multi-rank cases using library-MPI. Does not override ``mdrun -update cpu``.
 
 ``GMX_GPU_ID``
         set in the same way as ``mdrun -gpu_id``, ``GMX_GPU_ID``

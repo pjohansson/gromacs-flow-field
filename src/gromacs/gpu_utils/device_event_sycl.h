@@ -1,10 +1,9 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2020,2021, by the GROMACS development team, led by
- * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
- * and including many others, as listed in the AUTHORS file in the
- * top-level source directory and at http://www.gromacs.org.
+ * Copyright 2020- The GROMACS Authors
+ * and the project initiators Erik Lindahl, Berk Hess and David van der Spoel.
+ * Consult the AUTHORS/COPYING files and https://www.gromacs.org for details.
  *
  * GROMACS is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
@@ -18,7 +17,7 @@
  *
  * You should have received a copy of the GNU Lesser General Public
  * License along with GROMACS; if not, see
- * http://www.gnu.org/licenses, or write to the Free Software Foundation,
+ * https://www.gnu.org/licenses, or write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA.
  *
  * If you want to redistribute modifications to GROMACS, please
@@ -27,10 +26,10 @@
  * consider code for inclusion in the official distribution, but
  * derived work must not be called official GROMACS. Details are found
  * in the README & COPYING files - if they are missing, get the
- * official version at http://www.gromacs.org.
+ * official version at https://www.gromacs.org.
  *
  * To help us fund GROMACS development, we humbly ask that you cite
- * the research papers on the package. Check out http://www.gromacs.org.
+ * the research papers on the package. Check out https://www.gromacs.org.
  */
 /*! \libinternal \file
  *  \brief Implements a GpuEventSynchronizer class for SYCL.
@@ -70,7 +69,7 @@ public:
         events_.reserve(1);
     }
     //! A constructor from an existing event.
-    DeviceEvent(const cl::sycl::event& event) : events_{ event } {}
+    DeviceEvent(const sycl::event& event) : events_{ event } {}
     //! A destructor.
     ~DeviceEvent() = default;
     // Disable copy, move, and assignment. They all can be allowed, but not needed yet.
@@ -90,7 +89,11 @@ public:
         isMarked_ = true;
 #    else
         // Relies on SYCL_INTEL_enqueue_barrier
+#        if __SYCL_COMPILER_VERSION >= 20211123
+        events_ = { deviceStream.stream().ext_oneapi_submit_barrier() };
+#        else
         events_ = { deviceStream.stream().submit_barrier() };
+#        endif
 #    endif
     }
 
@@ -117,7 +120,11 @@ public:
 #    else
             GMX_ASSERT(events_.size() <= 1, "One event expected in DPC++, but we have several!");
             // Relies on SYCL_INTEL_enqueue_barrier extensions
+#        if __SYCL_COMPILER_VERSION >= 20211123
+            deviceStream.stream().ext_oneapi_submit_barrier(events_);
+#        else
             deviceStream.stream().submit_barrier(events_);
+#        endif
 #    endif
         }
     }
@@ -125,9 +132,9 @@ public:
     //! Checks the completion of the underlying event.
     inline bool isReady()
     {
-        bool allReady = std::all_of(events_.begin(), events_.end(), [](cl::sycl::event& event) {
-            auto info       = event.get_info<cl::sycl::info::event::command_execution_status>();
-            bool isComplete = (info == cl::sycl::info::event_command_status::complete);
+        bool allReady = std::all_of(events_.begin(), events_.end(), [](sycl::event& event) {
+            auto info       = event.get_info<sycl::info::event::command_execution_status>();
+            bool isComplete = (info == sycl::info::event_command_status::complete);
             return isComplete;
         });
         return allReady;
@@ -153,7 +160,7 @@ public:
     }
 
 private:
-    std::vector<cl::sycl::event> events_;
+    std::vector<sycl::event> events_;
 #    if GMX_SYCL_HIPSYCL
     /*! \brief Flag to track event marking in hipSYCL.
      *

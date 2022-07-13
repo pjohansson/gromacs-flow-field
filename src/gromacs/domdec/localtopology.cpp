@@ -1,11 +1,9 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2006 - 2014, The GROMACS development team.
- * Copyright (c) 2015,2016,2017,2018,2019,2020,2021, by the GROMACS development team, led by
- * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
- * and including many others, as listed in the AUTHORS file in the
- * top-level source directory and at http://www.gromacs.org.
+ * Copyright 2006- The GROMACS Authors
+ * and the project initiators Erik Lindahl, Berk Hess and David van der Spoel.
+ * Consult the AUTHORS/COPYING files and https://www.gromacs.org for details.
  *
  * GROMACS is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
@@ -19,7 +17,7 @@
  *
  * You should have received a copy of the GNU Lesser General Public
  * License along with GROMACS; if not, see
- * http://www.gnu.org/licenses, or write to the Free Software Foundation,
+ * https://www.gnu.org/licenses, or write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA.
  *
  * If you want to redistribute modifications to GROMACS, please
@@ -28,10 +26,10 @@
  * consider code for inclusion in the official distribution, but
  * derived work must not be called official GROMACS. Details are found
  * in the README & COPYING files - if they are missing, get the
- * official version at http://www.gromacs.org.
+ * official version at https://www.gromacs.org.
  *
  * To help us fund GROMACS development, we humbly ask that you cite
- * the research papers on the package. Check out http://www.gromacs.org.
+ * the research papers on the package. Check out https://www.gromacs.org.
  */
 
 /*! \internal \file
@@ -392,19 +390,20 @@ static void combine_idef(InteractionDefinitions* dest, gmx::ArrayRef<const threa
  * \returns The total number of bonded interactions for this atom for
  * which this domain is responsible.
  */
+template<bool haveSingleDomain>
 static inline int assignInteractionsForAtom(const AtomIndexSet&       atomIndexSet,
                                             const reverse_ilist_t&    reverseIlist,
                                             const gmx_ga2la_t&        ga2la,
                                             const gmx_domdec_zones_t& zones,
-                                            const bool                checkDistanceMultiBody,
-                                            const ivec                rcheck,
-                                            const bool                checkDistanceTwoBody,
-                                            const real                cutoffSquared,
-                                            const t_pbc*              pbc_null,
-                                            ArrayRef<const RVec>      coordinates,
-                                            InteractionDefinitions*   idef,
-                                            const int                 iz,
-                                            const DDBondedChecking    ddBondedChecking)
+                                            const bool gmx_unused     checkDistanceMultiBody,
+                                            const ivec gmx_unused     rcheck,
+                                            const bool gmx_unused     checkDistanceTwoBody,
+                                            const real gmx_unused     cutoffSquared,
+                                            const t_pbc gmx_unused*         pbc_null,
+                                            ArrayRef<const RVec> gmx_unused coordinates,
+                                            InteractionDefinitions*         idef,
+                                            const int                       iz,
+                                            const DDBondedChecking          ddBondedChecking)
 {
     gmx::ArrayRef<const DDPairInteractionRanges> iZones = zones.iZones;
 
@@ -454,7 +453,14 @@ static inline int assignInteractionsForAtom(const AtomIndexSet&       atomIndexS
                  */
                 /* Get the global index using the offset in the molecule */
                 const int k_gl = atomIndexSet.global + iatoms[2] - atomIndexSet.withinMolecule;
-                if (const auto* entry = ga2la.find(k_gl))
+                if constexpr (haveSingleDomain)
+                {
+                    // All atoms are local, we can assign without checks
+                    bUse       = true;
+                    tiatoms[1] = atomIndexSet.local;
+                    tiatoms[2] = ga2la.find(k_gl)->la;
+                }
+                else if (const auto* entry = ga2la.find(k_gl))
                 {
                     int kz = entry->cell;
                     if (kz >= zones.n)
@@ -501,6 +507,13 @@ static inline int assignInteractionsForAtom(const AtomIndexSet&       atomIndexS
                     /* Get the global index using the offset in the molecule */
                     const int k_gl = atomIndexSet.global + iatoms[k] - atomIndexSet.withinMolecule;
                     const auto* entry = ga2la.find(k_gl);
+                    if constexpr (haveSingleDomain)
+                    {
+                        // All atoms are local, we can assign without checks
+                        tiatoms[k] = entry->la;
+                        continue;
+                    }
+                    // NOLINTNEXTLINE(readability-misleading-indentation) remove when clang-tidy-13 is required
                     if (entry == nullptr || entry->cell >= zones.n)
                     {
                         /* We do not have this atom of this interaction
@@ -525,20 +538,23 @@ static inline int assignInteractionsForAtom(const AtomIndexSet&       atomIndexS
                         }
                     }
                 }
-                bUse = (bUse && (k_zero[XX] != 0) && (k_zero[YY] != 0) && (k_zero[ZZ] != 0));
-                if (checkDistanceMultiBody)
+                if constexpr (!haveSingleDomain)
                 {
-                    for (int d = 0; (d < DIM && bUse); d++)
+                    bUse = (bUse && (k_zero[XX] != 0) && (k_zero[YY] != 0) && (k_zero[ZZ] != 0));
+                    if (checkDistanceMultiBody)
                     {
-                        /* Check if the distance falls within
-                         * the cut-off to avoid possible multiple
-                         * assignments of bonded interactions.
-                         */
-                        if (rcheck[d] && k_plus[d]
-                            && dd_dist2(pbc_null, coordinates, tiatoms[k_zero[d]], tiatoms[k_plus[d]])
-                                       >= cutoffSquared)
+                        for (int d = 0; (d < DIM && bUse); d++)
                         {
-                            bUse = FALSE;
+                            /* Check if the distance falls within
+                             * the cut-off to avoid possible multiple
+                             * assignments of bonded interactions.
+                             */
+                            if (rcheck[d] && k_plus[d]
+                                && dd_dist2(pbc_null, coordinates, tiatoms[k_zero[d]], tiatoms[k_plus[d]])
+                                           >= cutoffSquared)
+                            {
+                                bUse = FALSE;
+                            }
                         }
                     }
                 }
@@ -617,6 +633,7 @@ static inline int assignPositionRestraintsForAtom(const AtomIndexSet&     atomIn
  * With thread parallelizing each thread acts on a different atom range:
  * at_start to at_end.
  */
+template<bool haveSingleDomain>
 static int make_bondeds_zone(const gmx_reverse_top_t&           rt,
                              ArrayRef<const int>                globalAtomIndices,
                              const gmx_ga2la_t&                 ga2la,
@@ -645,19 +662,19 @@ static int make_bondeds_zone(const gmx_reverse_top_t&           rt,
 
         const AtomIndexSet atomIndexMol = { atomIndexLocal, atomIndexGlobal, aim.atomIndexInMolecule };
         const auto&        ilistMol     = rt.interactionListForMoleculeType(aim.moleculeType);
-        numBondedInteractions += assignInteractionsForAtom(atomIndexMol,
-                                                           ilistMol,
-                                                           ga2la,
-                                                           zones,
-                                                           checkDistanceMultiBody,
-                                                           rcheck,
-                                                           checkDistanceTwoBody,
-                                                           cutoffSquared,
-                                                           pbc_null,
-                                                           coordinates,
-                                                           idef,
-                                                           izone,
-                                                           ddBondedChecking);
+        numBondedInteractions += assignInteractionsForAtom<haveSingleDomain>(atomIndexMol,
+                                                                             ilistMol,
+                                                                             ga2la,
+                                                                             zones,
+                                                                             checkDistanceMultiBody,
+                                                                             rcheck,
+                                                                             checkDistanceTwoBody,
+                                                                             cutoffSquared,
+                                                                             pbc_null,
+                                                                             coordinates,
+                                                                             idef,
+                                                                             izone,
+                                                                             ddBondedChecking);
 
         // Assign position restraints, when present, for the home zone
         if (izone == 0 && rt.hasPositionRestraints())
@@ -678,20 +695,20 @@ static int make_bondeds_zone(const gmx_reverse_top_t&           rt,
              * Note that we will index the intermolecular reverse ilist with atomIndexGlobal.
              */
             const AtomIndexSet atomIndexIntermol = { atomIndexLocal, atomIndexGlobal, atomIndexGlobal };
-            numBondedInteractions +=
-                    assignInteractionsForAtom(atomIndexIntermol,
-                                              rt.interactionListForIntermolecularInteractions(),
-                                              ga2la,
-                                              zones,
-                                              checkDistanceMultiBody,
-                                              rcheck,
-                                              checkDistanceTwoBody,
-                                              cutoffSquared,
-                                              pbc_null,
-                                              coordinates,
-                                              idef,
-                                              izone,
-                                              ddBondedChecking);
+            numBondedInteractions += assignInteractionsForAtom<haveSingleDomain>(
+                    atomIndexIntermol,
+                    rt.interactionListForIntermolecularInteractions(),
+                    ga2la,
+                    zones,
+                    checkDistanceMultiBody,
+                    rcheck,
+                    checkDistanceTwoBody,
+                    cutoffSquared,
+                    pbc_null,
+                    coordinates,
+                    idef,
+                    izone,
+                    ddBondedChecking);
         }
     }
 
@@ -699,6 +716,7 @@ static int make_bondeds_zone(const gmx_reverse_top_t&           rt,
 }
 
 /*! \brief Set the exclusion data for i-zone \p iz */
+template<bool haveSingleDomain>
 static void make_exclusions_zone(ArrayRef<const int>               globalAtomIndices,
                                  const gmx_ga2la_t&                ga2la,
                                  const gmx_domdec_zones_t&         zones,
@@ -729,8 +747,12 @@ static void make_exclusions_zone(ArrayRef<const int>               globalAtomInd
             const auto& excls = moltype[mtai.moleculeType].excls[mtai.atomIndex];
             for (const int excludedAtomIndexInMolecule : excls)
             {
-                if (const auto* jEntry =
-                            ga2la.find(globalAtomIndex + excludedAtomIndexInMolecule - mtai.atomIndex))
+                const int excludedAtomIndex = globalAtomIndex + excludedAtomIndexInMolecule - mtai.atomIndex;
+                if constexpr (haveSingleDomain)
+                {
+                    exclusionsForAtom.push_back(ga2la.find(excludedAtomIndex)->la);
+                }
+                else if (const auto* jEntry = ga2la.find(excludedAtomIndex))
                 {
                     /* This check is not necessary, but it can reduce
                      * the number of exclusions in the list, which in turn
@@ -840,22 +862,24 @@ static int make_local_bondeds_excls(const gmx_domdec_t&       dd,
                     idef_t->clear();
                 }
 
+                auto runMakeBondedsZone =
+                        zones.n == 1 ? make_bondeds_zone<true> : make_bondeds_zone<false>;
                 threadWorkObjects[thread].numBondedInteractions =
-                        make_bondeds_zone(rt,
-                                          dd.globalAtomIndices,
-                                          *dd.ga2la,
-                                          zones,
-                                          mtop.molblock,
-                                          checkDistanceMultiBody,
-                                          rcheck,
-                                          checkDistanceTwoBody,
-                                          cutoffSquared,
-                                          pbc_null,
-                                          coordinates,
-                                          idef->iparams.data(),
-                                          idef_t,
-                                          izone,
-                                          gmx::Range<int>(cg0t, cg1t));
+                        runMakeBondedsZone(rt,
+                                           dd.globalAtomIndices,
+                                           *dd.ga2la,
+                                           zones,
+                                           mtop.molblock,
+                                           checkDistanceMultiBody,
+                                           rcheck,
+                                           checkDistanceTwoBody,
+                                           cutoffSquared,
+                                           pbc_null,
+                                           coordinates,
+                                           idef->iparams.data(),
+                                           idef_t,
+                                           izone,
+                                           gmx::Range<int>(cg0t, cg1t));
 
                 if (izone < numIZonesForExclusions)
                 {
@@ -873,17 +897,19 @@ static int make_local_bondeds_excls(const gmx_domdec_t&       dd,
                     }
 
                     /* No charge groups and no distance check required */
-                    make_exclusions_zone(dd.globalAtomIndices,
-                                         *dd.ga2la,
-                                         zones,
-                                         rt.molblockIndices(),
-                                         mtop.moltype,
-                                         atomInfo,
-                                         excl_t,
-                                         izone,
-                                         cg0t,
-                                         cg1t,
-                                         mtop.intermolecularExclusionGroup);
+                    auto runMakeExclusionsZone =
+                            zones.n == 1 ? make_exclusions_zone<true> : make_exclusions_zone<false>;
+                    runMakeExclusionsZone(dd.globalAtomIndices,
+                                          *dd.ga2la,
+                                          zones,
+                                          rt.molblockIndices(),
+                                          mtop.moltype,
+                                          atomInfo,
+                                          excl_t,
+                                          izone,
+                                          cg0t,
+                                          cg1t,
+                                          mtop.intermolecularExclusionGroup);
                 }
             }
             GMX_CATCH_ALL_AND_EXIT_WITH_FATAL_ERROR

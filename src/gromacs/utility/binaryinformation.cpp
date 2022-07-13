@@ -1,13 +1,9 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 1991-2000, University of Groningen, The Netherlands.
- * Copyright (c) 2001-2004, The GROMACS development team.
- * Copyright (c) 2013,2014,2015,2016,2017 by the GROMACS development team.
- * Copyright (c) 2018,2019,2020,2021, by the GROMACS development team, led by
- * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
- * and including many others, as listed in the AUTHORS file in the
- * top-level source directory and at http://www.gromacs.org.
+ * Copyright 1991- The GROMACS Authors
+ * and the project initiators Erik Lindahl, Berk Hess and David van der Spoel.
+ * Consult the AUTHORS/COPYING files and https://www.gromacs.org for details.
  *
  * GROMACS is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
@@ -21,7 +17,7 @@
  *
  * You should have received a copy of the GNU Lesser General Public
  * License along with GROMACS; if not, see
- * http://www.gnu.org/licenses, or write to the Free Software Foundation,
+ * https://www.gnu.org/licenses, or write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA.
  *
  * If you want to redistribute modifications to GROMACS, please
@@ -30,10 +26,10 @@
  * consider code for inclusion in the official distribution, but
  * derived work must not be called official GROMACS. Details are found
  * in the README & COPYING files - if they are missing, get the
- * official version at http://www.gromacs.org.
+ * official version at https://www.gromacs.org.
  *
  * To help us fund GROMACS development, we humbly ask that you cite
- * the research papers on the package. Check out http://www.gromacs.org.
+ * the research papers on the package. Check out https://www.gromacs.org.
  */
 /*! \internal \file
  * \brief Implements functionality for printing information about the
@@ -70,11 +66,13 @@
 
 #include <algorithm>
 #include <array>
+#include <numeric>
 #include <string>
 
 /* This file is completely threadsafe - keep it that way! */
 
 #include "buildinfo.h"
+#include "contributors.h"
 #include "gromacs/utility/arraysize.h"
 #include "gromacs/utility/baseversion.h"
 #include "gromacs/utility/exceptions.h"
@@ -84,6 +82,7 @@
 #include "gromacs/utility/stringutil.h"
 #include "gromacs/utility/sysinfo.h"
 #include "gromacs/utility/textwriter.h"
+#include "gromacs/utility/mpiinfo.h"
 
 #include "cuda_version_information.h"
 #include "sycl_version_information.h"
@@ -106,104 +105,89 @@ std::string formatCentered(int width, const char* text)
     return formatString("%*s%s", offset, "", text);
 }
 
+void writeVectorAsColumns(gmx::TextWriter*                writer,
+                          const std::string&              header,
+                          const std::vector<std::string>& v,
+                          std::size_t                     outputWidth = 80)
+{
+    if (v.empty())
+    {
+        return;
+    }
+
+    writer->writeLine(formatCentered(outputWidth, header.c_str()));
+
+    const std::size_t maxWidth =
+            std::accumulate(v.begin(), v.end(), std::size_t{ 0 }, [](const auto a, const auto& s) {
+                return std::max(a, s.length());
+            });
+
+    const int columns     = outputWidth / (maxWidth + 1);
+    const int columnWidth = outputWidth / columns;
+
+    for (std::size_t i = 0; i < v.size(); i++)
+    {
+        const std::size_t padLeft = (columnWidth - v[i].length()) / 2;
+        const std::string paddedString{ std::string(padLeft, ' ') + v[i] };
+
+        // Using maxWidth+1 when calculating #columns above means we will always have spaces
+        writer->writeString(formatString("%-*s", columnWidth, paddedString.c_str()));
+        if ((i + 1) % columns == 0)
+        {
+            writer->ensureLineBreak();
+        }
+    }
+    writer->ensureEmptyLine();
+}
+
+void writeVectorAsSingleLine(gmx::TextWriter*                writer,
+                             const std::string&              header,
+                             const std::vector<std::string>& v,
+                             std::size_t                     outputWidth = 80)
+{
+    if (v.empty())
+    {
+        return;
+    }
+
+    writer->writeLine(formatCentered(outputWidth, header.c_str()));
+
+    std::string s;
+    for (std::size_t i = 0; i < v.size(); i++)
+    {
+        s += v[i];
+        if (i < v.size() - 2)
+        {
+            s += ", ";
+        }
+        else if (i == v.size() - 2)
+        {
+            s += (v.size() == 2) ? " and " : ", and "; // Oxford comma for >2 names...
+        }
+    }
+    writer->writeLine(formatCentered(outputWidth, s.c_str()));
+    writer->ensureEmptyLine();
+}
+
 void printCopyright(gmx::TextWriter* writer)
 {
-    // Contributors sorted alphabetically by last name
-    static const char* const Contributors[]  = { "Andrey Alekseenko",
-                                                "Emile Apol",
-                                                "Rossen Apostolov",
-                                                "Paul Bauer",
-                                                "Herman J.C. Berendsen",
-                                                "Par Bjelkmar",
-                                                "Christian Blau",
-                                                "Viacheslav Bolnykh",
-                                                "Kevin Boyd",
-                                                "Aldert van Buuren",
-                                                "Rudi van Drunen",
-                                                "Anton Feenstra",
-                                                "Oliver Fleetwood",
-                                                "Gaurav Garg",
-                                                "Gilles Gouaillardet",
-                                                "Alan Gray",
-                                                "Gerrit Groenhof",
-                                                "Anca Hamuraru",
-                                                "Vincent Hindriksen",
-                                                "M. Eric Irrgang",
-                                                "Aleksei Iupinov",
-                                                "Christoph Junghans",
-                                                "Joe Jordan",
-                                                "Dimitrios Karkoulis",
-                                                "Peter Kasson",
-                                                "Jiri Kraus",
-                                                "Carsten Kutzner",
-                                                "Per Larsson",
-                                                "Justin A. Lemkul",
-                                                "Viveca Lindahl",
-                                                "Magnus Lundborg",
-                                                "Erik Marklund",
-                                                "Pascal Merz",
-                                                "Pieter Meulenhoff",
-                                                "Teemu Murtola",
-                                                "Szilard Pall",
-                                                "Sander Pronk",
-                                                "Roland Schulz",
-                                                "Michael Shirts",
-                                                "Alexey Shvetsov",
-                                                "Alfons Sijbers",
-                                                "Peter Tieleman",
-                                                "Jon Vincent",
-                                                "Teemu Virolainen",
-                                                "Christian Wennberg",
-                                                "Maarten Wolf",
-                                                "Artem Zhmurov" };
-    static const char* const CopyrightText[] = {
-        "Copyright (c) 1991-2000, University of Groningen, The Netherlands.",
-        "Copyright (c) 2001-2019, The GROMACS development team at",
-        "Uppsala University, Stockholm University and",
-        "the Royal Institute of Technology, Sweden.",
-        "check out http://www.gromacs.org for more information."
-    };
-
-#define NCONTRIBUTORS static_cast<int>(asize(Contributors))
-#define NCR static_cast<int>(asize(CopyrightText))
-
-    // TODO a centering behaviour of TextWriter could be useful here
-    writer->writeLine(formatCentered(78, "GROMACS is written by:"));
-    for (int i = 0; i < NCONTRIBUTORS;)
-    {
-        for (int j = 0; j < 3 && i < NCONTRIBUTORS; ++j, ++i)
-        {
-            const int            width = 26;
-            std::array<char, 30> buf;
-            const int            offset = centeringOffset(width, strlen(Contributors[i]));
-            GMX_RELEASE_ASSERT(static_cast<int>(strlen(Contributors[i])) + offset < gmx::ssize(buf),
-                               "Formatting buffer is not long enough");
-            std::fill(buf.begin(), buf.begin() + offset, ' ');
-            std::strncpy(buf.data() + offset, Contributors[i], gmx::ssize(buf) - offset);
-            writer->writeString(formatString(" %-*s", width, buf.data()));
-        }
-        writer->ensureLineBreak();
-    }
-    writer->writeLine(formatCentered(78, "and the project leaders:"));
-    writer->writeLine(
-            formatCentered(78, "Mark Abraham, Berk Hess, Erik Lindahl, and David van der Spoel"));
-    writer->ensureEmptyLine();
-    for (int i = 0; i < NCR; ++i)
-    {
-        writer->writeLine(CopyrightText[i]);
-    }
-    writer->ensureEmptyLine();
-
-    // Folding At Home has different licence to allow digital
-    // signatures in GROMACS, so does not need to show the normal
-    // license statement.
+    writer->writeLine(gmx::copyrightText);
     if (!GMX_FAHCORE)
     {
+        // Folding At Home has different licence to allow digital
+        // signatures in GROMACS, so does not need to show the normal
+        // license statement.
         writer->writeLine("GROMACS is free software; you can redistribute it and/or modify it");
         writer->writeLine("under the terms of the GNU Lesser General Public License");
         writer->writeLine("as published by the Free Software Foundation; either version 2.1");
         writer->writeLine("of the License, or (at your option) any later version.");
     }
+    writer->ensureEmptyLine();
+
+    writeVectorAsColumns(writer, "Current GROMACS contributors:", gmx::currentContributors);
+    writeVectorAsColumns(writer, "Previous GROMACS contributors:", gmx::previousContributors);
+    writeVectorAsSingleLine(
+            writer, "Coordinated by the GROMACS project leaders:", gmx::currentProjectLeaders);
 }
 
 //! Construct a string that describes the library that provides CPU FFT support to this build
@@ -324,11 +308,16 @@ void gmx_print_version_info(gmx::TextWriter* writer)
 #if GMX_THREAD_MPI
     writer->writeLine("MPI library:        thread_mpi");
 #elif GMX_MPI
-#    if HAVE_CUDA_AWARE_MPI
-    writer->writeLine("MPI library:        MPI (CUDA-aware)");
-#    else
-    writer->writeLine("MPI library:        MPI");
-#    endif
+    const bool haveDetectedCudaAwareMpi =
+            (gmx::checkMpiCudaAwareSupport() == gmx::GpuAwareMpiStatus::Supported);
+    if (haveDetectedCudaAwareMpi)
+    {
+        writer->writeLine("MPI library:        MPI (CUDA-aware)");
+    }
+    else
+    {
+        writer->writeLine("MPI library:        MPI");
+    }
 #else
     writer->writeLine("MPI library:        none");
 #endif

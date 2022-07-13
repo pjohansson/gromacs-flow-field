@@ -51,3 +51,65 @@ were anyhow converted to Ryckaert-Bellemans parameters, so now the checks
 for perturbations are the same for the two functions.
 
 :issue:`2606`
+
+Do not scale coordinates of frozen atoms during Parrinello-Rahman pressure coupling
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+When Parrinello-Rahman pressure coupling was used, the box scaling was applied to all the atoms,
+causing frozen atoms to shift. The effect is more drastic towards the sides of the box and when the
+pressure is changed significantly during the simulations. Now, the frozen atoms will be ignored by
+the coupling and atoms with frozen dimensions shall keep such values.
+
+:issue:`3075`
+
+Avoid non-uniform rotation with Test Particle Insertion in anisotropic systems
+""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+With anisotropic systems the random angles would not get a uniform distribution.
+
+:issue:`3558`
+
+Allow free energy calculations with a linear angle potential
+""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+Free energy calculations with a linear angle potential were not
+explicitly allowed by grompp.
+
+:issue:`3456`
+
+
+Fixed progress display in trjconv and trjcat
+""""""""""""""""""""""""""""""""""""""""""""
+
+The progress information (frame number and time) shown during trajectory 
+operations in trjconv and trjcat is now correctly displayed.
+
+:issue:`4320`
+
+Fixed GROMOS dihedral generation for disulfide bridges
+""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+The pdb2gmx functionality now generates correct dihedrals for disulfide
+bridges with the GROMOS force field series.
+
+:issue:`4188`
+
+Fixed energy term naming for periodic improper dihedrals
+""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+Those used the same name internally as the non-periodic version for printing
+to energy files and reading from them. This could cause tools being confused
+when trying to compare terms from files where the terms where written in
+a different order.
+
+gmx density now always uses relative coordinates
+""""""""""""""""""""""""""""""""""""""""""""""""
+
+There is no realistic use case for using absolute coordinates in binning
+when the box dimension is changing, so gmx density now always uses
+relative coordinates internally. This also avoids issues with output
+scaling to the last instead of average box size when users forget
+this option, ensures the output is always correct, and gets rid of
+occassional segfaults.
+
+:issue:`3830`

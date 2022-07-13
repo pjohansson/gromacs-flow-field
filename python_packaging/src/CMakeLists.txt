@@ -1,10 +1,9 @@
 #
 # This file is part of the GROMACS molecular simulation package.
 #
-# Copyright (c) 2019,2020,2021, by the GROMACS development team, led by
-# Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
-# and including many others, as listed in the AUTHORS file in the
-# top-level source directory and at http://www.gromacs.org.
+# Copyright 2019- The GROMACS Authors
+# and the project initiators Erik Lindahl, Berk Hess and David van der Spoel.
+# Consult the AUTHORS/COPYING files and https://www.gromacs.org for details.
 #
 # GROMACS is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public License
@@ -18,7 +17,7 @@
 #
 # You should have received a copy of the GNU Lesser General Public
 # License along with GROMACS; if not, see
-# http://www.gnu.org/licenses, or write to the Free Software Foundation,
+# https://www.gnu.org/licenses, or write to the Free Software Foundation,
 # Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA.
 #
 # If you want to redistribute modifications to GROMACS, please
@@ -27,10 +26,10 @@
 # consider code for inclusion in the official distribution, but
 # derived work must not be called official GROMACS. Details are found
 # in the README & COPYING files - if they are missing, get the
-# official version at http://www.gromacs.org.
+# official version at https://www.gromacs.org.
 #
 # To help us fund GROMACS development, we humbly ask that you cite
-# the research papers on the package. Check out http://www.gromacs.org.
+# the research papers on the package. Check out https://www.gromacs.org.
 
 # This CMakeLists.txt is not intended to be used directly, but either through
 # setup.py or as an inclusion of the full GROMACS project.
@@ -84,7 +83,7 @@ if(POLICY CMP0074) #3.12
 endif()
 
 find_package(Python3 3.7 COMPONENTS Interpreter Development)
-find_package(pybind11 2.6 CONFIG)
+find_package(pybind11 2.6 QUIET CONFIG)
 # If we are not running through setup.py, we may need to look for the pybind11 headers.
 if (NOT pybind11_FOUND)
     execute_process(
@@ -92,8 +91,10 @@ if (NOT pybind11_FOUND)
         "${Python3_EXECUTABLE}" -c
         "import pybind11; print(pybind11.get_cmake_dir())"
         OUTPUT_VARIABLE _tmp_dir
-        OUTPUT_STRIP_TRAILING_WHITESPACE COMMAND_ECHO STDOUT)
+        OUTPUT_STRIP_TRAILING_WHITESPACE)
     list(APPEND CMAKE_PREFIX_PATH "${_tmp_dir}")
+    # The following should only run once, and if it runs more often than that, we would want to
+    # know about it. So we don't use `QUIET` here.
     find_package(pybind11 2.6 CONFIG)
 endif ()
 if (NOT pybind11_FOUND)
@@ -102,9 +103,7 @@ if (NOT pybind11_FOUND)
 endif ()
 
 if(GMXAPI_MASTER_PROJECT)
-    find_package(gmxapi 0.2 REQUIRED
-                 HINTS "$ENV{GROMACS_DIR}"
-                 )
+    find_package(gmxapi REQUIRED)
     if (gmxapi_VERSION VERSION_LESS 0.2.1)
         message(WARNING "Your GROMACS installation does not support custom MD plugins. "
                 "If you need this feature, please install GROMACS 2021.3 or higher.")
@@ -151,18 +150,28 @@ endif ()
 pybind11_add_module(_gmxapi
                     gmxapi/module.cpp
                     gmxapi/export_context.cpp
-                    gmxapi/export_exceptions.cpp
                     gmxapi/export_system.cpp
                     gmxapi/export_tprfile.cpp
                     gmxapi/pycontext.cpp
                     gmxapi/pysystem.cpp
                     )
 
-if (gmxapi_VERSION VERSION_GREATER_EQUAL 0.2.1)
-    target_sources(_gmxapi PRIVATE gmxapi/launch_021.cpp)
-else()
+if (NOT DEFINED gmxapi_VERSION)
+    get_target_property(gmxapi_VERSION Gromacs::gmxapi VERSION)
+endif ()
+if (NOT DEFINED gmxapi_VERSION)
+    message(FATAL_ERROR "gmxapi library version not detected.")
+endif ()
+if (gmxapi_VERSION VERSION_LESS 0.3.1)
     message(WARNING "Found an old gmxapi library version. Please consider updating your GROMACS installation.")
-    target_sources(_gmxapi PRIVATE gmxapi/launch_020.cpp)
+    target_sources(_gmxapi PRIVATE gmxapi/export_exceptions_0_2_0.cpp)
+else()
+    target_sources(_gmxapi PRIVATE gmxapi/export_exceptions_0_3_1.cpp)
+endif()
+if (gmxapi_VERSION VERSION_GREATER_EQUAL 0.2.1)
+    target_sources(_gmxapi PRIVATE gmxapi/launch_0_2_1.cpp)
+else()
+    target_sources(_gmxapi PRIVATE gmxapi/launch_0_2_0.cpp)
 endif()
 
 target_include_directories(_gmxapi PRIVATE
@@ -176,9 +185,17 @@ set_target_properties(_gmxapi PROPERTIES SKIP_BUILD_RPATH FALSE)
 if(GMXAPI_MASTER_PROJECT)
     # TODO: This requirement is probably overly restrictive.
     find_package(GROMACS 2021 REQUIRED
-                 NAMES gromacs gromacs_mpi
+                 NAMES gromacs gromacs_mpi gromacs_d
                  HINTS "$ENV{GROMACS_DIR}"
                  )
+    if (NOT DEFINED GROMACS_IS_DOUBLE)
+        message(AUTHOR_WARNING "GROMACS_IS_DOUBLE undefined.")
+    endif ()
+else()
+    if (NOT DEFINED GMX_DOUBLE)
+        message(AUTHOR_WARNING "GMX_DOUBLE undefined.")
+    endif ()
+    set(GROMACS_IS_DOUBLE ${GMX_DOUBLE})
 endif()
 
 # Get details of GROMACS installation needed by the Python package at run time.
@@ -214,10 +231,16 @@ endif ()
 if (NOT _gmx_bindir OR NOT _gmx_executable)
     message(FATAL_ERROR "Could not get path for gmx wrapper binary.")
 endif ()
+if (GROMACS_IS_DOUBLE)
+    set(_gmx_double "true")
+else()
+    set(_gmx_double "false")
+endif()
 configure_file(gmxapi/gmxconfig.json.in gmxapi/gmxconfig.json)
 unset(_gmx_executable)
 unset(_gmx_bindir)
 unset(_gmx_mpi_type)
+unset(_gmx_double)
 
 if (GMXAPI_MASTER_PROJECT)
     set_target_properties(_gmxapi PROPERTIES BUILD_WITH_INSTALL_RPATH TRUE)
@@ -230,6 +253,11 @@ else()
     # The rest of the logic in this conditional is to support the GMX_PYTHON_PACKAGE option
     # for testing the gmxapi Python packages within a full GROMACS project build_command and.
     # for building full GROMACS project documentation.
+    #
+    # Note that file copying occurs during the CMake configure phase. During development,
+    # edits may not trigger a rerun of the CMake configure phase for targets like
+    # `gmxapi-pytest` (enabled by -DGMX_PYTHON_PACKAGE=ON). Manual re-run of `cmake`
+    # may be necessary between edits and testing.
 
     set(GMXAPI_PYTHON_STAGING_DIR ${CMAKE_CURRENT_BINARY_DIR}/gmxapi_staging)
     # Instead, we should probably build a source package and alert the user of its location.

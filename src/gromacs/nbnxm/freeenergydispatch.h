@@ -1,10 +1,9 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2021, by the GROMACS development team, led by
- * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
- * and including many others, as listed in the AUTHORS file in the
- * top-level source directory and at http://www.gromacs.org.
+ * Copyright 2021- The GROMACS Authors
+ * and the project initiators Erik Lindahl, Berk Hess and David van der Spoel.
+ * Consult the AUTHORS/COPYING files and https://www.gromacs.org for details.
  *
  * GROMACS is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
@@ -18,7 +17,7 @@
  *
  * You should have received a copy of the GNU Lesser General Public
  * License along with GROMACS; if not, see
- * http://www.gnu.org/licenses, or write to the Free Software Foundation,
+ * https://www.gnu.org/licenses, or write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA.
  *
  * If you want to redistribute modifications to GROMACS, please
@@ -27,10 +26,10 @@
  * consider code for inclusion in the official distribution, but
  * derived work must not be called official GROMACS. Details are found
  * in the README & COPYING files - if they are missing, get the
- * official version at http://www.gromacs.org.
+ * official version at https://www.gromacs.org.
  *
  * To help us fund GROMACS development, we humbly ask that you cite
- * the research papers on the package. Check out http://www.gromacs.org.
+ * the research papers on the package. Check out https://www.gromacs.org.
  */
 /*! \internal \file
  *
@@ -65,7 +64,7 @@ class ForceWithShiftForces;
 class StepWorkload;
 } // namespace gmx
 
-/*! \libinternal
+/*! \internal
  *  \brief Temporary data and methods for handling dispatching of the nbnxm free-energy kernels
  */
 class FreeEnergyDispatch
@@ -78,26 +77,26 @@ public:
     void setupFepThreadedForceBuffer(int numAtomsForce, const PairlistSets& pairlistSets);
 
     //! Dispatches the non-bonded free-energy kernels, thread parallel and reduces the output
-    void dispatchFreeEnergyKernels(const PairlistSets&                       pairlistSets,
+    void dispatchFreeEnergyKernels(const PairlistSets&                              pairlistSets,
                                    const gmx::ArrayRefWithPadding<const gmx::RVec>& coords,
-                                   gmx::ForceWithShiftForces*                forceWithShiftForces,
-                                   bool                                      useSimd,
-                                   int                                       ntype,
-                                   real                                      rlist,
-                                   const interaction_const_t&                ic,
-                                   gmx::ArrayRef<const gmx::RVec>            shiftvec,
-                                   gmx::ArrayRef<const real>                 nbfp,
-                                   gmx::ArrayRef<const real>                 nbfp_grid,
-                                   gmx::ArrayRef<const real>                 chargeA,
-                                   gmx::ArrayRef<const real>                 chargeB,
-                                   gmx::ArrayRef<const int>                  typeA,
-                                   gmx::ArrayRef<const int>                  typeB,
-                                   t_lambda*                                 fepvals,
-                                   gmx::ArrayRef<const real>                 lambda,
-                                   gmx_enerdata_t*                           enerd,
-                                   const gmx::StepWorkload&                  stepWork,
-                                   t_nrnb*                                   nrnb,
-                                   gmx_wallcycle*                            wcycle);
+                                   gmx::ForceWithShiftForces*     forceWithShiftForces,
+                                   bool                           useSimd,
+                                   int                            ntype,
+                                   real                           rlist,
+                                   const interaction_const_t&     ic,
+                                   gmx::ArrayRef<const gmx::RVec> shiftvec,
+                                   gmx::ArrayRef<const real>      nbfp,
+                                   gmx::ArrayRef<const real>      nbfp_grid,
+                                   gmx::ArrayRef<const real>      chargeA,
+                                   gmx::ArrayRef<const real>      chargeB,
+                                   gmx::ArrayRef<const int>       typeA,
+                                   gmx::ArrayRef<const int>       typeB,
+                                   t_lambda*                      fepvals,
+                                   gmx::ArrayRef<const real>      lambda,
+                                   gmx_enerdata_t*                enerd,
+                                   const gmx::StepWorkload&       stepWork,
+                                   t_nrnb*                        nrnb,
+                                   gmx_wallcycle*                 wcycle);
 
 private:
     //! Temporary array for storing foreign lambda group pair energies

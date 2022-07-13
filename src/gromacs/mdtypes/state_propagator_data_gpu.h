@@ -1,10 +1,9 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2019,2020,2021, by the GROMACS development team, led by
- * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
- * and including many others, as listed in the AUTHORS file in the
- * top-level source directory and at http://www.gromacs.org.
+ * Copyright 2019- The GROMACS Authors
+ * and the project initiators Erik Lindahl, Berk Hess and David van der Spoel.
+ * Consult the AUTHORS/COPYING files and https://www.gromacs.org for details.
  *
  * GROMACS is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
@@ -18,7 +17,7 @@
  *
  * You should have received a copy of the GNU Lesser General Public
  * License along with GROMACS; if not, see
- * http://www.gnu.org/licenses, or write to the Free Software Foundation,
+ * https://www.gnu.org/licenses, or write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA.
  *
  * If you want to redistribute modifications to GROMACS, please
@@ -27,10 +26,10 @@
  * consider code for inclusion in the official distribution, but
  * derived work must not be called official GROMACS. Details are found
  * in the README & COPYING files - if they are missing, get the
- * official version at http://www.gromacs.org.
+ * official version at https://www.gromacs.org.
  *
  * To help us fund GROMACS development, we humbly ask that you cite
- * the research papers on the package. Check out http://www.gromacs.org.
+ * the research papers on the package. Check out https://www.gromacs.org.
  */
 /*! \internal \file
  *
@@ -69,6 +68,20 @@ struct gmx_wallcycle;
 
 namespace gmx
 {
+
+/*!\brief If StatePropagatorDataGpu object is needed.
+ *
+ * \param[in] simulationWorkload Simulation workload flags.
+ *
+ * \return Whether the StatePropagatorDataGpu object is needed/was created for this run.
+ */
+inline bool needStateGpu(SimulationWorkload simulationWorkload)
+{
+    return (simulationWorkload.useGpuPme && !simulationWorkload.haveSeparatePmeRank)
+           || simulationWorkload.useGpuXBufferOps || simulationWorkload.useGpuFBufferOps
+           || simulationWorkload.useGpuHaloExchange || simulationWorkload.useGpuUpdate;
+}
+
 class DeviceStreamManager;
 
 class StatePropagatorDataGpu
@@ -171,12 +184,20 @@ public:
      *
      * Use \ref getCoordinatesReadyOnDeviceEvent to get the associated event synchronizer or
      * \ref waitCoordinatesCopiedToDevice to wait for the copy completion.
-     * Note: the event is not marked in OpenCL, because it is not used.
+     *
+     * Please set \p expectedConsumptionCount when expecting to consume (use for synchronization)
+     * the associated \ref GpuEventSynchronizer event more than once (or never).
      *
      *  \param[in] h_x           Positions in the host memory.
      *  \param[in] atomLocality  Locality of the particles to copy.
+     *  \param[in] expectedConsumptionCount How many times will the event indicating the completion
+     *                                      of the data transfer be used later via
+     *                                      \ref getCoordinatesReadyOnDeviceEvent and
+     *                                      \ref waitCoordinatesCopiedToDevice.
      */
-    void copyCoordinatesToGpu(gmx::ArrayRef<const gmx::RVec> h_x, AtomLocality atomLocality);
+    void copyCoordinatesToGpu(gmx::ArrayRef<const gmx::RVec> h_x,
+                              AtomLocality                   atomLocality,
+                              int                            expectedConsumptionCount = 1);
 
     /*! \brief Get the event synchronizer of the coordinates ready for the consumption on the device.
      *
@@ -224,11 +245,17 @@ public:
      */
     void resetCoordinatesCopiedToDeviceEvent(AtomLocality atomLocality);
 
-    /*! \brief Setter for the event synchronizer for the update is done on th GPU
+    /*! \brief Setter for the event synchronizer for the update is done on the GPU
      *
      *  \param[in] xUpdatedOnDeviceEvent  The event to synchronize the stream coordinates wre updated on device.
      */
     void setXUpdatedOnDeviceEvent(GpuEventSynchronizer* xUpdatedOnDeviceEvent);
+
+    /*! \brief Set the expected consumption count for the event associated with GPU update.
+     *
+     *  \param[in] expectedConsumptionCount  New value.
+     */
+    void setXUpdatedOnDeviceEventExpectedConsumptionCount(int expectedConsumptionCount);
 
     /*! \brief Copy positions from the GPU memory, with an optional explicit dependency.
      *

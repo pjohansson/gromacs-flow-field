@@ -1,10 +1,9 @@
 #
 # This file is part of the GROMACS molecular simulation package.
 #
-# Copyright (c) 2019,2020,2021, by the GROMACS development team, led by
-# Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
-# and including many others, as listed in the AUTHORS file in the
-# top-level source directory and at http://www.gromacs.org.
+# Copyright 2019- The GROMACS Authors
+# and the project initiators Erik Lindahl, Berk Hess and David van der Spoel.
+# Consult the AUTHORS/COPYING files and https://www.gromacs.org for details.
 #
 # GROMACS is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public License
@@ -18,7 +17,7 @@
 #
 # You should have received a copy of the GNU Lesser General Public
 # License along with GROMACS; if not, see
-# http://www.gnu.org/licenses, or write to the Free Software Foundation,
+# https://www.gnu.org/licenses, or write to the Free Software Foundation,
 # Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA.
 #
 # If you want to redistribute modifications to GROMACS, please
@@ -27,10 +26,10 @@
 # consider code for inclusion in the official distribution, but
 # derived work must not be called official GROMACS. Details are found
 # in the README & COPYING files - if they are missing, get the
-# official version at http://www.gromacs.org.
+# official version at https://www.gromacs.org.
 #
 # To help us fund GROMACS development, we humbly ask that you cite
-# the research papers on the package. Check out http://www.gromacs.org.
+# the research papers on the package. Check out https://www.gromacs.org.
 
 """Reusable definitions for test modules.
 
@@ -61,16 +60,26 @@ import pytest
 
 mpi_status = 'Test requires mpi4py managing 2 MPI ranks.'
 skip_mpi = False
+rank_number = 0
+comm_size = 1
+rank_tag = ''
+comm = None
 try:
     from mpi4py import MPI
 
     if not MPI.Is_initialized():
         skip_mpi = True
         mpi_status += ' MPI is not initialized'
-    elif MPI.COMM_WORLD.Get_size() < 2:
-        skip_mpi = True
-        mpi_status += ' MPI context is too small.'
+    else:
+        comm = MPI.COMM_WORLD
+        if comm.Get_size() < 2:
+            skip_mpi = True
+            mpi_status += ' MPI context is too small.'
+        else:
+            rank_number = comm.Get_rank()
+            comm_size = comm.Get_size()
 except ImportError:
+    MPI = None
     skip_mpi = True
     mpi_status += ' mpi4py is not available.'
 
@@ -130,7 +139,6 @@ def gmxconfig():
 def mdrun_kwargs(request, gmxconfig):
     """pytest fixture to provide a mdrun_kwargs dictionary for the mdrun ResourceManager.
     """
-    from gmxapi.simulation.mdrun import ResourceManager as _ResourceManager
     if gmxconfig is None:
         raise RuntimeError('--threads argument requires a usable gmxconfig.json')
     arg = request.config.getoption('--threads')
@@ -142,7 +150,6 @@ def mdrun_kwargs(request, gmxconfig):
     else:
         kwargs = {}
     # TODO: (#3718) Normalize the handling of run-time arguments.
-    _ResourceManager.mdrun_kwargs = dict(**kwargs)
     return kwargs
 
 
@@ -199,6 +206,11 @@ def _cleandir(remove_tempdir: Union[str, RmOption]):
         # I.e. If the user specified `--rm success`, then we need to toggle from `warn` to `remove`.
         if remove_tempdir != RmOption.never:
             callback = remove
+
+        # Make sure that the temporary directory is not removed before all ranks have done
+        # the file checks.
+        if comm_size > 1:
+            comm.barrier()
     finally:
         callback()
 

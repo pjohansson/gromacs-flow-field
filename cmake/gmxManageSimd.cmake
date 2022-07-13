@@ -1,11 +1,9 @@
 #
 # This file is part of the GROMACS molecular simulation package.
 #
-# Copyright (c) 2012,2013,2014,2015,2016 by the GROMACS development team.
-# Copyright (c) 2017,2018,2019,2020,2021, by the GROMACS development team, led by
-# Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
-# and including many others, as listed in the AUTHORS file in the
-# top-level source directory and at http://www.gromacs.org.
+# Copyright 2012- The GROMACS Authors
+# and the project initiators Erik Lindahl, Berk Hess and David van der Spoel.
+# Consult the AUTHORS/COPYING files and https://www.gromacs.org for details.
 #
 # GROMACS is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public License
@@ -19,7 +17,7 @@
 #
 # You should have received a copy of the GNU Lesser General Public
 # License along with GROMACS; if not, see
-# http://www.gnu.org/licenses, or write to the Free Software Foundation,
+# https://www.gnu.org/licenses, or write to the Free Software Foundation,
 # Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA.
 #
 # If you want to redistribute modifications to GROMACS, please
@@ -28,10 +26,10 @@
 # consider code for inclusion in the official distribution, but
 # derived work must not be called official GROMACS. Details are found
 # in the README & COPYING files - if they are missing, get the
-# official version at http://www.gromacs.org.
+# official version at https://www.gromacs.org.
 #
 # To help us fund GROMACS development, we humbly ask that you cite
-# the research papers on the package. Check out http://www.gromacs.org.
+# the research papers on the package. Check out https://www.gromacs.org.
 
 include(gmxDetectCpu)
 include(gmxSimdFlags)
@@ -226,9 +224,9 @@ elseif(GMX_SIMD_ACTIVE STREQUAL "ARM_SVE")
 
     gmx_option_multichoice(
         GMX_SIMD_ARM_SVE_LENGTH
-	"SVE vector length in bits"
-	"auto"
-	auto 128 256 512 1024 2048)
+        "SVE vector length in bits"
+        "auto"
+        auto 128 256 512 1024 2048)
 
     if (GMX_SIMD_ARM_SVE_LENGTH STREQUAL "AUTO")
         if (NOT GMX_SIMD_ARM_SVE_DETECTED_LENGTH)
@@ -237,12 +235,12 @@ elseif(GMX_SIMD_ACTIVE STREQUAL "ARM_SVE")
                 message(FATAL_ERROR "cannot automatically determine the SVE vector length, please explicitly set it via -DGMX_SIMD_ARM_SVE_LENGTH=<bits>")
             endif()
             file(READ "/proc/sys/abi/sve_default_vector_length" GMX_SIMD_ARM_SVE_DETECTED_LENGTH_IN_BYTES)
-	    message(STATUS "Detected SVE vector length in bytes : ${GMX_SIMD_ARM_SVE_DETECTED_LENGTH_IN_BYTES}")
-	    math(EXPR GMX_SIMD_ARM_SVE_DETECTED_LENGTH "${GMX_SIMD_ARM_SVE_DETECTED_LENGTH_IN_BYTES} * 8")
+            message(STATUS "Detected SVE vector length in bytes : ${GMX_SIMD_ARM_SVE_DETECTED_LENGTH_IN_BYTES}")
+            math(EXPR GMX_SIMD_ARM_SVE_DETECTED_LENGTH "${GMX_SIMD_ARM_SVE_DETECTED_LENGTH_IN_BYTES} * 8")
             set(GMX_SIMD_ARM_SVE_DETECTED_LENGTH ${GMX_SIMD_ARM_SVE_DETECTED_LENGTH} CACHE STRING "Detected length in bits for SVE vectors")
             message(STATUS "Detected SVE vector length of ${GMX_SIMD_ARM_SVE_DETECTED_LENGTH} bits")
         endif()
-	set(GMX_SIMD_ARM_SVE_LENGTH_VALUE ${GMX_SIMD_ARM_SVE_DETECTED_LENGTH})
+        set(GMX_SIMD_ARM_SVE_LENGTH_VALUE ${GMX_SIMD_ARM_SVE_DETECTED_LENGTH})
     else()
         set(GMX_SIMD_ARM_SVE_LENGTH_VALUE ${GMX_SIMD_ARM_SVE_LENGTH})
     endif()
@@ -251,7 +249,7 @@ elseif(GMX_SIMD_ACTIVE STREQUAL "ARM_SVE")
                                 SIMD_ARM_SVE_C_FLAGS SIMD_ARM_SVE_CXX_FLAGS)
 
     if(NOT SIMD_ARM_SVE_C_SUPPORTED OR NOT SIMD_ARM_SVE_CXX_SUPPORTED)
-        gmx_give_fatal_error_when_simd_support_not_found("ARM (AArch64) SVE SIMD" "particularly gcc version 10.1 or later, or disable SIMD support (slower)" "${SUGGEST_BINUTILS_UPDATE}")
+        gmx_give_fatal_error_when_simd_support_not_found("ARM (AArch64) SVE SIMD" "particularly gcc version 10.1 or later, or clang version 14 or later (when available), or disable SIMD support (slower)" "${SUGGEST_BINUTILS_UPDATE}")
     endif()
 
     # If multiple flags are neeed, make them into a list
@@ -261,13 +259,6 @@ elseif(GMX_SIMD_ACTIVE STREQUAL "ARM_SVE")
     set(SIMD_STATUS_MESSAGE "Enabling ARM (AArch64) SVE Advanced SIMD instructions using CXX flags: ${SIMD_ARM_SVE_CXX_FLAGS}")
 
 elseif(GMX_SIMD_ACTIVE STREQUAL "IBM_VSX")
-
-    # IBM_VSX and gcc > 9 do not work together, so we need to prevent people from
-    # choosing a combination that might fail. Issue #3380.
-    if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 10)
-        message(FATAL_ERROR "IBM_VSX does not work together with gcc > 9. Disable SIMD support (slower), or use an older version of the GNU compiler")
-    endif()
-
 
     gmx_find_simd_ibm_vsx_flags(SIMD_IBM_VSX_C_SUPPORTED SIMD_IBM_VSX_CXX_SUPPORTED
                                 SIMD_IBM_VSX_C_FLAGS SIMD_IBM_VSX_CXX_FLAGS)
@@ -296,7 +287,7 @@ elseif(GMX_SIMD_ACTIVE STREQUAL "REFERENCE")
         add_definitions(-DGMX_SIMD_REF_FLOAT_WIDTH=${GMX_SIMD_REF_FLOAT_WIDTH})
     endif()
     if(GMX_SIMD_REF_DOUBLE_WIDTH)
-      	add_definitions(-DGMX_SIMD_REF_DOUBLE_WIDTH=${GMX_SIMD_REF_DOUBLE_WIDTH})
+        add_definitions(-DGMX_SIMD_REF_DOUBLE_WIDTH=${GMX_SIMD_REF_DOUBLE_WIDTH})
     endif()
 
     set(GMX_SIMD_${GMX_SIMD_ACTIVE} 1)

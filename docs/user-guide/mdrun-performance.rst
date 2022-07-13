@@ -223,8 +223,8 @@ configuring with ``GMX_SIMD_ARM_SVE_LENGTH=<len>``.
 The supported vector lengths are 128, 256, 512 and 1024. Since the SIMD short-range non-bonded kernels
 only support up to 16 floating point numbers per SIMD vector, 1024 bits vector length is only
 valid in double precision (e.g. ``-DGMX_DOUBLE=on``).
-Note that even if `mdrun` does check the SIMD vector length at runtime, running with a different
-vector length than the one used at CMake time is undefined behavior, and `mdrun` might crash before reaching
+Note that even if :ref:`mdrun <gmx mdrun>` does check the SIMD vector length at runtime, running with a different
+vector length than the one used at CMake time is undefined behavior, and :ref:`mdrun <gmx mdrun>` might crash before reaching
 the check (that would abort with a user-friendly error message).
 
 Process(-or) level parallelization via OpenMP
@@ -258,7 +258,7 @@ Compilation with thread-MPI is controlled by the ``GMX_THREAD_MPI`` CMake variab
 Thread-MPI is compatible with most :ref:`mdrun <gmx mdrun>` features and parallelization schemes,
 including OpenMP, GPUs; it is not compatible with MPI and multi-simulation runs.
 
-By default, the thread-MPI mdrun will use all available cores in the machine by starting
+By default, the thread-MPI :ref:`mdrun <gmx mdrun>` will use all available cores in the machine by starting
 an appropriate number of ranks or OpenMP threads to occupy all of them. The number of
 ranks can be controlled using the
 ``-nt`` and ``-ntmpi`` options. ``-nt`` represents the total number of threads
@@ -1061,7 +1061,7 @@ outlined further below.**
 
 Right now, we generally support short-range nonbonded offload with and
 without dynamic pruning on a wide range of GPU accelerators
-(both NVIDIA and AMD). This is compatible with the grand majority of
+(NVIDIA, AMD, and Intel). This is compatible with the grand majority of
 the features and parallelization modes and can be used to scale to large machines.
 
 Simultaneously offloading both short-range nonbonded and long-range
@@ -1130,8 +1130,8 @@ A typical case for the latter is free-energy calculations.
 
 .. _gmx-gpu-update:
 
-GPU accelerated calculation of constraints and coordinate update (CUDA only)
-............................................................................
+GPU accelerated calculation of constraints and coordinate update (CUDA and SYCL only)
+.....................................................................................
 
 .. TODO again, extend this and add some actual useful information concerning performance etc...
 
@@ -1249,10 +1249,8 @@ A few percent of runtime spent in this category is normal,
 but in fast-iterating and multi-GPU parallel runs 10% or larger overheads can be observed.
 In general, a user can do little to avoid such overheads, but there
 are a few cases where tweaks can give performance benefits.
-In single-rank runs timing of GPU tasks is by default enabled and,
+In OpenCL runs, timing of GPU tasks is by default enabled and,
 while in most cases its impact is small, in fast runs performance can be affected.
-The performance impact will be most significant on NVIDIA GPUs with CUDA,
-less on AMD and Intel with OpenCL.
 In these cases, when more than a few percent of "Launch GPU ops" time is observed,
 it is recommended to turn off timing by setting the ``GMX_DISABLE_GPU_TIMING``
 environment variable.
@@ -1298,7 +1296,6 @@ required as the open source nouveau driver (available in Mesa) does not
 provide the OpenCL support.
 For Intel integrated GPUs, the `Neo driver <https://github.com/intel/compute-runtime/releases>`_ is
 recommended.
-.. seealso:: :issue:`3268` add more Intel driver recommendations
 
 The minimum OpenCL version required is |REQUIRED_OPENCL_MIN_VERSION|. See
 also the :ref:`known limitations <opencl-known-limitations>`.
@@ -1337,7 +1334,7 @@ Limitations in the current OpenCL support of interest to |Gromacs| users:
 - On NVIDIA GPUs the OpenCL kernels achieve much lower performance
   than the equivalent CUDA kernels due to limitations of the NVIDIA OpenCL
   compiler.
-- On the NVIDIA Volta an Turing architectures the OpenCL code is known to produce
+- On the NVIDIA Volta and Turing architectures the OpenCL code is known to produce
   incorrect results with driver version up to 440.x (most likely due to compiler issues).
   Runs typically fail on these architectures.
 
@@ -1368,9 +1365,9 @@ of 2. So it can be useful go through the checklist.
   the performance of the compiled code improved a lot).
 * MPI library: OpenMPI usually has good performance and causes little trouble.
 * Make sure your compiler supports OpenMP (some versions of Clang don't).
-* If you have GPUs that support either CUDA or OpenCL, use them.
+* If you have GPUs that support either CUDA, OpenCL, or SYCL, use them.
 
-  * Configure with ``-DGMX_GPU=CUDA `` or ``-DGMX_GPU=OpenCL``.
+  * Configure with ``-DGMX_GPU=CUDA``, ``-DGMX_GPU=OpenCL``, or ``-DGMX_GPU=SYCL``.
   * For CUDA, use the newest CUDA available for your GPU to take advantage of the
     latest performance enhancements.
   * Use a recent GPU driver.

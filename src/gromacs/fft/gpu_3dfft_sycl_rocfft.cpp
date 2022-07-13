@@ -1,10 +1,9 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2021, by the GROMACS development team, led by
- * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
- * and including many others, as listed in the AUTHORS file in the
- * top-level source directory and at http://www.gromacs.org.
+ * Copyright 2021- The GROMACS Authors
+ * and the project initiators Erik Lindahl, Berk Hess and David van der Spoel.
+ * Consult the AUTHORS/COPYING files and https://www.gromacs.org for details.
  *
  * GROMACS is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
@@ -18,7 +17,7 @@
  *
  * You should have received a copy of the GNU Lesser General Public
  * License along with GROMACS; if not, see
- * http://www.gnu.org/licenses, or write to the Free Software Foundation,
+ * https://www.gnu.org/licenses, or write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA.
  *
  * If you want to redistribute modifications to GROMACS, please
@@ -27,10 +26,10 @@
  * consider code for inclusion in the official distribution, but
  * derived work must not be called official GROMACS. Details are found
  * in the README & COPYING files - if they are missing, get the
- * official version at http://www.gromacs.org.
+ * official version at https://www.gromacs.org.
  *
  * To help us fund GROMACS development, we humbly ask that you cite
- * the research papers on the package. Check out http://www.gromacs.org.
+ * the research papers on the package. Check out https://www.gromacs.org.
  */
 
 /*! \internal \file
@@ -46,13 +45,6 @@
  * asynchronous host-side lambda into the same queue. The body of the
  * lambda unpacks the runtime data structures to get the native
  * handles and calls the native FFT APIs.
- *
- * For a 3D FFT, rocFFT requires a working buffer which it allocates
- * itself if not provided. This might be slow enough to be worth
- * optimizing. This working buffer could be provided in advance by
- * calling rocfft_plan_get_work_buffer_size, allocating a buffer that
- * persists suitably, and then using
- * rocfft_execution_info_set_work_buffer in a custom operation.
  *
  * hipSYCL queues operate at a higher level of abstraction than hip
  * streams, with the runtime distributing work to the latter to
@@ -166,6 +158,10 @@ struct RocfftPlan
     rocfft_plan_description description = nullptr;
     //! High level information about the plan
     rocfft_plan plan = nullptr;
+    //! Execution details (working buffer, HIP stream to use, etc)
+    rocfft_execution_info info = nullptr;
+    //! Persistent work buffer (left unallocated if not needed)
+    void* workBuffer;
     //! Destructor
     ~RocfftPlan()
     {
@@ -178,6 +174,14 @@ struct RocfftPlan
         if (description)
         {
             rocfft_plan_description_destroy(description);
+        }
+        if (info)
+        {
+            rocfft_execution_info_destroy(info);
+        }
+        if (workBuffer)
+        {
+            GMX_UNUSED_VALUE(hipFree(workBuffer));
         }
     }
 };
@@ -203,8 +207,8 @@ std::array<size_t, DIM> makeRealStrides(ivec realGridSizePadded)
 std::array<size_t, DIM> makeComplexStrides(ivec complexGridSizePadded)
 {
     return { 1,
-             size_t(complexGridSizePadded[XX]),
-             size_t(complexGridSizePadded[XX] * complexGridSizePadded[YY]) };
+             size_t(complexGridSizePadded[ZZ]),
+             size_t(complexGridSizePadded[ZZ] * complexGridSizePadded[YY]) };
 }
 
 //! Compute total grid size
@@ -247,8 +251,10 @@ RocfftPlan makePlan(const std::string&     descriptiveString,
     // used. The stream for execution can be set at the same time.
 
     // First set up device buffers to receive the rocfft status values
-    rocfft_plan                        plan = nullptr;
-    cl::sycl::buffer<rocfft_status, 1> resultPlanCreate(1);
+    rocfft_plan                    plan                   = nullptr;
+    size_t                         requiredWorkBufferSize = 0;
+    void*                          workBuffer             = nullptr;
+    sycl::buffer<rocfft_status, 1> resultBuffer(3);
 
     // Submit the planning to the queue. This is necessary so that we
     // can ensure that the allocations in the planning go to the right
@@ -257,14 +263,20 @@ RocfftPlan makePlan(const std::string&     descriptiveString,
         auto queue = pmeStream.stream();
         // Make a buffer that is a view of the existing memory for a
         // plan.
-        cl::sycl::buffer<rocfft_plan, 1> planView =
-                cl::sycl::make_async_writeback_view(&plan, cl::sycl::range(1), queue);
-        queue.submit([&](cl::sycl::handler& cgh) {
+        sycl::buffer<rocfft_plan, 1> planView =
+                sycl::make_async_writeback_view(&plan, sycl::range(1), queue);
+        sycl::buffer<void*, 1> workBufferView =
+                sycl::make_async_writeback_view(&workBuffer, sycl::range(1), queue);
+        sycl::buffer<size_t, 1> requiredWorkBufferSizeView =
+                sycl::make_async_writeback_view(&requiredWorkBufferSize, sycl::range(1), queue);
+        queue.submit([&](sycl::handler& cgh) {
             // Make the necessary accessors
-            auto a_plan = planView.get_access(cgh, cl::sycl::write_only, cl::sycl::no_init);
-            auto a_resultPlanCreate =
-                    resultPlanCreate.get_access(cgh, cl::sycl::write_only, cl::sycl::no_init);
-            cgh.hipSYCL_enqueue_custom_operation([=](cl::sycl::interop_handle& /*h*/) {
+            auto a_plan       = planView.get_access(cgh, sycl::read_write, sycl::no_init);
+            auto a_workBuffer = workBufferView.get_access(cgh, sycl::write_only, sycl::no_init);
+            auto a_requiredWorkBufferSize =
+                    requiredWorkBufferSizeView.get_access(cgh, sycl::read_write, sycl::no_init);
+            auto a_result = resultBuffer.get_access(cgh, sycl::write_only, sycl::no_init);
+            cgh.hipSYCL_enqueue_custom_operation([=](sycl::interop_handle& /*h*/) {
                 const int numBatches = 1;
                 // Unlike some other FFT APIs, in rocFFT the
                 // dimension of an FFT is the (vectorial) size
@@ -273,23 +285,48 @@ RocfftPlan makePlan(const std::string&     descriptiveString,
                 // according to whether the input format is real
                 // or hermitian respectively for forward or
                 // reverse transforms).
-                a_resultPlanCreate[0] = rocfft_plan_create(&a_plan[0],
-                                                           rocfft_placement_notinplace,
-                                                           transformType,
-                                                           rocfft_precision_single,
-                                                           rocfftRealGridSize.size(),
-                                                           rocfftRealGridSize.data(),
-                                                           numBatches,
-                                                           description);
+                a_result[0] = rocfft_plan_create(&a_plan[0],
+                                                 rocfft_placement_notinplace,
+                                                 transformType,
+                                                 rocfft_precision_single,
+                                                 rocfftRealGridSize.size(),
+                                                 rocfftRealGridSize.data(),
+                                                 numBatches,
+                                                 description);
+                a_result[1] = rocfft_plan_get_work_buffer_size(a_plan[0], &a_requiredWorkBufferSize[0]);
+                if (a_requiredWorkBufferSize[0] > 0)
+                {
+                    hipError_t err = hipMalloc(&a_workBuffer[0], a_requiredWorkBufferSize[0]);
+                    a_result[2] = (err == hipSuccess) ? rocfft_status_success : rocfft_status_failure;
+                }
+                else
+                {
+                    a_result[2] = rocfft_status_success;
+                }
             });
         });
     }
-    // Check for errors that happened while running the hipSYCL custom
-    // operation.
+    // Check for errors that happened while running the hipSYCL custom operation.
     handleFftError(
-            resultPlanCreate.get_host_access()[0], descriptiveString, "rocfft_plan_create failure");
+            resultBuffer.get_host_access()[0], descriptiveString, "rocfft_plan_create failure");
+    handleFftError(resultBuffer.get_host_access()[1],
+                   descriptiveString,
+                   "rocfft_plan_get_work_buffer_size failure");
+    handleFftError(resultBuffer.get_host_access()[2], descriptiveString, "hipMalloc failure");
 
-    return RocfftPlan{ description, plan };
+    rocfft_execution_info execution_info = nullptr;
+    result                               = rocfft_execution_info_create(&execution_info);
+    handleFftError(result, descriptiveString, "rocfft_execution_info_create failure");
+
+    if (requiredWorkBufferSize > 0)
+    {
+        GMX_RELEASE_ASSERT(workBuffer != nullptr,
+                           "Work buffer should have been allocated, but was not");
+        result = rocfft_execution_info_set_work_buffer(execution_info, workBuffer, requiredWorkBufferSize);
+        handleFftError(result, descriptiveString, "rocfft_execution_info_set_work_buffer failure");
+    }
+
+    return RocfftPlan{ description, plan, execution_info, workBuffer };
 }
 
 } // namespace
@@ -319,15 +356,22 @@ public:
     RocfftInitializer init_;
     //! Data for 3D FFT plans and execution
     EnumerationArray<FftDirection, RocfftPlan> plans_;
+#if GMX_SYCL_USE_USM
     //! Handle to the real grid buffer
-    cl::sycl::buffer<float, 1> realGrid_;
+    float* realGrid_;
     //! Handle to the complex grid buffer
-    cl::sycl::buffer<float, 1> complexGrid_;
+    float* complexGrid_;
+#else
+    //! Handle to the real grid buffer
+    sycl::buffer<float, 1> realGrid_;
+    //! Handle to the complex grid buffer
+    sycl::buffer<float, 1> complexGrid_;
+#endif
     /*! \brief Copy of PME stream
      *
      * This copy is guaranteed by the SYCL standard to work as if
      * it was the original. */
-    cl::sycl::queue queue_;
+    sycl::queue queue_;
 };
 
 Gpu3dFft::ImplSyclRocfft::Impl::Impl(bool allocateGrids,
@@ -393,8 +437,12 @@ void Gpu3dFft::ImplSyclRocfft::perform3dFft(gmx_fft_direction dir, CommandEvent*
 {
     GMX_RELEASE_ASSERT((dir == GMX_FFT_REAL_TO_COMPLEX) || (dir == GMX_FFT_COMPLEX_TO_REAL),
                        "Only real-to-complex and complex-to-real FFTs are implemented in hipSYCL");
-    FftDirection               direction;
-    cl::sycl::buffer<float, 1>*inputGrid = nullptr, *outputGrid = nullptr;
+    FftDirection direction;
+#if GMX_SYCL_USE_USM
+    float **inputGrid = nullptr, **outputGrid = nullptr;
+#else
+    sycl::buffer<float, 1>*inputGrid = nullptr, *outputGrid = nullptr;
+#endif
     if (dir == GMX_FFT_REAL_TO_COMPLEX)
     {
         direction  = FftDirection::RealToComplex;
@@ -408,17 +456,29 @@ void Gpu3dFft::ImplSyclRocfft::perform3dFft(gmx_fft_direction dir, CommandEvent*
         outputGrid = &impl_->realGrid_;
     }
     // Enqueue the 3D FFT work
-    impl_->queue_.submit([&](cl::sycl::handler& cgh) {
-        auto inputGridAccessor = inputGrid->get_access(cgh, cl::sycl::read_only);
-        auto outputGridAccessor = outputGrid->get_access(cgh, cl::sycl::write_only, cl::sycl::no_init);
+    impl_->queue_.submit([&](sycl::handler& cgh) {
+#if !GMX_SYCL_USE_USM
+        auto inputGridAccessor  = inputGrid->get_access(cgh, sycl::read_only);
+        auto outputGridAccessor = outputGrid->get_access(cgh, sycl::write_only, sycl::no_init);
+#endif
         // Use a hipSYCL custom operation to access the native buffers
         // needed to call rocFFT
-        cgh.hipSYCL_enqueue_custom_operation([=](cl::sycl::interop_handle& h) {
-            void* d_inputGrid  = h.get_native_mem<cl::sycl::backend::hip>(inputGridAccessor);
-            void* d_outputGrid = h.get_native_mem<cl::sycl::backend::hip>(outputGridAccessor);
+        cgh.hipSYCL_enqueue_custom_operation([=](sycl::interop_handle& gmx_unused h) {
+#if GMX_SYCL_USE_USM
+            void* d_inputGrid  = reinterpret_cast<void*>(*inputGrid);
+            void* d_outputGrid = reinterpret_cast<void*>(*outputGrid);
+#else
+            void* d_inputGrid  = h.get_native_mem<sycl::backend::hip>(inputGridAccessor);
+            void* d_outputGrid = h.get_native_mem<sycl::backend::hip>(outputGridAccessor);
+#endif
+            hipStream_t stream = h.get_native_queue<sycl::backend::hip>();
+            rocfft_execution_info_set_stream(impl_->plans_[direction].info, stream);
             // Don't check results generated asynchronously,
             // because we don't know what to do with them
-            rocfft_execute(impl_->plans_[direction].plan, &d_inputGrid, &d_outputGrid, nullptr);
+            rocfft_execute(impl_->plans_[direction].plan,
+                           &d_inputGrid,
+                           &d_outputGrid,
+                           impl_->plans_[direction].info);
         });
     });
 }

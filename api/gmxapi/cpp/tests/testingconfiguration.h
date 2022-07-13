@@ -1,10 +1,9 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2018,2019,2020,2021, by the GROMACS development team, led by
- * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
- * and including many others, as listed in the AUTHORS file in the
- * top-level source directory and at http://www.gromacs.org.
+ * Copyright 2018- The GROMACS Authors
+ * and the project initiators Erik Lindahl, Berk Hess and David van der Spoel.
+ * Consult the AUTHORS/COPYING files and https://www.gromacs.org for details.
  *
  * GROMACS is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
@@ -18,7 +17,7 @@
  *
  * You should have received a copy of the GNU Lesser General Public
  * License along with GROMACS; if not, see
- * http://www.gnu.org/licenses, or write to the Free Software Foundation,
+ * https://www.gnu.org/licenses, or write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA.
  *
  * If you want to redistribute modifications to GROMACS, please
@@ -27,17 +26,16 @@
  * consider code for inclusion in the official distribution, but
  * derived work must not be called official GROMACS. Details are found
  * in the README & COPYING files - if they are missing, get the
- * official version at http://www.gromacs.org.
+ * official version at https://www.gromacs.org.
  *
  * To help us fund GROMACS development, we humbly ask that you cite
- * the research papers on the package. Check out http://www.gromacs.org.
+ * the research papers on the package. Check out https://www.gromacs.org.
  */
 
 #ifndef GROMACS_TESTINGCONFIGURATION_H
 #define GROMACS_TESTINGCONFIGURATION_H
 
-#include "config.h"
-
+#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -85,7 +83,15 @@ inline real getTestStepSize()
 class GmxApiTest : public gmx::test::MdrunTestFixture
 {
 public:
-    GmxApiTest() {}
+    GmxApiTest()
+    {
+        // For files that will always be generated, let's explicitly set the names so that
+        // TestFileManager will clean them up properly.
+        runner_.groOutputFileName_ = fileManager_.getTemporaryFilePath("confout.gro");
+        runner_.cptOutputFileName_ = fileManager_.getTemporaryFilePath("state.cpt");
+        runner_.reducedPrecisionTrajectoryFileName_ =
+                fileManager_.getTemporaryFilePath("traj_comp.xtc");
+    }
 
     /* \brief
      * Prepare a tpr to run the test with.
@@ -106,7 +112,7 @@ public:
                                   "nstxout = 2\n"
                                   "nstvout = 2\n"
                                   "nstfout = 4\n"
-                                  "nstxout-compressed = 5\n"
+                                  "nstxout-compressed = 2\n"
                                   "tcoupl = v-rescale\n"
                                   "tc-grps = System\n"
                                   "tau-t = 1\n"
@@ -123,18 +129,54 @@ public:
     {
         std::vector<std::string> mdArgs;
 
-        mdArgs.emplace_back("-o");
-        mdArgs.emplace_back(runner_.fullPrecisionTrajectoryFileName_);
-        mdArgs.emplace_back("-x");
-        mdArgs.emplace_back(runner_.reducedPrecisionTrajectoryFileName_);
-        mdArgs.emplace_back("-c");
-        mdArgs.emplace_back(runner_.groOutputFileName_);
-        mdArgs.emplace_back("-g");
-        mdArgs.emplace_back(runner_.logFileName_);
-        mdArgs.emplace_back("-e");
-        mdArgs.emplace_back(runner_.edrFileName_);
-        mdArgs.emplace_back("-cpo");
-        mdArgs.emplace_back(runner_.cptOutputFileName_);
+        if (!runner_.fullPrecisionTrajectoryFileName_.empty())
+        {
+            EXPECT_TRUE(std::none_of(mdArgs.cbegin(), mdArgs.cend(), [](const std::string& arg) {
+                return arg == "-o";
+            }));
+            mdArgs.emplace_back("-o");
+            mdArgs.emplace_back(runner_.fullPrecisionTrajectoryFileName_);
+        }
+        if (!runner_.reducedPrecisionTrajectoryFileName_.empty())
+        {
+            EXPECT_TRUE(std::none_of(mdArgs.cbegin(), mdArgs.cend(), [](const std::string& arg) {
+                return arg == "-x";
+            }));
+            mdArgs.emplace_back("-x");
+            mdArgs.emplace_back(runner_.reducedPrecisionTrajectoryFileName_);
+        }
+        if (!runner_.groOutputFileName_.empty())
+        {
+            EXPECT_TRUE(std::none_of(mdArgs.cbegin(), mdArgs.cend(), [](const std::string& arg) {
+                return arg == "-c";
+            }));
+            mdArgs.emplace_back("-c");
+            mdArgs.emplace_back(runner_.groOutputFileName_);
+        }
+        if (!runner_.logFileName_.empty())
+        {
+            EXPECT_TRUE(std::none_of(mdArgs.cbegin(), mdArgs.cend(), [](const std::string& arg) {
+                return arg == "-g";
+            }));
+            mdArgs.emplace_back("-g");
+            mdArgs.emplace_back(runner_.logFileName_);
+        }
+        if (!runner_.edrFileName_.empty())
+        {
+            EXPECT_TRUE(std::none_of(mdArgs.cbegin(), mdArgs.cend(), [](const std::string& arg) {
+                return arg == "-e";
+            }));
+            mdArgs.emplace_back("-e");
+            mdArgs.emplace_back(runner_.edrFileName_);
+        }
+        if (!runner_.cptOutputFileName_.empty())
+        {
+            EXPECT_TRUE(std::none_of(mdArgs.cbegin(), mdArgs.cend(), [](const std::string& arg) {
+                return arg == "-cpo";
+            }));
+            mdArgs.emplace_back("-cpo");
+            mdArgs.emplace_back(runner_.cptOutputFileName_);
+        }
 #if GMX_THREAD_MPI
         /* This should be handled through the actual API we have for getting
          * ranks, but currently this leads to data races right now */

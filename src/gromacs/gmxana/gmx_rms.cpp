@@ -1,13 +1,9 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 1991-2000, University of Groningen, The Netherlands.
- * Copyright (c) 2001-2004, The GROMACS development team.
- * Copyright (c) 2013,2014,2015,2016,2017 by the GROMACS development team.
- * Copyright (c) 2018,2019,2020,2021, by the GROMACS development team, led by
- * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
- * and including many others, as listed in the AUTHORS file in the
- * top-level source directory and at http://www.gromacs.org.
+ * Copyright 1991- The GROMACS Authors
+ * and the project initiators Erik Lindahl, Berk Hess and David van der Spoel.
+ * Consult the AUTHORS/COPYING files and https://www.gromacs.org for details.
  *
  * GROMACS is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
@@ -21,7 +17,7 @@
  *
  * You should have received a copy of the GNU Lesser General Public
  * License along with GROMACS; if not, see
- * http://www.gnu.org/licenses, or write to the Free Software Foundation,
+ * https://www.gnu.org/licenses, or write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA.
  *
  * If you want to redistribute modifications to GROMACS, please
@@ -30,10 +26,10 @@
  * consider code for inclusion in the official distribution, but
  * derived work must not be called official GROMACS. Details are found
  * in the README & COPYING files - if they are missing, get the
- * official version at http://www.gromacs.org.
+ * official version at https://www.gromacs.org.
  *
  * To help us fund GROMACS development, we humbly ask that you cite
- * the research papers on the package. Check out http://www.gromacs.org.
+ * the research papers on the package. Check out https://www.gromacs.org.
  */
 #include "gmxpre.h"
 
@@ -132,9 +128,8 @@ int gmx_rms(int argc, char* argv[])
         "If you select the option (default) and ",
         "supply a valid [REF].tpr[ref] file masses will be taken from there, ",
         "otherwise the masses will be deduced from the [TT]atommass.dat[tt] file in",
-        "[TT]GMXLIB[tt]. This is fine for proteins, but not",
-        "necessarily for other molecules. A default mass of 12.011 amu (carbon)",
-        "is assigned to unknown atoms. You can check whether this happened by",
+        "[TT]GMXLIB[tt] (deprecated). This is fine for proteins, but not",
+        "necessarily for other molecules. You can check whether this happened by",
         "turning on the [TT]-debug[tt] flag and inspecting the log file.[PAR]",
 
         "With [TT]-f2[tt], the 'other structures' are taken from a second",
@@ -338,7 +333,7 @@ int gmx_rms(int argc, char* argv[])
         }
     }
 
-    bTop = read_tps_conf(ftp2fn(efTPS, NFILE, fnm), &top, &pbcType, &xp, nullptr, box, TRUE);
+    bTop = read_tps_conf(ftp2fn(efTPS, NFILE, fnm), &top, &pbcType, &xp, nullptr, box, bMassWeighted);
     snew(w_rls, top.atoms.nr);
     snew(w_rms, top.atoms.nr);
 
@@ -373,14 +368,14 @@ int gmx_rms(int argc, char* argv[])
             if (bMassWeighted)
             {
                 w_rls[ind_fit[i]] = top.atoms.atom[ind_fit[i]].m;
+                bMass             = bMass || (top.atoms.atom[ind_fit[i]].m != 0);
             }
             else
             {
                 w_rls[ind_fit[i]] = 1;
             }
-            bMass = bMass || (top.atoms.atom[ind_fit[i]].m != 0);
         }
-        if (!bMass)
+        if (bMassWeighted && !bMass)
         {
             fprintf(stderr, "All masses in the fit group are 0, using masses of 1\n");
             for (i = 0; i < ifit; i++)
@@ -428,14 +423,14 @@ int gmx_rms(int argc, char* argv[])
             if (bMassWeighted)
             {
                 w_rms[ind_rms[j][i]] = top.atoms.atom[ind_rms[j][i]].m;
+                bMass                = bMass || (top.atoms.atom[ind_rms[j][i]].m != 0);
             }
             else
             {
                 w_rms[ind_rms[j][i]] = 1.0;
             }
-            bMass = bMass || (top.atoms.atom[ind_rms[j][i]].m != 0);
         }
-        if (!bMass)
+        if (bMassWeighted && !bMass)
         {
             fprintf(stderr, "All masses in group %d are 0, using masses of 1\n", j);
             for (i = 0; i < irms[j]; i++)

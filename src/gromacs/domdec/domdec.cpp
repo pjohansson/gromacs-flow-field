@@ -1,13 +1,9 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2005,2006,2007,2008,2009 by the GROMACS development team.
- * Copyright (c) 2010,2011,2012,2013,2014 by the GROMACS development team.
- * Copyright (c) 2015,2016,2017,2018,2019 by the GROMACS development team.
- * Copyright (c) 2020,2021, by the GROMACS development team, led by
- * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
- * and including many others, as listed in the AUTHORS file in the
- * top-level source directory and at http://www.gromacs.org.
+ * Copyright 2005- The GROMACS Authors
+ * and the project initiators Erik Lindahl, Berk Hess and David van der Spoel.
+ * Consult the AUTHORS/COPYING files and https://www.gromacs.org for details.
  *
  * GROMACS is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
@@ -21,7 +17,7 @@
  *
  * You should have received a copy of the GNU Lesser General Public
  * License along with GROMACS; if not, see
- * http://www.gnu.org/licenses, or write to the Free Software Foundation,
+ * https://www.gnu.org/licenses, or write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA.
  *
  * If you want to redistribute modifications to GROMACS, please
@@ -30,10 +26,10 @@
  * consider code for inclusion in the official distribution, but
  * derived work must not be called official GROMACS. Details are found
  * in the README & COPYING files - if they are missing, get the
- * official version at http://www.gromacs.org.
+ * official version at https://www.gromacs.org.
  *
  * To help us fund GROMACS development, we humbly ask that you cite
- * the research papers on the package. Check out http://www.gromacs.org.
+ * the research papers on the package. Check out https://www.gromacs.org.
  */
 
 #include "gmxpre.h"
@@ -64,6 +60,7 @@
 #include "gromacs/domdec/localtopologychecker.h"
 #include "gromacs/domdec/options.h"
 #include "gromacs/domdec/partition.h"
+#include "gromacs/domdec/utility.h"
 #include "gromacs/ewald/pme.h"
 #include "gromacs/domdec/reversetopology.h"
 #include "gromacs/gmxlib/network.h"
@@ -129,6 +126,22 @@ using gmx::DdRankOrder;
 using gmx::DlbOption;
 using gmx::DomdecOptions;
 using gmx::RangePartitioning;
+
+/*! \brief Computes and returns the number of halo communication pulses along the three dimensions
+ *
+ * The number of pulses includes some margin on the box for pressure scaling.
+ *
+ * \param[in] numDomains             The number of DD domains along the three Cartesian dimensions
+ * \param[in] ir                     The input record
+ * \param[in] box                    The unit cell
+ * \param[in] x                      The coordinates of the whole system
+ * \param[in] communicationDistance  The halo communication distance
+ */
+static gmx::IVec getNumCommunicationPulses(const ivec&                    numDomains,
+                                           const t_inputrec&              ir,
+                                           const matrix                   box,
+                                           gmx::ArrayRef<const gmx::RVec> x,
+                                           real                           communicationDistance);
 
 static const char* enumValueToString(DlbState enumValue)
 {
@@ -1816,23 +1829,25 @@ static DlbState forceDlbOffOrBail(DlbState             cmdlineDlbState,
  * may be altered or an error may be thrown if incompatibility of options is detected.
  *
  * \param [in] mdlog                Logger.
- * \param [in] dlbOption            Enum value for the DLB option.
+ * \param [in] options              DomdecOptions.
  * \param [in] bRecordLoad          True if the load balancer is recording load information.
  * \param [in] mdrunOptions         Options for mdrun.
  * \param [in] inputrec             Pointer mdrun to input parameters.
- * \param [in] directGpuCommUsedWithGpuUpdate     Direct GPU halo exchange and GPU update enabled
+ * \param [in] useGpuForPme         PME offloaded to GPU
+ * \param [in] canUseGpuPmeDecomposition         GPU pme decomposition supported
  * \returns                         DLB initial/startup state.
  */
 static DlbState determineInitialDlbState(const gmx::MDLogger&     mdlog,
-                                         DlbOption                dlbOption,
+                                         const DomdecOptions&     options,
                                          gmx_bool                 bRecordLoad,
                                          const gmx::MdrunOptions& mdrunOptions,
                                          const t_inputrec&        inputrec,
-                                         const bool               directGpuCommUsedWithGpuUpdate)
+                                         const bool               useGpuForPme,
+                                         const bool               canUseGpuPmeDecomposition)
 {
     DlbState dlbState = DlbState::offCanTurnOn;
 
-    switch (dlbOption)
+    switch (options.dlbOption)
     {
         case DlbOption::turnOnWhenUseful: dlbState = DlbState::offCanTurnOn; break;
         case DlbOption::no: dlbState = DlbState::offUser; break;
@@ -1840,12 +1855,15 @@ static DlbState determineInitialDlbState(const gmx::MDLogger&     mdlog,
         default: gmx_incons("Invalid dlbOption enum value");
     }
 
-    // P2P GPU comm + GPU update leads to case in which we enqueue async work for multiple timesteps
-    // DLB needs to be disabled in that case
-    if (directGpuCommUsedWithGpuUpdate)
+    // Disable DLB when GPU PME decomposition is used
+    // GPU PME decomposition uses an extended halo exchange algorithm without any X/F-redistribution
+    // DLB causes changes in PP domain which doesn't work well with new PME decomposition algorithm
+
+    // ToDo: This code has an assumption that options.numPmeRanks < 0 results in no separate PME rank (which is true currently),
+    // if in future "-npme -1" option results in single separate PME rank, we shouldn't disable DLB in that case
+    if (useGpuForPme && canUseGpuPmeDecomposition && (options.numPmeRanks == 0 || options.numPmeRanks > 1))
     {
-        std::string reasonStr =
-                "it is not supported with GPU direct communication + GPU update enabled.";
+        std::string reasonStr = "it is not supported with GPU PME decomposition.";
         return forceDlbOffOrBail(dlbState, reasonStr, mdlog);
     }
 
@@ -2799,7 +2817,8 @@ static DDSettings getDDSettings(const gmx::MDLogger&     mdlog,
                                 const DomdecOptions&     options,
                                 const gmx::MdrunOptions& mdrunOptions,
                                 const t_inputrec&        ir,
-                                const bool               directGpuCommUsedWithGpuUpdate)
+                                const bool               useGpuForPme,
+                                const bool               canUseGpuPmeDecomposition)
 {
     DDSettings ddSettings;
 
@@ -2833,7 +2852,7 @@ static DDSettings getDDSettings(const gmx::MDLogger&     mdlog,
     }
 
     ddSettings.initialDlbState = determineInitialDlbState(
-            mdlog, options.dlbOption, ddSettings.recordLoad, mdrunOptions, ir, directGpuCommUsedWithGpuUpdate);
+            mdlog, options, ddSettings.recordLoad, mdrunOptions, ir, useGpuForPme, canUseGpuPmeDecomposition);
     GMX_LOG(mdlog.info)
             .appendTextFormatted("Dynamic load balancing: %s",
                                  enumValueToString(ddSettings.initialDlbState));
@@ -2869,7 +2888,9 @@ public:
          ArrayRef<const RVec>              xGlobal,
          bool                              useGpuForNonbonded,
          bool                              useGpuForPme,
-         bool                              directGpuCommUsedWithGpuUpdate);
+         bool                              useGpuForUpdate,
+         bool*                             useGpuDirectHalo,
+         bool                              canUseGpuPmeDecomposition);
 
     //! Build the resulting DD manager
     gmx_domdec_t* build(LocalAtomSetManager*       atomSets,
@@ -2928,12 +2949,14 @@ DomainDecompositionBuilder::Impl::Impl(const MDLogger&                   mdlog,
                                        ArrayRef<const RVec>              xGlobal,
                                        bool                              useGpuForNonbonded,
                                        bool                              useGpuForPme,
-                                       bool directGpuCommUsedWithGpuUpdate) :
+                                       bool                              useGpuForUpdate,
+                                       bool*                             useGpuDirectHalo,
+                                       bool canUseGpuPmeDecomposition) :
     mdlog_(mdlog), cr_(cr), options_(options), mtop_(mtop), ir_(ir), notifiers_(notifiers)
 {
     GMX_LOG(mdlog_.info).appendTextFormatted("\nInitializing Domain Decomposition on %d ranks", cr_->sizeOfDefaultCommunicator);
 
-    ddSettings_ = getDDSettings(mdlog_, options_, mdrunOptions, ir_, directGpuCommUsedWithGpuUpdate);
+    ddSettings_ = getDDSettings(mdlog_, options_, mdrunOptions, ir_, useGpuForPme, canUseGpuPmeDecomposition);
 
     if (ddSettings_.eFlop > 1)
     {
@@ -2959,7 +2982,7 @@ DomainDecompositionBuilder::Impl::Impl(const MDLogger&                   mdlog,
 
     /* Checks for ability to use PME-only ranks */
     auto separatePmeRanksPermitted = checkForSeparatePmeRanks(
-            notifiers_, options_, numRanksRequested, useGpuForNonbonded, useGpuForPme);
+            notifiers_, options_, numRanksRequested, useGpuForNonbonded, useGpuForPme, canUseGpuPmeDecomposition);
 
     /* Checks for validity of requested Ranks setup */
     checkForValidRankCountRequests(numRanksRequested,
@@ -3001,6 +3024,59 @@ DomainDecompositionBuilder::Impl::Impl(const MDLogger&                   mdlog,
                      systemInfo_,
                      gridSetupCellsizeLimit,
                      ddbox_);
+
+    // GPU-direct communication presently only works with a single pulse in the 2nd/3rd dimensions.
+    // Check that the domains are large enough (including a margin for scaling), and disable it otherwise.
+    if (*useGpuDirectHalo)
+    {
+        // Since the simulation box can distort (a lot) during a long simulation,
+        // we need a large margin here to ensure that we will never end up later
+        // triggering the assert condition and the simulation just dying. Instead
+        // of adjusting all the dimensions of the box, we simply use a margin of
+        // on the cutoff distance to ensure the domains are large enough. Without
+        // pressure coupling no margin is needed, for isotropic coupliing it can
+        // be small (10%), and for all other cases we want a factor 2.
+        float marginFactor;
+        if (ir_.epc == PressureCoupling::No)
+        {
+            marginFactor = 1.0;
+        }
+        else if (ir_.epct == PressureCouplingType::Isotropic)
+        {
+            marginFactor = 1.1;
+        }
+        else
+        {
+            marginFactor = 2.0;
+        }
+        const IVec numPulses = getNumCommunicationPulses(
+                ddGridSetup_.numDomains, ir, box, xGlobal, marginFactor * systemInfo_.cutoff);
+
+        // We don't need to check the first dimension;
+        // there we can have multiple pulses with GPU-direct halos.
+        for (int dimIndex = 1; dimIndex < ddGridSetup_.numDDDimensions; dimIndex++)
+        {
+            const int dim = ddGridSetup_.ddDimensions[dimIndex];
+
+            if (numPulses[dim] > 1)
+            {
+                *useGpuDirectHalo = false;
+                GMX_LOG(mdlog.info)
+                        .appendText(
+                                "Disabling GPU-direct halo communication; domains are too small.");
+            }
+        }
+    }
+
+    // Now that we know whether GPU-direct halos actually will be used, we might have to modify DLB
+    if (!isDlbDisabled(ddSettings_.initialDlbState) && useGpuForUpdate && *useGpuDirectHalo)
+    {
+        ddSettings_.initialDlbState = DlbState::offForever;
+        GMX_LOG(mdlog.info)
+                .appendText(
+                        "Disabling dynamic load balancing; unsupported with GPU communication + "
+                        "update.");
+    }
 
     cr_->npmenodes = ddGridSetup_.numPmeOnlyRanks;
 
@@ -3072,7 +3148,9 @@ DomainDecompositionBuilder::DomainDecompositionBuilder(const MDLogger&          
                                                        ArrayRef<const RVec> xGlobal,
                                                        const bool           useGpuForNonbonded,
                                                        const bool           useGpuForPme,
-                                                       const bool directGpuCommUsedWithGpuUpdate) :
+                                                       bool                 useGpuForUpdate,
+                                                       bool*                useGpuDirectHalo,
+                                                       const bool canUseGpuPmeDecomposition) :
     impl_(new Impl(mdlog,
                    cr,
                    options,
@@ -3087,7 +3165,9 @@ DomainDecompositionBuilder::DomainDecompositionBuilder(const MDLogger&          
                    xGlobal,
                    useGpuForNonbonded,
                    useGpuForPme,
-                   directGpuCommUsedWithGpuUpdate))
+                   useGpuForUpdate,
+                   useGpuDirectHalo,
+                   canUseGpuPmeDecomposition))
 {
 }
 
@@ -3102,6 +3182,46 @@ gmx_domdec_t* DomainDecompositionBuilder::build(LocalAtomSetManager*       atomS
 DomainDecompositionBuilder::~DomainDecompositionBuilder() = default;
 
 } // namespace gmx
+
+
+//! Returns the number of halo communication pulses along Cartesian dimension \p dim
+static int getNumCommunicationPulsesForDim(const gmx_ddbox_t& ddbox,
+                                           const int          dim,
+                                           const int          numDomains,
+                                           const bool         ddBoxIsDynamic,
+                                           const real         communicationDistance)
+{
+    real inverseOfDomainSize = DD_CELL_MARGIN * numDomains / ddbox.box_size[dim];
+
+    if (ddBoxIsDynamic)
+    {
+        inverseOfDomainSize *= DD_PRES_SCALE_MARGIN;
+    }
+
+    // second part truncates, but since we add 1 this means we return value rounded up.
+    return 1 + static_cast<int>(communicationDistance * inverseOfDomainSize * ddbox.skew_fac[dim]);
+}
+
+static gmx::IVec getNumCommunicationPulses(const ivec&                    numDomains,
+                                           const t_inputrec&              ir,
+                                           const matrix                   box,
+                                           gmx::ArrayRef<const gmx::RVec> xGlobal,
+                                           const real                     communicationDistance)
+{
+    const gmx_ddbox_t ddbox = get_ddbox(numDomains, ir, box, xGlobal);
+
+    gmx::IVec numPulses = { 0, 0, 0 };
+    for (int dim = 0; dim < DIM; dim++)
+    {
+        if (numDomains[dim] > 1)
+        {
+            numPulses[dim] = getNumCommunicationPulsesForDim(
+                    ddbox, dim, numDomains[dim], inputrecDynamicBox(&ir), communicationDistance);
+        }
+    }
+
+    return numPulses;
+}
 
 static gmx_bool test_dd_cutoff(const t_commrec* cr, const matrix box, gmx::ArrayRef<const gmx::RVec> x, real cutoffRequested)
 {
@@ -3118,13 +3238,8 @@ static gmx_bool test_dd_cutoff(const t_commrec* cr, const matrix box, gmx::Array
     {
         const int dim = dd->dim[d];
 
-        real inv_cell_size = DD_CELL_MARGIN * dd->numCells[dim] / ddbox.box_size[dim];
-        if (dd->unitCellInfo.ddBoxIsDynamic)
-        {
-            inv_cell_size *= DD_PRES_SCALE_MARGIN;
-        }
-
-        const int np = 1 + static_cast<int>(cutoffRequested * inv_cell_size * ddbox.skew_fac[dim]);
+        const int np = getNumCommunicationPulsesForDim(
+                ddbox, dim, dd->numCells[dim], dd->unitCellInfo.ddBoxIsDynamic, cutoffRequested);
 
         if (!isDlbDisabled(dd->comm) && (dim < ddbox.npbcdim) && (dd->comm->cd[d].np_dlb > 0))
         {
@@ -3179,8 +3294,7 @@ bool change_dd_cutoff(t_commrec* cr, const matrix box, gmx::ArrayRef<const gmx::
     return bCutoffAllowed;
 }
 
-void constructGpuHaloExchange(const gmx::MDLogger&            mdlog,
-                              const t_commrec&                cr,
+void constructGpuHaloExchange(const t_commrec&                cr,
                               const gmx::DeviceStreamManager& deviceStreamManager,
                               gmx_wallcycle*                  wcycle)
 {
@@ -3190,16 +3304,6 @@ void constructGpuHaloExchange(const gmx::MDLogger&            mdlog,
     GMX_RELEASE_ASSERT(deviceStreamManager.streamIsValid(gmx::DeviceStreamType::NonBondedNonLocal),
                        "Non-local non-bonded stream should be valid when using "
                        "GPU halo exchange.");
-
-    if (cr.dd->gpuHaloExchange[0].empty())
-    {
-        GMX_LOG(mdlog.warning)
-                .asParagraph()
-                .appendTextFormatted(
-                        "NOTE: Activating the 'GPU halo exchange' feature, enabled "
-                        "by the "
-                        "GMX_GPU_DD_COMMS environment variable.");
-    }
 
     for (int d = 0; d < cr.dd->ndim; d++)
     {

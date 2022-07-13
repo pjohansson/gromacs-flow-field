@@ -1,12 +1,9 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 1991-2000, University of Groningen, The Netherlands.
- * Copyright (c) 2001-2004, The GROMACS development team.
- * Copyright (c) 2011-2019,2020,2021, by the GROMACS development team, led by
- * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
- * and including many others, as listed in the AUTHORS file in the
- * top-level source directory and at http://www.gromacs.org.
+ * Copyright 1991- The GROMACS Authors
+ * and the project initiators Erik Lindahl, Berk Hess and David van der Spoel.
+ * Consult the AUTHORS/COPYING files and https://www.gromacs.org for details.
  *
  * GROMACS is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
@@ -20,7 +17,7 @@
  *
  * You should have received a copy of the GNU Lesser General Public
  * License along with GROMACS; if not, see
- * http://www.gnu.org/licenses, or write to the Free Software Foundation,
+ * https://www.gnu.org/licenses, or write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA.
  *
  * If you want to redistribute modifications to GROMACS, please
@@ -29,10 +26,10 @@
  * consider code for inclusion in the official distribution, but
  * derived work must not be called official GROMACS. Details are found
  * in the README & COPYING files - if they are missing, get the
- * official version at http://www.gromacs.org.
+ * official version at https://www.gromacs.org.
  *
  * To help us fund GROMACS development, we humbly ask that you cite
- * the research papers on the package. Check out http://www.gromacs.org.
+ * the research papers on the package. Check out https://www.gromacs.org.
  */
 /*! \internal \file
  *
@@ -545,9 +542,10 @@ void gmx::LegacySimulator::do_md()
         repl_ex = init_replica_exchange(fplog, ms, top_global.natoms, ir, replExParams);
     }
     /* PME tuning is only supported in the Verlet scheme, with PME for
-     * Coulomb. It is not supported with only LJ PME. */
+     * Coulomb. It is not supported with only LJ PME.
+     * Disable PME tuning with GPU PME decomposition */
     bPMETune = (mdrunOptions.tunePme && EEL_PME(fr->ic->eeltype) && !mdrunOptions.reproducible
-                && ir->cutoff_scheme != CutoffScheme::Group);
+                && ir->cutoff_scheme != CutoffScheme::Group && !simulationWork.useGpuPmeDecomposition);
 
     pme_load_balancing_t* pme_loadbal = nullptr;
     if (bPMETune)
@@ -1040,7 +1038,7 @@ void gmx::LegacySimulator::do_md()
             GMX_RELEASE_ASSERT(fr->deviceStreamManager != nullptr,
                                "GPU device manager has to be initialized to use GPU "
                                "version of halo exchange.");
-            constructGpuHaloExchange(mdlog, *cr, *fr->deviceStreamManager, wcycle);
+            constructGpuHaloExchange(*cr, *fr->deviceStreamManager, wcycle);
         }
 
         if (MASTER(cr) && do_log)
@@ -1527,6 +1525,7 @@ void gmx::LegacySimulator::do_md()
             if (useGpuForUpdate)
             {
                 // On search steps, update handles to device vectors
+                // TODO: this condition has redundant / unnecessary clauses
                 if (bNS && (bFirstStep || haveDDAtomOrdering(*cr) || bExchanged))
                 {
                     integrator->set(stateGpu->getCoordinates(),
@@ -1535,18 +1534,20 @@ void gmx::LegacySimulator::do_md()
                                     top->idef,
                                     *md);
 
-                    // Copy data to the GPU after buffers might have being reinitialized
+                    // Copy data to the GPU after buffers might have been reinitialized
                     /* The velocity copy is redundant if we had Center-of-Mass motion removed on
                      * the previous step. We don't check that now. */
                     stateGpu->copyVelocitiesToGpu(state->v, AtomLocality::Local);
-                    if (bExchanged
-                        || (!runScheduleWork->stepWork.haveGpuPmeOnThisRank
-                            && !runScheduleWork->stepWork.useGpuXBufferOps))
-                    {
-                        stateGpu->copyCoordinatesToGpu(state->x, AtomLocality::Local);
-                        // Coordinates are later used by the integrator running in the same stream.
-                        stateGpu->consumeCoordinatesCopiedToDeviceEvent(AtomLocality::Local);
-                    }
+                }
+
+                // Copy x to the GPU unless we have already transferred in do_force().
+                // We transfer in do_force() if a GPU force task requires x (PME or x buffer ops).
+                if (!(runScheduleWork->stepWork.haveGpuPmeOnThisRank
+                      || runScheduleWork->stepWork.useGpuXBufferOps))
+                {
+                    stateGpu->copyCoordinatesToGpu(state->x, AtomLocality::Local);
+                    // Coordinates are later used by the integrator running in the same stream.
+                    stateGpu->consumeCoordinatesCopiedToDeviceEvent(AtomLocality::Local);
                 }
 
                 if ((simulationWork.useGpuPme && simulationWork.useCpuPmePpCommunication)
@@ -1908,7 +1909,7 @@ void gmx::LegacySimulator::do_md()
                                                    fr->fcdata.get(),
                                                    awh.get());
             }
-            if (do_log && ir->bDoAwh && awh->hasFepLambdaDimension())
+            if (do_log && ((ir->bDoAwh && awh->hasFepLambdaDimension()) || ir->fepvals->delta_lambda != 0))
             {
                 const bool isInitialOutput = false;
                 printLambdaStateToLog(fplog, state->lambda, isInitialOutput);

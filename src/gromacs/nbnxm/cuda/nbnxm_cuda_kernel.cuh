@@ -1,11 +1,9 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2012,2013,2014,2015,2016 by the GROMACS development team.
- * Copyright (c) 2017,2018,2019,2020,2021, by the GROMACS development team, led by
- * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
- * and including many others, as listed in the AUTHORS file in the
- * top-level source directory and at http://www.gromacs.org.
+ * Copyright 2012- The GROMACS Authors
+ * and the project initiators Erik Lindahl, Berk Hess and David van der Spoel.
+ * Consult the AUTHORS/COPYING files and https://www.gromacs.org for details.
  *
  * GROMACS is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
@@ -19,7 +17,7 @@
  *
  * You should have received a copy of the GNU Lesser General Public
  * License along with GROMACS; if not, see
- * http://www.gnu.org/licenses, or write to the Free Software Foundation,
+ * https://www.gnu.org/licenses, or write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA.
  *
  * If you want to redistribute modifications to GROMACS, please
@@ -28,10 +26,10 @@
  * consider code for inclusion in the official distribution, but
  * derived work must not be called official GROMACS. Details are found
  * in the README & COPYING files - if they are missing, get the
- * official version at http://www.gromacs.org.
+ * official version at https://www.gromacs.org.
  *
  * To help us fund GROMACS development, we humbly ask that you cite
- * the research papers on the package. Check out http://www.gromacs.org.
+ * the research papers on the package. Check out https://www.gromacs.org.
  */
 
 /*! \internal \file
@@ -173,8 +171,8 @@ __launch_bounds__(THREADS_PER_BLOCK)
     const int*           atom_types  = atdat.atomTypes;
     int                  ntypes      = atdat.numTypes;
 #    else
-    const float2* lj_comb = atdat.ljComb;
-    float2        ljcp_i, ljcp_j;
+    const float2*        lj_comb = atdat.ljComb;
+    float2               ljcp_i, ljcp_j;
 #    endif
     const float4*        xq          = atdat.xq;
     float3*              f           = asFloat3(atdat.f);
@@ -203,7 +201,7 @@ __launch_bounds__(THREADS_PER_BLOCK)
     float                beta        = nbparam.ewald_beta;
     float                ewald_shift = nbparam.sh_ewald;
 #        else
-    float reactionFieldShift = nbparam.c_rf;
+    float                reactionFieldShift = nbparam.c_rf;
 #        endif /* EL_EWALD_ANY */
     float*               e_lj        = atdat.eLJ;
     float*               e_el        = atdat.eElec;
@@ -216,7 +214,7 @@ __launch_bounds__(THREADS_PER_BLOCK)
 #    if NTHREAD_Z == 1
     unsigned int tidxz = 0;
 #    else
-    unsigned int  tidxz = threadIdx.z;
+    unsigned int         tidxz              = threadIdx.z;
 #    endif
     unsigned int bidx  = blockIdx.x;
     unsigned int widx  = tidx / warp_size; /* warp index */
@@ -258,6 +256,32 @@ __launch_bounds__(THREADS_PER_BLOCK)
     // - sm_6x and earlier not tested to
     constexpr bool c_preloadCj = (GMX_PTX_ARCH < 700 || GMX_PTX_ARCH == 750);
 
+
+    // Full or partial unroll on Ampere GPUs is beneficial given the incresead L1 intruction cache
+    // Tested with CUDA 11.2-5.
+#    if GMX_PTX_ARCH == 800
+#        define DO_JM_UNROLL 1
+#        if !defined CALC_ENERGIES && !defined PRUNE_NBL
+#            if (defined EL_CUTOFF || defined EL_RF \
+                 || defined EL_EWALD_ANY && !defined LJ_FORCE_SWITCH && !defined LJ_POT_SWITCH)
+    static constexpr int jmLoopUnrollFactor = 4;
+#            else
+    static constexpr int jmLoopUnrollFactor = 2;
+#            endif
+#        else // CALC_ENERGIES
+#            if (defined EL_CUTOFF || defined EL_RF && !defined LJ_FORCE_SWITCH && !defined LJ_POT_SWITCH)
+    static constexpr int jmLoopUnrollFactor = 2;
+#            else
+    static constexpr int jmLoopUnrollFactor = 1;
+#            endif
+#        endif
+#    elif GMX_PTX_ARCH == 860
+#        define DO_JM_UNROLL 1
+    static constexpr int jmLoopUnrollFactor = 2;
+#    else
+#        define DO_JM_UNROLL 0
+#    endif
+
     /*********************************************************************
      * Set up shared memory pointers.
      * sm_nextSlotPtr should always be updated to point to the "next slot",
@@ -298,7 +322,10 @@ __launch_bounds__(THREADS_PER_BLOCK)
     cij4_start = nb_sci.cj4_ind_start; /* first ...*/
     cij4_end   = nb_sci.cj4_ind_end;   /* and last index of j clusters */
 
-    if (tidxz == 0)
+    // We may need only a subset of threads active for preloading i-atoms
+    // depending on the super-cluster and cluster / thread-block size.
+    constexpr bool c_loadUsingAllXYThreads = (c_clSize == c_nbnxnGpuNumClusterPerSupercluster);
+    if (tidxz == 0 && (c_loadUsingAllXYThreads || tidxj < c_nbnxnGpuNumClusterPerSupercluster))
     {
         /* Pre-load i-atom x and q into shared memory */
         ci = sci * c_nbnxnGpuNumClusterPerSupercluster + tidxj;
@@ -403,10 +430,9 @@ __launch_bounds__(THREADS_PER_BLOCK)
                 __syncwarp(c_fullWarpMask);
             }
 
-            /* Unrolling this loop
-               - with pruning leads to register spilling;
-               - on Kepler and later it is much slower;
-               Tested with up to nvcc 7.5 */
+#    if DO_JM_UNROLL
+#        pragma unroll(jmLoopUnrollFactor)
+#    endif
             for (jm = 0; jm < c_nbnxnGpuJgroupSize; jm++)
             {
                 if (imask & (superClInteractionMask << (jm * c_nbnxnGpuNumClusterPerSupercluster)))
@@ -431,7 +457,7 @@ __launch_bounds__(THREADS_PER_BLOCK)
                     fcj_buf = make_float3(0.0F);
 
 #    if !defined PRUNE_NBL
-#        pragma unroll 8
+#        pragma unroll c_nbnxnGpuNumClusterPerSupercluster
 #    endif
                     for (i = 0; i < c_nbnxnGpuNumClusterPerSupercluster; i++)
                     {

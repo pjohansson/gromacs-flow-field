@@ -1,10 +1,9 @@
 #
 # This file is part of the GROMACS molecular simulation package.
 #
-# Copyright (c) 2020,2021, by the GROMACS development team, led by
-# Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
-# and including many others, as listed in the AUTHORS file in the
-# top-level source directory and at http://www.gromacs.org.
+# Copyright 2020- The GROMACS Authors
+# and the project initiators Erik Lindahl, Berk Hess and David van der Spoel.
+# Consult the AUTHORS/COPYING files and https://www.gromacs.org for details.
 #
 # GROMACS is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public License
@@ -18,7 +17,7 @@
 #
 # You should have received a copy of the GNU Lesser General Public
 # License along with GROMACS; if not, see
-# http://www.gnu.org/licenses, or write to the Free Software Foundation,
+# https://www.gnu.org/licenses, or write to the Free Software Foundation,
 # Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA.
 #
 # If you want to redistribute modifications to GROMACS, please
@@ -27,10 +26,10 @@
 # consider code for inclusion in the official distribution, but
 # derived work must not be called official GROMACS. Details are found
 # in the README & COPYING files - if they are missing, get the
-# official version at http://www.gromacs.org.
+# official version at https://www.gromacs.org.
 #
 # To help us fund GROMACS development, we humbly ask that you cite
-# the research papers on the package. Check out http://www.gromacs.org.
+# the research papers on the package. Check out https://www.gromacs.org.
 
 # OpenCL required version: 1.2 or newer
 set(REQUIRED_SYCL_MIN_VERSION_MAJOR 1)
@@ -43,6 +42,8 @@ set(GMX_GPU_SYCL ON)
 # https://gitlab.kitware.com/cmake/cmake/-/issues/21711
 
 option(GMX_SYCL_HIPSYCL "Use hipSYCL instead of Intel/Clang for SYCL compilation" OFF)
+
+option(GMX_SYCL_USE_USM "Use USM instead of SYCL buffers" ON)
 
 if(GMX_DOUBLE)
     message(FATAL_ERROR "SYCL acceleration is not available in double precision")
@@ -187,8 +188,8 @@ if(GMX_SYCL_HIPSYCL)
             get_filename_component(HIPSYCL_SYCLCC_DIR ${HIPSYCL_SYCLCC} DIRECTORY)
             find_file(HIPSYCL_SYCLCC_JSON syclcc.json
                 HINTS ${HIPSYCL_SYCLCC_DIR}/../etc/hipSYCL
-	        DOC "location of hipSYCL JSON configuration file"
-	        )
+                DOC "location of hipSYCL JSON configuration file"
+                )
             if (HIPSYCL_SYCLCC_JSON)
                 if(NOT HIPSYCL_SYCLCC_ROCM_PATH)
                     file(READ ${HIPSYCL_SYCLCC_JSON} HIPSYCL_SYCLCC_JSON_CONTENTS)
@@ -272,13 +273,13 @@ else()
     endif()
     gmx_find_flag_for_source(SYCL_CXX_FLAGS_RESULT
         "#include <CL/sycl.hpp>
-         namespace sycl = cl::sycl;
          int main(){
              sycl::queue q(sycl::default_selector{});
              return 0;
          }
-         " "CXX" DISABLE_SYCL_CXX_FLAGS SYCL_CXX_FLAGS "-fsycl -fsycl-device-code-split=per_kernel -Wno-deprecated-declarations")
+         " "CXX" DISABLE_SYCL_CXX_FLAGS SYCL_CXX_FLAGS "-ffast-math -fsycl -fsycl-device-code-split=per_kernel ${SYCL_CXX_FLAGS_EXTRA}")
     
+    string(STRIP "${SYCL_CXX_FLAGS}" SYCL_CXX_FLAGS)
     if(NOT CHECK_SYCL_CXX_FLAGS_QUIETLY)
         if(SYCL_CXX_FLAGS_RESULT)
             message(STATUS "Checking for flags to enable SYCL - ${SYCL_CXX_FLAGS}")

@@ -1,10 +1,9 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2021, by the GROMACS development team, led by
- * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
- * and including many others, as listed in the AUTHORS file in the
- * top-level source directory and at http://www.gromacs.org.
+ * Copyright 2021- The GROMACS Authors
+ * and the project initiators Erik Lindahl, Berk Hess and David van der Spoel.
+ * Consult the AUTHORS/COPYING files and https://www.gromacs.org for details.
  *
  * GROMACS is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
@@ -18,7 +17,7 @@
  *
  * You should have received a copy of the GNU Lesser General Public
  * License along with GROMACS; if not, see
- * http://www.gnu.org/licenses, or write to the Free Software Foundation,
+ * https://www.gnu.org/licenses, or write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA.
  *
  * If you want to redistribute modifications to GROMACS, please
@@ -27,10 +26,10 @@
  * consider code for inclusion in the official distribution, but
  * derived work must not be called official GROMACS. Details are found
  * in the README & COPYING files - if they are missing, get the
- * official version at http://www.gromacs.org.
+ * official version at https://www.gromacs.org.
  *
  * To help us fund GROMACS development, we humbly ask that you cite
- * the research papers on the package. Check out http://www.gromacs.org.
+ * the research papers on the package. Check out https://www.gromacs.org.
  */
 /*! \internal \file
  * \brief
@@ -62,7 +61,9 @@ TEST(ObservablesReducerTest, CanMoveAssign)
 {
     ObservablesReducerBuilder builder;
     ObservablesReducer        observablesReducer = builder.build();
-    EXPECT_TRUE(observablesReducer.communicationBuffer().empty())
+    EXPECT_FALSE(observablesReducer.isReductionRequired())
+            << "no reduction required when no subscribers requested reduction";
+    EXPECT_TRUE(observablesReducer.communicationBuffer(false).empty())
             << "no buffer available when no subscribers requested reduction";
 }
 
@@ -71,7 +72,9 @@ TEST(ObservablesReducerTest, CanMoveConstruct)
     ObservablesReducerBuilder builder;
     ObservablesReducer        observablesReducerOriginal = builder.build();
     ObservablesReducer        observablesReducer(std::move(observablesReducerOriginal));
-    EXPECT_TRUE(observablesReducer.communicationBuffer().empty())
+    EXPECT_FALSE(observablesReducer.isReductionRequired())
+            << "no reduction required when no subscribers requested reduction";
+    EXPECT_TRUE(observablesReducer.communicationBuffer(false).empty())
             << "no buffer available when no subscribers requested reduction";
     observablesReducer.markAsReadyToReduce();
 }
@@ -81,11 +84,15 @@ TEST(ObservablesReducerTest, CanBuildAndUseWithNoSubscribers)
     ObservablesReducerBuilder builder;
 
     ObservablesReducer observablesReducer = builder.build();
-    EXPECT_TRUE(observablesReducer.communicationBuffer().empty())
+    EXPECT_FALSE(observablesReducer.isReductionRequired())
+            << "no reduction required when no subscribers requested reduction";
+    EXPECT_TRUE(observablesReducer.communicationBuffer(false).empty())
             << "no buffer available when no subscribers requested reduction";
     observablesReducer.reductionComplete(0);
 
-    EXPECT_TRUE(observablesReducer.communicationBuffer().empty())
+    EXPECT_FALSE(observablesReducer.isReductionRequired())
+            << "no reduction required when no subscribers requested reduction";
+    EXPECT_TRUE(observablesReducer.communicationBuffer(false).empty())
             << "no buffer available after reductionComplete()";
     observablesReducer.markAsReadyToReduce();
 }
@@ -115,7 +122,9 @@ TEST(ObservablesReducerTest, CanBuildAndUseWithOneSubscriber)
             requiredBufferSize, std::move(callbackFromBuilder), std::move(callbackAfterReduction));
 
     ObservablesReducer observablesReducer = builder.build();
-    EXPECT_TRUE(observablesReducer.communicationBuffer().empty())
+    EXPECT_FALSE(observablesReducer.isReductionRequired())
+            << "no reduction required when no subscribers requested reduction";
+    EXPECT_TRUE(observablesReducer.communicationBuffer(false).empty())
             << "no buffer available when no subscribers requested reduction";
     ASSERT_EQ(requiredBufferSize, bufferView.size());
     ASSERT_NE(callbackToRequireReduction, nullptr)
@@ -132,7 +141,9 @@ TEST(ObservablesReducerTest, CanBuildAndUseWithOneSubscriber)
 
         EXPECT_EQ(callbackToRequireReduction(ReductionRequirement::Eventually),
                   ObservablesReducerStatus::ReadyToReduce);
-        EXPECT_TRUE(observablesReducer.communicationBuffer().empty())
+        EXPECT_FALSE(observablesReducer.isReductionRequired())
+                << "no reduction required when no subscribers requested reduction";
+        EXPECT_TRUE(observablesReducer.communicationBuffer(false).empty())
                 << "no buffer available when the only subscribers requested reduction eventually";
         EXPECT_FALSE(stepUponWhichReductionOccured.has_value())
                 << "no callbacks until reductionComplete() is called";
@@ -146,7 +157,7 @@ TEST(ObservablesReducerTest, CanBuildAndUseWithOneSubscriber)
 
         EXPECT_EQ(callbackToRequireReduction(ReductionRequirement::Soon),
                   ObservablesReducerStatus::ReadyToReduce);
-        EXPECT_EQ(observablesReducer.communicationBuffer().size(), requiredBufferSize)
+        EXPECT_EQ(observablesReducer.communicationBuffer(false).size(), requiredBufferSize)
                 << "buffer available when a subscriber requested reduction soon";
         EXPECT_FALSE(stepUponWhichReductionOccured.has_value())
                 << "no callbacks until reductionComplete() is called";
@@ -314,22 +325,26 @@ public:
 
     /*! \brief Performs the equivalent of MPI_Allreduce on the
      * communication buffer over \c rankData_ */
-    void fakeMpiAllReduce()
+    void fakeMpiAllReduce(const bool reductionRequiredExternally)
     {
-        std::vector<double> reducedValues(
-                rankData_[0].observablesReducer.value().communicationBuffer().size(), 0.0);
+        std::vector<double> reducedValues(rankData_[0]
+                                                  .observablesReducer.value()
+                                                  .communicationBuffer(reductionRequiredExternally)
+                                                  .size(),
+                                          0.0);
         // Reduce the values across "ranks"
         for (auto& rankData : rankData_)
         {
             for (size_t i = 0; i != reducedValues.size(); ++i)
             {
-                reducedValues[i] += rankData.observablesReducer.value().communicationBuffer()[i];
+                reducedValues[i] += rankData.observablesReducer.value().communicationBuffer(
+                        reductionRequiredExternally)[i];
             }
         }
         // Copy the reduced values to all "ranks"
         for (auto& rankData : rankData_)
         {
-            auto buffer = rankData.observablesReducer.value().communicationBuffer();
+            auto buffer = rankData.observablesReducer.value().communicationBuffer(reductionRequiredExternally);
             std::copy(reducedValues.begin(), reducedValues.end(), buffer.begin());
         }
     }
@@ -342,11 +357,15 @@ public:
 
 TEST_P(ObservablesReducerIntegrationTest, CanBuildAndUseSimply)
 {
+    const bool reductionRequiredExternally = false;
     for (auto& rankData : rankData_)
     {
         rankData.observablesReducer = rankData.builder.value().build();
         rankData.builder.reset();
-        EXPECT_TRUE(rankData.observablesReducer.value().communicationBuffer().empty())
+        EXPECT_FALSE(rankData.observablesReducer.value().isReductionRequired())
+                << "no reduction required when no subscribers requested reduction";
+        EXPECT_TRUE(
+                rankData.observablesReducer.value().communicationBuffer(reductionRequiredExternally).empty())
                 << "no buffer available when no subscribers requested reduction";
     }
 
@@ -357,18 +376,25 @@ TEST_P(ObservablesReducerIntegrationTest, CanBuildAndUseSimply)
         {
             subscriber.doSimulationWork(step, ReductionRequirement::Soon);
         }
-        EXPECT_EQ(numSubscribers_ == 0, rankData.observablesReducer.value().communicationBuffer().empty())
+        EXPECT_NE(numSubscribers_ == 0, rankData.observablesReducer.value().isReductionRequired())
+                << "no reduction required when no subscribers requested reduction";
+        EXPECT_EQ(
+                numSubscribers_ == 0,
+                rankData.observablesReducer.value().communicationBuffer(reductionRequiredExternally).empty())
                 << "buffer should be available only when there are active subscribers";
     }
 
     // This does reduction work, and calls the callbacks that check
     // the buffer contents.
-    fakeMpiAllReduce();
+    fakeMpiAllReduce(reductionRequiredExternally);
 
     for (auto& rankData : rankData_)
     {
         rankData.observablesReducer.value().reductionComplete(step);
-        EXPECT_TRUE(rankData.observablesReducer.value().communicationBuffer().empty())
+        EXPECT_FALSE(rankData.observablesReducer.value().isReductionRequired())
+                << "no reduction required when no subscribers requested reduction";
+        EXPECT_TRUE(
+                rankData.observablesReducer.value().communicationBuffer(reductionRequiredExternally).empty())
                 << "no buffer available after reductionComplete()";
         rankData.observablesReducer.value().markAsReadyToReduce();
     }
@@ -376,11 +402,15 @@ TEST_P(ObservablesReducerIntegrationTest, CanBuildAndUseSimply)
 
 TEST_P(ObservablesReducerIntegrationTest, CanBuildAndUseOverMultipleSteps)
 {
+    const bool reductionRequiredExternally = false;
     for (auto& rankData : rankData_)
     {
         rankData.observablesReducer = rankData.builder.value().build();
         rankData.builder.reset();
-        EXPECT_TRUE(rankData.observablesReducer.value().communicationBuffer().empty())
+        EXPECT_FALSE(rankData.observablesReducer.value().isReductionRequired())
+                << "no reduction required when no subscribers requested reduction";
+        EXPECT_TRUE(
+                rankData.observablesReducer.value().communicationBuffer(reductionRequiredExternally).empty())
                 << "no buffer available when no subscribers requested reduction";
     }
 
@@ -392,19 +422,27 @@ TEST_P(ObservablesReducerIntegrationTest, CanBuildAndUseOverMultipleSteps)
             {
                 subscriber.doSimulationWork(step, ReductionRequirement::Soon);
             }
+            EXPECT_NE(numSubscribers_ == 0, rankData.observablesReducer.value().isReductionRequired())
+                    << "no reduction required when no subscribers requested reduction";
             EXPECT_EQ(numSubscribers_ == 0,
-                      rankData.observablesReducer.value().communicationBuffer().empty())
+                      rankData.observablesReducer.value()
+                              .communicationBuffer(reductionRequiredExternally)
+                              .empty())
                     << "buffer should be available only when there are subscribers";
         }
 
         // This does reduction work, and calls the callbacks that
         // check the buffer contents.
-        fakeMpiAllReduce();
+        fakeMpiAllReduce(reductionRequiredExternally);
 
         for (auto& rankData : rankData_)
         {
             rankData.observablesReducer.value().reductionComplete(step);
-            EXPECT_TRUE(rankData.observablesReducer.value().communicationBuffer().empty())
+            EXPECT_FALSE(rankData.observablesReducer.value().isReductionRequired())
+                    << "no reduction required after reductionComplete()";
+            EXPECT_TRUE(rankData.observablesReducer.value()
+                                .communicationBuffer(reductionRequiredExternally)
+                                .empty())
                     << "no buffer available after reductionComplete()";
             rankData.observablesReducer.value().markAsReadyToReduce();
         }
@@ -419,11 +457,15 @@ TEST_P(ObservablesReducerIntegrationTest, CanBuildAndUseWithoutAllNeedingReducti
         return;
     }
 
+    const bool reductionRequiredExternally = false;
     for (auto& rankData : rankData_)
     {
         rankData.observablesReducer = rankData.builder.value().build();
         rankData.builder.reset();
-        EXPECT_TRUE(rankData.observablesReducer.value().communicationBuffer().empty())
+        EXPECT_FALSE(rankData.observablesReducer.value().isReductionRequired())
+                << "no reduction required when no subscribers requested reduction";
+        EXPECT_TRUE(
+                rankData.observablesReducer.value().communicationBuffer(reductionRequiredExternally).empty())
                 << "no buffer available when no subscribers requested reduction";
     }
 
@@ -434,13 +476,16 @@ TEST_P(ObservablesReducerIntegrationTest, CanBuildAndUseWithoutAllNeedingReducti
     {
         auto& subscriber = rankData.subscribers[subscriberNeedingReduction];
         subscriber.doSimulationWork(step, ReductionRequirement::Soon);
-        EXPECT_FALSE(rankData.observablesReducer.value().communicationBuffer().empty())
+        EXPECT_TRUE(rankData.observablesReducer.value().isReductionRequired())
+                << "no reduction required when no subscribers requested reduction";
+        EXPECT_FALSE(
+                rankData.observablesReducer.value().communicationBuffer(reductionRequiredExternally).empty())
                 << "buffer should be available when there is an active subscriber";
     }
 
     // This does reduction work, and calls the callbacks that check
     // the buffer contents.
-    fakeMpiAllReduce();
+    fakeMpiAllReduce(reductionRequiredExternally);
 
     // Check that other subscribers didn't reduce anything
     for (auto& rankData : rankData_)
@@ -459,7 +504,10 @@ TEST_P(ObservablesReducerIntegrationTest, CanBuildAndUseWithoutAllNeedingReducti
     for (auto& rankData : rankData_)
     {
         rankData.observablesReducer.value().reductionComplete(step);
-        EXPECT_TRUE(rankData.observablesReducer.value().communicationBuffer().empty())
+        EXPECT_FALSE(rankData.observablesReducer.value().isReductionRequired())
+                << "no reduction required after reductionComplete()";
+        EXPECT_TRUE(
+                rankData.observablesReducer.value().communicationBuffer(reductionRequiredExternally).empty())
                 << "no buffer available after reductionComplete()";
         rankData.observablesReducer.value().markAsReadyToReduce();
     }
@@ -473,11 +521,15 @@ TEST_P(ObservablesReducerIntegrationTest, CanBuildAndUseWhenASubscriberUsesEvent
         return;
     }
 
+    const bool reductionRequiredExternally = false;
     for (auto& rankData : rankData_)
     {
         rankData.observablesReducer = rankData.builder.value().build();
         rankData.builder.reset();
-        EXPECT_TRUE(rankData.observablesReducer.value().communicationBuffer().empty())
+        EXPECT_FALSE(rankData.observablesReducer.value().isReductionRequired())
+                << "no reduction required when no subscribers requested reduction";
+        EXPECT_TRUE(
+                rankData.observablesReducer.value().communicationBuffer(reductionRequiredExternally).empty())
                 << "no buffer available when no subscribers requested reduction";
     }
 
@@ -488,7 +540,11 @@ TEST_P(ObservablesReducerIntegrationTest, CanBuildAndUseWhenASubscriberUsesEvent
     {
         auto& subscriber = rankData.subscribers[subscriberUsingEventually];
         subscriber.doSimulationWork(step, ReductionRequirement::Eventually);
-        EXPECT_TRUE(rankData.observablesReducer.value().communicationBuffer().empty())
+        EXPECT_FALSE(rankData.observablesReducer.value().isReductionRequired())
+                << "reduction should not be required when the only active subscriber used "
+                   "ReductionRequirement::Eventually";
+        EXPECT_TRUE(
+                rankData.observablesReducer.value().communicationBuffer(reductionRequiredExternally).empty())
                 << "buffer should not be available when the only active subscriber used "
                    "ReductionRequirement::Eventually";
     }
@@ -498,7 +554,7 @@ TEST_P(ObservablesReducerIntegrationTest, CanBuildAndUseWhenASubscriberUsesEvent
     // occured. Instead, we will later do some
     // ReductionRequirement::Soon work and observe that result is
     // consistent with exactly one reduction.
-    fakeMpiAllReduce();
+    fakeMpiAllReduce(reductionRequiredExternally);
 
     for (auto& rankData : rankData_)
     {
@@ -510,19 +566,81 @@ TEST_P(ObservablesReducerIntegrationTest, CanBuildAndUseWhenASubscriberUsesEvent
             }
             rankData.subscribers[i].doSimulationWork(step, ReductionRequirement::Soon);
         }
-        EXPECT_FALSE(rankData.observablesReducer.value().communicationBuffer().empty())
+        EXPECT_TRUE(rankData.observablesReducer.value().isReductionRequired())
+                << "reduction should be required since there are subscribers";
+        EXPECT_FALSE(
+                rankData.observablesReducer.value().communicationBuffer(reductionRequiredExternally).empty())
                 << "buffer should be available since there are subscribers";
     }
 
     // This does reduction work, and calls the callbacks that check
     // the buffer contents.
-    fakeMpiAllReduce();
+    fakeMpiAllReduce(reductionRequiredExternally);
 
     for (auto& rankData : rankData_)
     {
         rankData.observablesReducer.value().reductionComplete(step);
-        EXPECT_TRUE(rankData.observablesReducer.value().communicationBuffer().empty())
+        EXPECT_FALSE(rankData.observablesReducer.value().isReductionRequired())
+                << "no reduction required after reductionComplete()";
+        EXPECT_TRUE(
+                rankData.observablesReducer.value().communicationBuffer(reductionRequiredExternally).empty())
                 << "no buffer available after reductionComplete()";
+        rankData.observablesReducer.value().markAsReadyToReduce();
+    }
+}
+
+TEST_P(ObservablesReducerIntegrationTest, CanBuildAndUseWhenAllSubscribersUseEventually)
+{
+    if (numSubscribers_ < 2)
+    {
+        // Test is meaningful only with multiple subscribers
+        return;
+    }
+
+    const bool reductionRequiredExternally = true;
+    for (auto& rankData : rankData_)
+    {
+        rankData.observablesReducer = rankData.builder.value().build();
+        rankData.builder.reset();
+        EXPECT_FALSE(rankData.observablesReducer.value().isReductionRequired())
+                << "no reduction required when no subscribers requested reduction";
+        EXPECT_TRUE(
+                rankData.observablesReducer.value().communicationBuffer(reductionRequiredExternally).empty())
+                << "no buffer available when no subscribers requested reduction";
+    }
+
+    Step step = 1;
+    // All subscribers do work leading to reduction eventually
+    for (auto& rankData : rankData_)
+    {
+        for (size_t i = 0; i != rankData.subscribers.size(); ++i)
+        {
+            rankData.subscribers[i].doSimulationWork(step, ReductionRequirement::Eventually);
+        }
+        EXPECT_FALSE(rankData.observablesReducer.value().isReductionRequired())
+                << "reduction should not be required since there are no subscribers using "
+                   "ReductionRequirement::Soon";
+        EXPECT_TRUE(rankData.observablesReducer.value().communicationBuffer(false).empty())
+                << "buffer should not be available unless reduction is required externally";
+        EXPECT_FALSE(
+                rankData.observablesReducer.value().communicationBuffer(reductionRequiredExternally).empty())
+                << "buffer should be available since there are subscribers and reduction is "
+                   "required externally";
+    }
+
+    // This does reduction work, and calls the callbacks that check
+    // the buffer contents.
+    fakeMpiAllReduce(reductionRequiredExternally);
+
+    for (auto& rankData : rankData_)
+    {
+        rankData.observablesReducer.value().reductionComplete(step);
+        EXPECT_FALSE(rankData.observablesReducer.value().isReductionRequired())
+                << "no reduction required after reductionComplete()";
+        EXPECT_TRUE(
+                rankData.observablesReducer.value().communicationBuffer(reductionRequiredExternally).empty())
+                << "no buffer available after reductionComplete() even when reduction required "
+                   "externally";
         rankData.observablesReducer.value().markAsReadyToReduce();
     }
 }

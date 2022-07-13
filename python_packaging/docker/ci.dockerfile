@@ -20,11 +20,13 @@
 #
 
 ARG REF=latest
+ARG MPIFLAVOR=mpich
 
-FROM gmxapi/gromacs-dependencies-mpich as python-base
+FROM gmxapi/gromacs-dependencies-$MPIFLAVOR as python-base
 
 RUN apt-get update && \
-    apt-get -yq --no-install-suggests --no-install-recommends install \
+    DEBIAN_FRONTEND=noninteractive apt-get -yq --no-install-suggests --no-install-recommends \
+    install \
         python3 \
         python3-dev \
         python3-venv && \
@@ -48,7 +50,7 @@ ADD --chown=testing:testing requirements-*.txt /home/testing/gmxapi/
 # Use gromacs installation from gmxapi/gromacs image
 #
 
-FROM gmxapi/gromacs-mpich:$REF as gromacs
+FROM gmxapi/gromacs-$MPIFLAVOR:$REF as gromacs
 # This intermediate is necessary because the COPY command does not support syntax like the following:
 #COPY --from=gmxapi/gromacs:$REF /usr/local/gromacs /usr/local/gromacs
 
@@ -65,17 +67,16 @@ ADD --chown=testing:testing src/gmxapi /home/testing/gmxapi/src/gmxapi
 # We use "--no-cache-dir" to reduce Docker image size.
 RUN . $VENV/bin/activate && \
     (cd $HOME/gmxapi/src && \
-     rm -rf build dist && \
-     GMXTOOLCHAINDIR=/usr/local/gromacs/share/cmake/gromacs \
+     CMAKE_ARGS="-Dgmxapi_ROOT=/usr/local/gromacs -C /usr/local/gromacs/share/cmake/gromacs/gromacs-hints.cmake" \
       pip install --no-cache-dir --verbose . \
     )
 
-ADD --chown=testing:testing src/test /home/testing/gmxapi/test
-ADD scripts /docker_entry_points
-
 ADD --chown=testing:testing sample_restraint /home/testing/sample_restraint
 
-# TODO: (#3027) Get googletest sources locally.
+# To test behavior as in GitLab CI, copy the googletest sources, export CI=1 to the cmake
+# configure command, and remove the option to download googletest.
+#COPY --from=gromacs /gromacs-source/src/external/googletest /home/testing/sample_restraint/external/googletest
+RUN cmake --version
 RUN . $VENV/bin/activate && \
     . /usr/local/gromacs/bin/GMXRC && \
     (cd $HOME/sample_restraint && \
@@ -91,7 +92,8 @@ RUN . $VENV/bin/activate && \
      make install \
     )
 
-# TODO: this can be in the root user section above once it is stable
+ADD --chown=testing:testing src/test /home/testing/gmxapi/test
+ADD scripts /docker_entry_points
 COPY docker/entrypoint.sh /
 
 ENTRYPOINT ["/entrypoint.sh"]

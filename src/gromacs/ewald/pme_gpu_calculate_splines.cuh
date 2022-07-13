@@ -1,10 +1,9 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2016,2017,2018,2019,2020,2021, by the GROMACS development team, led by
- * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
- * and including many others, as listed in the AUTHORS file in the
- * top-level source directory and at http://www.gromacs.org.
+ * Copyright 2016- The GROMACS Authors
+ * and the project initiators Erik Lindahl, Berk Hess and David van der Spoel.
+ * Consult the AUTHORS/COPYING files and https://www.gromacs.org for details.
  *
  * GROMACS is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
@@ -18,7 +17,7 @@
  *
  * You should have received a copy of the GNU Lesser General Public
  * License along with GROMACS; if not, see
- * http://www.gnu.org/licenses, or write to the Free Software Foundation,
+ * https://www.gnu.org/licenses, or write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA.
  *
  * If you want to redistribute modifications to GROMACS, please
@@ -27,10 +26,10 @@
  * consider code for inclusion in the official distribution, but
  * derived work must not be called official GROMACS. Details are found
  * in the README & COPYING files - if they are missing, get the
- * official version at http://www.gromacs.org.
+ * official version at https://www.gromacs.org.
  *
  * To help us fund GROMACS development, we humbly ask that you cite
- * the research papers on the package. Check out http://www.gromacs.org.
+ * the research papers on the package. Check out https://www.gromacs.org.
  */
 
 /*! \internal \file
@@ -65,7 +64,7 @@
  * \returns Index into theta or dtheta array using GPU layout.
  */
 template<int order, int atomsPerWarp>
-int __device__ __forceinline__ getSplineParamIndexBase(int warpIndex, int atomWarpIndex)
+static int __device__ __forceinline__ getSplineParamIndexBase(int warpIndex, int atomWarpIndex)
 {
     assert((atomWarpIndex >= 0) && (atomWarpIndex < atomsPerWarp));
     const int dimIndex    = 0;
@@ -89,7 +88,7 @@ int __device__ __forceinline__ getSplineParamIndexBase(int warpIndex, int atomWa
  * \returns Index into theta or dtheta array using GPU layout.
  */
 template<int order, int atomsPerWarp>
-int __device__ __forceinline__ getSplineParamIndex(int paramIndexBase, int dimIndex, int splineIndex)
+static int __device__ __forceinline__ getSplineParamIndex(int paramIndexBase, int dimIndex, int splineIndex)
 {
     assert((dimIndex >= XX) && (dimIndex < DIM));
     assert((splineIndex >= 0) && (splineIndex < order));
@@ -104,7 +103,7 @@ int __device__ __forceinline__ getSplineParamIndex(int paramIndexBase, int dimIn
  *
  * This is called from the spline_and_spread and gather PME kernels.
  */
-bool __device__ __forceinline__ pme_gpu_check_atom_charge(const float coefficient)
+static bool __device__ __forceinline__ pme_gpu_check_atom_charge(const float coefficient)
 {
     assert(isfinite(coefficient));
     return c_skipNeutralAtoms ? (coefficient != 0.0F) : true;
@@ -121,7 +120,7 @@ static const bool c_useAtomDataPrefetch = true;
  * \param[in] arg  Argument to check.
  */
 template<typename T>
-__device__ inline void assertIsFinite(T arg);
+static __device__ inline void assertIsFinite(T arg);
 
 template<>
 __device__ inline void assertIsFinite(float3 gmx_unused arg)
@@ -132,7 +131,7 @@ __device__ inline void assertIsFinite(float3 gmx_unused arg)
 }
 
 template<typename T>
-__device__ inline void assertIsFinite(T gmx_unused arg)
+static __device__ inline void assertIsFinite(T gmx_unused arg)
 {
     assert(isfinite(static_cast<float>(arg)));
 }
@@ -149,8 +148,8 @@ __device__ inline void assertIsFinite(T gmx_unused arg)
  * \param[in]  gm_source          Global memory array for input.
  */
 template<typename T, int atomsPerBlock, int dataCountPerAtom>
-__device__ __forceinline__ void pme_gpu_stage_atom_data(T* __restrict__ sm_destination,
-                                                        const T* __restrict__ gm_source)
+static __device__ __forceinline__ void pme_gpu_stage_atom_data(T* __restrict__ sm_destination,
+                                                               const T* __restrict__ gm_source)
 {
     const int blockIndex       = blockIdx.y * gridDim.x + blockIdx.x;
     const int threadLocalIndex = ((threadIdx.z * blockDim.y + threadIdx.y) * blockDim.x) + threadIdx.x;
@@ -189,13 +188,13 @@ __device__ __forceinline__ void pme_gpu_stage_atom_data(T* __restrict__ sm_desti
  */
 
 template<int order, int atomsPerBlock, int atomsPerWarp, bool writeSmDtheta, bool writeGlobal, int numGrids>
-__device__ __forceinline__ void calculate_splines(const PmeGpuCudaKernelParams kernelParams,
-                                                  const int                    atomIndexOffset,
-                                                  const float3                 atomX,
-                                                  const float                  atomCharge,
-                                                  float* __restrict__ sm_theta,
-                                                  float* __restrict__ sm_dtheta,
-                                                  int* __restrict__ sm_gridlineIndices)
+static __device__ __forceinline__ void calculate_splines(const PmeGpuCudaKernelParams kernelParams,
+                                                         const int    atomIndexOffset,
+                                                         const float3 atomX,
+                                                         const float  atomCharge,
+                                                         float* __restrict__ sm_theta,
+                                                         float* __restrict__ sm_dtheta,
+                                                         int* __restrict__ sm_gridlineIndices)
 {
     assert(numGrids == 1 || numGrids == 2);
     assert(numGrids == 1 || c_skipNeutralAtoms == false);

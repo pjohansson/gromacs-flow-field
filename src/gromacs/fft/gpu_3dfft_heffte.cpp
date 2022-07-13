@@ -1,10 +1,9 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2021, by the GROMACS development team, led by
- * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
- * and including many others, as listed in the AUTHORS file in the
- * top-level source directory and at http://www.gromacs.org.
+ * Copyright 2021- The GROMACS Authors
+ * and the project initiators Erik Lindahl, Berk Hess and David van der Spoel.
+ * Consult the AUTHORS/COPYING files and https://www.gromacs.org for details.
  *
  * GROMACS is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
@@ -18,7 +17,7 @@
  *
  * You should have received a copy of the GNU Lesser General Public
  * License along with GROMACS; if not, see
- * http://www.gnu.org/licenses, or write to the Free Software Foundation,
+ * https://www.gnu.org/licenses, or write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA.
  *
  * If you want to redistribute modifications to GROMACS, please
@@ -27,10 +26,10 @@
  * consider code for inclusion in the official distribution, but
  * derived work must not be called official GROMACS. Details are found
  * in the README & COPYING files - if they are missing, get the
- * official version at http://www.gromacs.org.
+ * official version at https://www.gromacs.org.
  *
  * To help us fund GROMACS development, we humbly ask that you cite
- * the research papers on the package. Check out http://www.gromacs.org.
+ * the research papers on the package. Check out https://www.gromacs.org.
  */
 
 /*! \internal \file
@@ -64,8 +63,7 @@ Gpu3dFft::ImplHeFfte<backend_tag>::ImplHeFfte(bool                allocateGrids,
                                               ivec                 realGridSizePadded,
                                               ivec                 complexGridSizePadded,
                                               DeviceBuffer<float>* realGrid,
-                                              DeviceBuffer<float>* complexGrid) :
-    stream_(pmeStream)
+                                              DeviceBuffer<float>* complexGrid)
 {
     const int numDomainsX = gridSizesInXForEachRank.size();
     const int numDomainsY = gridSizesInYForEachRank.size();
@@ -135,14 +133,14 @@ Gpu3dFft::ImplHeFfte<backend_tag>::ImplHeFfte(bool                allocateGrids,
         { 2, 0, 1 }
     };
 
-    // ToDo: useReorder=true and useAlltoall=true gave me best results in past but, verify it once again
-    const bool useReorder  = true;
-    const bool useAlltoall = true;
-    const bool usePencils  = false; // Not-used as GROMACS doesn't work with brick decomposition
-    heffte::plan_options options(useReorder, useAlltoall, usePencils);
+    // ToDo: useReorder=true and reshape_algorithm::alltoallv gave me best results in past but, verify it once again
+    const bool useReorder = true;
+    const bool usePencils = true; // Not-used as GROMACS doesn't work with brick decomposition
+    heffte::plan_options options(useReorder, heffte::reshape_algorithm::alltoallv, usePencils);
 
     // Define 3D FFT plan
-    fftPlan_ = std::make_unique<heffte::fft3d_r2c<backend_tag, int>>(realBox, complexBox, 0, comm, options);
+    fftPlan_ = std::make_unique<heffte::fft3d_r2c<backend_tag, int>>(
+            pmeStream.stream(), realBox, complexBox, 0, comm, options);
 
     // allocate grid and workspace_
     localRealGrid_    = heffte::gpu::vector<float>(fftPlan_->size_inbox());
@@ -169,11 +167,6 @@ Gpu3dFft::ImplHeFfte<backend_tag>::ImplHeFfte(bool                allocateGrids,
 template<typename backend_tag>
 void Gpu3dFft::ImplHeFfte<backend_tag>::perform3dFft(gmx_fft_direction dir, CommandEvent* /*timingEvent*/)
 {
-    // HeFFTe does all the computations in the default stream
-    // ToDo: We need some way to create DeviceStream class in GROMACS with default stream
-    // This way we can synchronize PME and default streams using events
-    stream_.synchronize();
-
     switch (dir)
     {
         case GMX_FFT_REAL_TO_COMPLEX:
@@ -185,9 +178,6 @@ void Gpu3dFft::ImplHeFfte<backend_tag>::perform3dFft(gmx_fft_direction dir, Comm
         default:
             GMX_THROW(NotImplementedError("The chosen 3D-FFT case is not implemented on GPUs"));
     }
-
-    // ToDo: Same as above, we need some way to create DeviceStream from default stream
-    heffte::gpu::synchronize_default_stream();
 }
 
 // instantiate relevant HeFFTe backend

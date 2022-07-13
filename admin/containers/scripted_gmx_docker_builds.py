@@ -2,10 +2,9 @@
 #
 # This file is part of the GROMACS molecular simulation package.
 #
-# Copyright (c) 2020,2021, by the GROMACS development team, led by
-# Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
-# and including many others, as listed in the AUTHORS file in the
-# top-level source directory and at http://www.gromacs.org.
+# Copyright 2020- The GROMACS Authors
+# and the project initiators Erik Lindahl, Berk Hess and David van der Spoel.
+# Consult the AUTHORS/COPYING files and https://www.gromacs.org for details.
 #
 # GROMACS is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public License
@@ -19,7 +18,7 @@
 #
 # You should have received a copy of the GNU Lesser General Public
 # License along with GROMACS; if not, see
-# http://www.gnu.org/licenses, or write to the Free Software Foundation,
+# https://www.gnu.org/licenses, or write to the Free Software Foundation,
 # Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA.
 #
 # If you want to redistribute modifications to GROMACS, please
@@ -28,10 +27,10 @@
 # consider code for inclusion in the official distribution, but
 # derived work must not be called official GROMACS. Details are found
 # in the README & COPYING files - if they are missing, get the
-# official version at http://www.gromacs.org.
+# official version at https://www.gromacs.org.
 #
 # To help us fund GROMACS development, we humbly ask that you cite
-# the research papers on the package. Check out http://www.gromacs.org.
+# the research papers on the package. Check out https://www.gromacs.org.
 
 """Building block based Dockerfile generation for CI testing images.
 
@@ -114,15 +113,16 @@ _opencl_extra_packages = [
 _rocm_extra_packages = [
     # The following require
     #             apt_keys=['http://repo.radeon.com/rocm/rocm.gpg.key'],
-    #             apt_repositories=['deb [arch=amd64] http://repo.radeon.com/rocm/apt/4.0.1/ xenial main']
+    #             apt_repositories=['deb [arch=amd64] http://repo.radeon.com/rocm/apt/X.Y.Z/ ubuntu main']
     'clinfo',
     'hipfft',
     'libelf1',
     'rocfft',
+    'rocfft-dev',
     'rocm-opencl',
     'rocm-dev',
 ]
-    
+
 # Extra packages required to build CP2K
 _cp2k_extra_packages = [
                         'autoconf',
@@ -433,8 +433,6 @@ def get_hipsycl(args):
         postinstall += [
             # https://github.com/illuhad/hipSYCL/issues/410#issuecomment-743301929
             f'sed s/_OPENMP/__OPENMP_NVPTX__/ -i /usr/lib/llvm-{args.llvm}/lib/clang/*/include/__clang_cuda_complex_builtins.h',
-            # Not needed unless we're building with CUDA 11.x, but no harm in doing always
-            'ln -s /usr/local/cuda/compat/* /usr/local/cuda/lib64/'
         ]
 
     return hpccm.building_blocks.generic_cmake(
@@ -802,7 +800,7 @@ def build_stages(args) -> typing.Iterable[hpccm.Stage]:
     if args.rocm is not None:
         building_blocks['extra_packages'] += hpccm.building_blocks.packages(
             apt_keys=['http://repo.radeon.com/rocm/rocm.gpg.key'],
-            apt_repositories=[f'deb [arch=amd64] http://repo.radeon.com/rocm/apt/{args.rocm}/ xenial main']
+            apt_repositories=[f'deb [arch=amd64] http://repo.radeon.com/rocm/apt/{args.rocm}/ ubuntu main']
         )
     building_blocks['extra_packages'] += hpccm.building_blocks.packages(
         ospackages=os_packages,

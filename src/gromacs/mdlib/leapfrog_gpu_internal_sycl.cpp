@@ -1,10 +1,9 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2020,2021, by the GROMACS development team, led by
- * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
- * and including many others, as listed in the AUTHORS file in the
- * top-level source directory and at http://www.gromacs.org.
+ * Copyright 2020- The GROMACS Authors
+ * and the project initiators Erik Lindahl, Berk Hess and David van der Spoel.
+ * Consult the AUTHORS/COPYING files and https://www.gromacs.org for details.
  *
  * GROMACS is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
@@ -18,7 +17,7 @@
  *
  * You should have received a copy of the GNU Lesser General Public
  * License along with GROMACS; if not, see
- * http://www.gnu.org/licenses, or write to the Free Software Foundation,
+ * https://www.gnu.org/licenses, or write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA.
  *
  * If you want to redistribute modifications to GROMACS, please
@@ -27,10 +26,10 @@
  * consider code for inclusion in the official distribution, but
  * derived work must not be called official GROMACS. Details are found
  * in the README & COPYING files - if they are missing, get the
- * official version at http://www.gromacs.org.
+ * official version at https://www.gromacs.org.
  *
  * To help us fund GROMACS development, we humbly ask that you cite
- * the research papers on the package. Check out http://www.gromacs.org.
+ * the research papers on the package. Check out https://www.gromacs.org.
  */
 /*! \internal \file
  *
@@ -63,7 +62,7 @@ class LeapFrogKernel;
 namespace gmx
 {
 
-using cl::sycl::access::mode;
+using mode = sycl::access_mode;
 
 /*! \brief Main kernel for the Leap-Frog integrator.
  *
@@ -87,7 +86,7 @@ using cl::sycl::access::mode;
  */
 template<NumTempScaleValues numTempScaleValues, VelocityScalingType velocityScaling>
 auto leapFrogKernel(
-        cl::sycl::handler&                          cgh,
+        sycl::handler&                              cgh,
         DeviceAccessor<Float3, mode::read_write>    a_x,
         DeviceAccessor<Float3, mode::discard_write> a_xp,
         DeviceAccessor<Float3, mode::read_write>    a_v,
@@ -112,7 +111,7 @@ auto leapFrogKernel(
         a_tempScaleGroups.bind(cgh);
     }
 
-    return [=](cl::sycl::id<1> itemIdx) {
+    return [=](sycl::id<1> itemIdx) {
         const Float3 x    = a_x[itemIdx];
         const Float3 v    = a_v[itemIdx];
         const Float3 f    = a_f[itemIdx];
@@ -162,15 +161,15 @@ auto leapFrogKernel(
 
 //! \brief Leap Frog SYCL kernel launch code.
 template<NumTempScaleValues numTempScaleValues, VelocityScalingType velocityScaling, class... Args>
-static cl::sycl::event launchLeapFrogKernel(const DeviceStream& deviceStream, int numAtoms, Args&&... args)
+static sycl::event launchLeapFrogKernel(const DeviceStream& deviceStream, int numAtoms, Args&&... args)
 {
     // Should not be needed for SYCL2020.
     using kernelNameType = LeapFrogKernel<numTempScaleValues, velocityScaling>;
 
-    const cl::sycl::range<1> rangeAllAtoms(numAtoms);
-    cl::sycl::queue          q = deviceStream.stream();
+    const sycl::range<1> rangeAllAtoms(numAtoms);
+    sycl::queue          q = deviceStream.stream();
 
-    cl::sycl::event e = q.submit([&](cl::sycl::handler& cgh) {
+    sycl::event e = q.submit([&](sycl::handler& cgh) {
         auto kernel =
                 leapFrogKernel<numTempScaleValues, velocityScaling>(cgh, std::forward<Args>(args)...);
         cgh.parallel_for<kernelNameType>(rangeAllAtoms, kernel);
@@ -202,9 +201,9 @@ static NumTempScaleValues getTempScalingType(bool doTemperatureScaling, int numT
 
 /*! \brief Select templated kernel and launch it. */
 template<class... Args>
-static inline cl::sycl::event launchLeapFrogKernel(NumTempScaleValues  tempScalingType,
-                                                   VelocityScalingType prVelocityScalingType,
-                                                   Args&&... args)
+static inline sycl::event launchLeapFrogKernel(NumTempScaleValues  tempScalingType,
+                                               VelocityScalingType prVelocityScalingType,
+                                               Args&&... args)
 {
     GMX_ASSERT(prVelocityScalingType == VelocityScalingType::None
                        || prVelocityScalingType == VelocityScalingType::Diagonal,

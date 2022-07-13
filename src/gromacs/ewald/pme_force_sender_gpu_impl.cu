@@ -1,10 +1,9 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2019,2020,2021, by the GROMACS development team, led by
- * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
- * and including many others, as listed in the AUTHORS file in the
- * top-level source directory and at http://www.gromacs.org.
+ * Copyright 2019- The GROMACS Authors
+ * and the project initiators Erik Lindahl, Berk Hess and David van der Spoel.
+ * Consult the AUTHORS/COPYING files and https://www.gromacs.org for details.
  *
  * GROMACS is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
@@ -18,7 +17,7 @@
  *
  * You should have received a copy of the GNU Lesser General Public
  * License along with GROMACS; if not, see
- * http://www.gnu.org/licenses, or write to the Free Software Foundation,
+ * https://www.gnu.org/licenses, or write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA.
  *
  * If you want to redistribute modifications to GROMACS, please
@@ -27,10 +26,10 @@
  * consider code for inclusion in the official distribution, but
  * derived work must not be called official GROMACS. Details are found
  * in the README & COPYING files - if they are missing, get the
- * official version at http://www.gromacs.org.
+ * official version at https://www.gromacs.org.
  *
  * To help us fund GROMACS development, we humbly ask that you cite
- * the research papers on the package. Check out http://www.gromacs.org.
+ * the research papers on the package. Check out https://www.gromacs.org.
  */
 /*! \internal \file
  *
@@ -80,6 +79,7 @@ PmeForceSenderGpu::Impl::Impl(GpuEventSynchronizer*  pmeForcesReady,
         event            = std::make_unique<GpuEventSynchronizer>();
         ppCommEvent_[i]  = std::move(event);
     }
+    stageThreadMpiGpuCpuComm_ = (getenv("GMX_ENABLE_STAGED_GPU_TO_CPU_PMEPP_COMM") != nullptr);
 }
 
 PmeForceSenderGpu::Impl::~Impl() = default;
@@ -109,20 +109,23 @@ void PmeForceSenderGpu::Impl::setForceSendBuffer(DeviceBuffer<Float3> d_f)
         ind_start = ind_end;
         ind_end   = ind_start + receiver.numAtoms;
 
-        localForcePtr_[i] = &d_f[ind_start];
-        // NOLINTNEXTLINE(bugprone-sizeof-expression)
-        MPI_Recv(&pmeRemoteGpuForcePtr_[i], sizeof(float3*), MPI_BYTE, receiver.rankId, 0, comm_, MPI_STATUS_IGNORE);
-        // NOLINTNEXTLINE(bugprone-sizeof-expression)
-        MPI_Recv(&pmeRemoteCpuForcePtr_[i], sizeof(float3*), MPI_BYTE, receiver.rankId, 0, comm_, MPI_STATUS_IGNORE);
-        // Send address of event and associated flag to PP rank, to allow remote enqueueing
-        // NOLINTNEXTLINE(bugprone-sizeof-expression)
-        MPI_Send(&ppCommEvent_[i], sizeof(GpuEventSynchronizer*), MPI_BYTE, receiver.rankId, 0, comm_);
+        if (receiver.numAtoms > 0)
+        {
+            localForcePtr_[i] = &d_f[ind_start];
+            // NOLINTNEXTLINE(bugprone-sizeof-expression)
+            MPI_Recv(&pmeRemoteGpuForcePtr_[i], sizeof(float3*), MPI_BYTE, receiver.rankId, 0, comm_, MPI_STATUS_IGNORE);
+            // NOLINTNEXTLINE(bugprone-sizeof-expression)
+            MPI_Recv(&pmeRemoteCpuForcePtr_[i], sizeof(float3*), MPI_BYTE, receiver.rankId, 0, comm_, MPI_STATUS_IGNORE);
+            // Send address of event and associated flag to PP rank, to allow remote enqueueing
+            // NOLINTNEXTLINE(bugprone-sizeof-expression)
+            MPI_Send(&ppCommEvent_[i], sizeof(GpuEventSynchronizer*), MPI_BYTE, receiver.rankId, 0, comm_);
 
-        std::atomic<bool>* tmpPpCommEventRecordedPtr =
-                reinterpret_cast<std::atomic<bool>*>(&(ppCommEventRecorded_[i]));
-        tmpPpCommEventRecordedPtr->store(false, std::memory_order_release);
-        // NOLINTNEXTLINE(bugprone-sizeof-expression)
-        MPI_Send(&tmpPpCommEventRecordedPtr, sizeof(std::atomic<bool>*), MPI_BYTE, receiver.rankId, 0, comm_);
+            std::atomic<bool>* tmpPpCommEventRecordedPtr =
+                    reinterpret_cast<std::atomic<bool>*>(&(ppCommEventRecorded_[i]));
+            tmpPpCommEventRecordedPtr->store(false, std::memory_order_release);
+            // NOLINTNEXTLINE(bugprone-sizeof-expression)
+            MPI_Send(&tmpPpCommEventRecordedPtr, sizeof(std::atomic<bool>*), MPI_BYTE, receiver.rankId, 0, comm_);
+        }
         i++;
     }
 
@@ -140,17 +143,32 @@ void PmeForceSenderGpu::Impl::sendFToPpCudaDirect(int ppRank, int numAtoms, bool
 
 
 #if GMX_MPI
-    float3* pmeRemoteForcePtr =
-            sendForcesDirectToPpGpu ? pmeRemoteGpuForcePtr_[ppRank] : pmeRemoteCpuForcePtr_[ppRank];
+    float3* pmeRemoteForcePtr = (sendForcesDirectToPpGpu || stageThreadMpiGpuCpuComm_)
+                                        ? pmeRemoteGpuForcePtr_[ppRank]
+                                        : pmeRemoteCpuForcePtr_[ppRank];
 
     pmeForcesReady_->enqueueWaitEvent(*ppCommStream_[ppRank]);
 
+    // Push data to remote GPU's memory
     cudaError_t stat = cudaMemcpyAsync(pmeRemoteForcePtr,
                                        localForcePtr_[ppRank],
                                        numAtoms * sizeof(rvec),
                                        cudaMemcpyDefault,
                                        ppCommStream_[ppRank]->stream());
     CU_RET_ERR(stat, "cudaMemcpyAsync on Recv from PME CUDA direct data transfer failed");
+
+    if (stageThreadMpiGpuCpuComm_ && !sendForcesDirectToPpGpu)
+    {
+        // Perform local D2H (from remote GPU memory to remote PP rank's CPU memory)
+        // to finalize staged data transfer
+        stat = cudaMemcpyAsync(pmeRemoteCpuForcePtr_[ppRank],
+                               pmeRemoteGpuForcePtr_[ppRank],
+                               numAtoms * sizeof(rvec),
+                               cudaMemcpyDefault,
+                               ppCommStream_[ppRank]->stream());
+        CU_RET_ERR(stat, "cudaMemcpyAsync on local device to host transfer of PME forces failed");
+    }
+
     ppCommEvent_[ppRank]->markEvent(*ppCommStream_[ppRank]);
     std::atomic<bool>* tmpPpCommEventRecordedPtr =
             reinterpret_cast<std::atomic<bool>*>(&(ppCommEventRecorded_[ppRank]));
@@ -161,7 +179,7 @@ void PmeForceSenderGpu::Impl::sendFToPpCudaDirect(int ppRank, int numAtoms, bool
 #endif
 }
 
-/*! \brief Send PME data directly using CUDA-aware MPI */
+/*! \brief Send PME data directly using GPU-aware MPI */
 void PmeForceSenderGpu::Impl::sendFToPpCudaMpi(DeviceBuffer<RVec> sendbuf,
                                                int                offset,
                                                int                numBytes,
@@ -171,7 +189,7 @@ void PmeForceSenderGpu::Impl::sendFToPpCudaMpi(DeviceBuffer<RVec> sendbuf,
     GMX_ASSERT(GMX_LIB_MPI, "sendFToPpCudaMpi is expected to be called only for Lib-MPI");
 
 #if GMX_MPI
-    // if using GPU direct comm with CUDA-aware MPI, make sure forces are ready on device
+    // if using GPU direct comm with GPU-aware MPI, make sure forces are ready on device
     // before sending it to PP ranks
     pmeForcesReady_->waitForEvent();
 

@@ -1,12 +1,9 @@
 #
 # This file is part of the GROMACS molecular simulation package.
 #
-# Copyright (c) 2009,2010,2011,2012,2013 by the GROMACS development team.
-# Copyright (c) 2014,2015,2016,2017,2018 by the GROMACS development team.
-# Copyright (c) 2019,2020,2021, by the GROMACS development team, led by
-# Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
-# and including many others, as listed in the AUTHORS file in the
-# top-level source directory and at http://www.gromacs.org.
+# Copyright 2009- The GROMACS Authors
+# and the project initiators Erik Lindahl, Berk Hess and David van der Spoel.
+# Consult the AUTHORS/COPYING files and https://www.gromacs.org for details.
 #
 # GROMACS is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public License
@@ -20,7 +17,7 @@
 #
 # You should have received a copy of the GNU Lesser General Public
 # License along with GROMACS; if not, see
-# http://www.gnu.org/licenses, or write to the Free Software Foundation,
+# https://www.gnu.org/licenses, or write to the Free Software Foundation,
 # Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA.
 #
 # If you want to redistribute modifications to GROMACS, please
@@ -29,10 +26,10 @@
 # consider code for inclusion in the official distribution, but
 # derived work must not be called official GROMACS. Details are found
 # in the README & COPYING files - if they are missing, get the
-# official version at http://www.gromacs.org.
+# official version at https://www.gromacs.org.
 #
 # To help us fund GROMACS development, we humbly ask that you cite
-# the research papers on the package. Check out http://www.gromacs.org.
+# the research papers on the package. Check out https://www.gromacs.org.
 
 cmake_minimum_required(VERSION 3.16.3)
 cmake_policy(SET CMP0074 NEW) # From CMake 3.12
@@ -281,7 +278,7 @@ mark_as_advanced(GMX_COMPILER_WARNINGS)
 gmx_add_cache_dependency(GMX_COMPILER_WARNINGS BOOL "NOT GMX_DEVELOPER_BUILD" ON)
 
 option(GMX_BUILD_SHARED_EXE
-    "Build exectuables as shared binaries. If not set, this disables rpath and dynamic linker flags in an attempt to build a static binary, but this may require setting up the toolchain properly and making appropriate libraries available."
+    "Build executables as shared binaries. If not set, this disables rpath and dynamic linker flags in an attempt to build a static binary, but this may require setting up the toolchain properly and making appropriate libraries available."
     ON)
 mark_as_advanced(GMX_BUILD_SHARED_EXE)
 
@@ -342,6 +339,21 @@ if(GMX_IMD AND WIN32)
 endif()
 
 
+########################################################################
+# Parse present/past contributors and project leaders from AUTHORS     #
+########################################################################
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS AUTHORS)
+file(READ "${CMAKE_SOURCE_DIR}/AUTHORS" AUTHORS)
+string(REGEX REPLACE " <[^<]+>" "" AUTHORS_NO_EMAIL "${AUTHORS}")
+string(REGEX MATCH "CURRENT CONTRIBUTORS\n=+\n(.*)\n\n+PREVIOUS CONTRIBUTORS\n=+\n(.*)\n\n+CURRENT PROJECT LEADERS\n=+\n(.*)\n\n+" MATCH "${AUTHORS_NO_EMAIL}")
+
+set(GMX_CURRENT_CONTRIBUTORS ${CMAKE_MATCH_1})
+set(GMX_PREVIOUS_CONTRIBUTORS ${CMAKE_MATCH_2})
+set(GMX_CURRENT_PROJECT_LEADERS ${CMAKE_MATCH_3})
+
+string(REGEX REPLACE "([^\n]+)" "    \"\\1\"," GMX_CURRENT_CONTRIBUTORS "${GMX_CURRENT_CONTRIBUTORS}")
+string(REGEX REPLACE "([^\n]+)" "    \"\\1\"," GMX_PREVIOUS_CONTRIBUTORS "${GMX_PREVIOUS_CONTRIBUTORS}")
+string(REGEX REPLACE "([^\n]+)" "    \"\\1\"," GMX_CURRENT_PROJECT_LEADERS "${GMX_CURRENT_PROJECT_LEADERS}")
 
 ########################################################################
 # Basic system tests (standard libraries, headers, functions, types)   #
@@ -580,6 +592,9 @@ include(gmxManageMuparser)
 include(gmxManageSimd)
 gmx_manage_simd()
 
+# The earliest version of the CUDA toolkit that supports c++17 is 11.0
+set(REQUIRED_CUDA_VERSION 11.0)
+set(REQUIRED_CUDA_COMPUTE_CAPABILITY 3.5)
 
 if(GMX_GPU)
 
@@ -639,7 +654,8 @@ endif()
 if(GMX_GPU_CUDA AND GMX_LIB_MPI)
     include(gmxManageCudaAwareMPI)
 else()
-    set(HAVE_CUDA_AWARE_MPI 0)
+    set(HAVE_MPI_EXT 0)
+    set(MPI_SUPPORTS_CUDA_AWARE_DETECTION 0)
 endif()
 
 if(CYGWIN)
@@ -653,7 +669,7 @@ if(GMX_USE_HEFFTE)
     if(NOT GMX_LIB_MPI)
         message(FATAL_ERROR "HeFFTe support requires a library MPI build")
     endif()
-    find_package(Heffte 2.1.0 REQUIRED CUDA)
+    find_package(Heffte 2.2.0 REQUIRED CUDA)
 endif()
 
 if(WIN32)
@@ -815,7 +831,6 @@ else()
     # binaries relocatable.
     if(CMAKE_SYSTEM_NAME STREQUAL "Darwin") #Assume OS X >=10.5
         set(CMAKE_INSTALL_RPATH "@loader_path/../${CMAKE_INSTALL_LIBDIR}")
-        set(CMAKE_INSTALL_NAME_DIR ${CMAKE_INSTALL_RPATH})
     else()
         set(CMAKE_INSTALL_RPATH "\$ORIGIN/../${CMAKE_INSTALL_LIBDIR}")
     endif()

@@ -1,10 +1,9 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright (c) 2019,2020,2021, by the GROMACS development team, led by
- * Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
- * and including many others, as listed in the AUTHORS file in the
- * top-level source directory and at http://www.gromacs.org.
+ * Copyright 2019- The GROMACS Authors
+ * and the project initiators Erik Lindahl, Berk Hess and David van der Spoel.
+ * Consult the AUTHORS/COPYING files and https://www.gromacs.org for details.
  *
  * GROMACS is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
@@ -18,7 +17,7 @@
  *
  * You should have received a copy of the GNU Lesser General Public
  * License along with GROMACS; if not, see
- * http://www.gnu.org/licenses, or write to the Free Software Foundation,
+ * https://www.gnu.org/licenses, or write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA.
  *
  * If you want to redistribute modifications to GROMACS, please
@@ -27,10 +26,10 @@
  * consider code for inclusion in the official distribution, but
  * derived work must not be called official GROMACS. Details are found
  * in the README & COPYING files - if they are missing, get the
- * official version at http://www.gromacs.org.
+ * official version at https://www.gromacs.org.
  *
  * To help us fund GROMACS development, we humbly ask that you cite
- * the research papers on the package. Check out http://www.gromacs.org.
+ * the research papers on the package. Check out https://www.gromacs.org.
  */
 /*! \internal \file
  *
@@ -55,9 +54,8 @@
 namespace gmx
 {
 
-using cl::sycl::access::fence_space;
-using cl::sycl::access::mode;
-using cl::sycl::access::target;
+using sycl::access::fence_space;
+using mode = sycl::access_mode;
 
 /*! \brief Main kernel for LINCS constraints.
  *
@@ -106,7 +104,7 @@ using cl::sycl::access::target;
  * \param[in]     pbcAiuc                       Periodic boundary data.
  */
 template<bool updateVelocities, bool computeVirial, bool haveCoupledConstraints>
-auto lincsKernel(cl::sycl::handler&                   cgh,
+auto lincsKernel(sycl::handler&                       cgh,
                  const int                            numConstraintsThreads,
                  DeviceAccessor<AtomPair, mode::read> a_constraints,
                  DeviceAccessor<float, mode::read>    a_constraintsTargetLengths,
@@ -151,12 +149,12 @@ auto lincsKernel(cl::sycl::handler&                   cgh,
      * sm_threadVirial: six floats per thread.
      * So, without virials we need max(1*3, 2) floats, and with virials we need max(1*3, 2, 6) floats.
      */
-    static constexpr int smBufferElementsPerThread = computeVirial ? 6 : 3;
-    cl::sycl::accessor<float, 1, mode::read_write, target::local> sm_buffer{
-        cl::sycl::range<1>(c_threadsPerBlock * smBufferElementsPerThread), cgh
+    static constexpr int                smBufferElementsPerThread = computeVirial ? 6 : 3;
+    sycl_2020::local_accessor<float, 1> sm_buffer{
+        sycl::range<1>(c_threadsPerBlock * smBufferElementsPerThread), cgh
     };
 
-    return [=](cl::sycl::nd_item<1> itemIdx) {
+    return [=](sycl::nd_item<1> itemIdx) {
         const int threadIndex   = itemIdx.get_global_linear_id();
         const int threadInBlock = itemIdx.get_local_linear_id(); // Work-item index in work-group
 
@@ -197,7 +195,7 @@ auto lincsKernel(cl::sycl::handler&                   cgh,
             targetLength    = a_constraintsTargetLengths[threadIndex];
             inverseMassi    = a_inverseMasses[i];
             inverseMassj    = a_inverseMasses[j];
-            sqrtReducedMass = cl::sycl::rsqrt(inverseMassi + inverseMassj);
+            sqrtReducedMass = sycl::rsqrt(inverseMassi + inverseMassj);
 
             xi = a_x[i];
             xj = a_x[j];
@@ -205,7 +203,7 @@ auto lincsKernel(cl::sycl::handler&                   cgh,
             Float3 dx;
             pbcDxAiucSycl(pbcAiuc, xi, xj, dx);
 
-            float rlen = cl::sycl::rsqrt(dx[XX] * dx[XX] + dx[YY] * dx[YY] + dx[ZZ] * dx[ZZ]);
+            float rlen = sycl::rsqrt(dx[XX] * dx[XX] + dx[YY] * dx[YY] + dx[ZZ] * dx[ZZ]);
             rc         = rlen * dx;
         }
 
@@ -334,7 +332,7 @@ auto lincsKernel(cl::sycl::handler&                   cgh,
             float proj;
             if (dlen2 > 0.0F)
             {
-                proj = sqrtReducedMass * (targetLength - dlen2 * cl::sycl::rsqrt(dlen2));
+                proj = sqrtReducedMass * (targetLength - dlen2 * sycl::rsqrt(dlen2));
             }
             else
             {
@@ -470,17 +468,17 @@ template<bool updateVelocities, bool computeVirial, bool haveCoupledConstraints>
 class LincsKernelName;
 
 template<bool updateVelocities, bool computeVirial, bool haveCoupledConstraints, class... Args>
-static cl::sycl::event launchLincsKernel(const DeviceStream& deviceStream,
-                                         const int           numConstraintsThreads,
-                                         Args&&... args)
+static sycl::event launchLincsKernel(const DeviceStream& deviceStream,
+                                     const int           numConstraintsThreads,
+                                     Args&&... args)
 {
     // Should not be needed for SYCL2020.
     using kernelNameType = LincsKernelName<updateVelocities, computeVirial, haveCoupledConstraints>;
 
-    const cl::sycl::nd_range<1> rangeAllLincs(numConstraintsThreads, c_threadsPerBlock);
-    cl::sycl::queue             q = deviceStream.stream();
+    const sycl::nd_range<1> rangeAllLincs(numConstraintsThreads, c_threadsPerBlock);
+    sycl::queue             q = deviceStream.stream();
 
-    cl::sycl::event e = q.submit([&](cl::sycl::handler& cgh) {
+    sycl::event e = q.submit([&](sycl::handler& cgh) {
         auto kernel = lincsKernel<updateVelocities, computeVirial, haveCoupledConstraints>(
                 cgh, numConstraintsThreads, std::forward<Args>(args)...);
         cgh.parallel_for<kernelNameType>(rangeAllLincs, kernel);
@@ -491,7 +489,7 @@ static cl::sycl::event launchLincsKernel(const DeviceStream& deviceStream,
 
 /*! \brief Select templated kernel and launch it. */
 template<class... Args>
-static inline cl::sycl::event
+static inline sycl::event
 launchLincsKernel(bool updateVelocities, bool computeVirial, bool haveCoupledConstraints, Args&&... args)
 {
     return dispatchTemplatedFunction(
