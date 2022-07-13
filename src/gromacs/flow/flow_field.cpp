@@ -27,8 +27,6 @@
 namespace flow
 {
 
-// using namespace flow;
-
 /*! \brief Get the number of groups in User1
 
     This is slightly complicated by how Gromacs adds a "rest" group
@@ -151,50 +149,81 @@ init_flow_container(const int               nfile,
 
 
 void
-print_flow_collection_information(const FlowData &flowcr, const double dt)
+print_flow_collection_information(const FlowData       &flowcr,
+                                  const double          dt,
+                                  const gmx::MDLogger  &mdlog)
 {
-    fprintf(stderr, "\n\n************************************\n");
-    fprintf(stderr, "* FLOW DATA COLLECTION INFORMATION *\n");
-    fprintf(stderr, "************************************\n\n");
+    // Log to warning level, which prints both to md.log and stdout
+    // (info level only writes to md.log)
 
-    fprintf(stderr,
-            "Data for flow field maps will be collected every %g ps "
-            "(%lu steps).\n\n",
-            flowcr.step_collect * dt, flowcr.step_collect);
+    GMX_LOG(mdlog.warning)
+        .asParagraph()
+        .appendText("************************************\n")
+        .appendText("* FLOW DATA COLLECTION INFORMATION *\n")
+        .appendText("************************************");
 
-    fprintf(stderr,
-            "It will be averaged and output to data maps every %g ps "
-            "(%lu steps).\n\n",
-            flowcr.step_output * dt, flowcr.step_output);
+    GMX_LOG(mdlog.warning)
+        .asParagraph()
+        .appendText("Flow field collection frequency:\n")
+        .appendTextFormatted(
+            "  Collect: %g ps (every %lu steps).\n",
+            flowcr.step_collect * dt, flowcr.step_collect
+        )
+        .appendTextFormatted(
+            "  Output:  %g ps (every %lu steps).",
+            flowcr.step_output * dt, flowcr.step_output
+        );
 
-    fprintf(stderr,
-            "The system has been divided into %lu x %lu bins "
-            "of size %g x %g nm^2 \nin x and z.\n\n",
-            flowcr.nx(), flowcr.nz(), flowcr.dx(), flowcr.dz());
+    GMX_LOG(mdlog.warning)
+        .asParagraph()
+        .appendText("Flow field grid information:\n")
+        .appendTextFormatted(
+            "  Shape:   %lu x %lu (along x and z)\n",
+            flowcr.nx(), flowcr.nz()
+        )
+        .appendTextFormatted(
+            "  Spacing: %g x %g nm^2",
+            flowcr.dx(), flowcr.dz()
+        );
 
-    fprintf(stderr,
-            "Writing full flow data to files with base '%s_00001.dat' (...).\n\n", flowcr.fnbase.c_str());
+    GMX_LOG(mdlog.warning)
+        .asParagraph()
+        .appendTextFormatted(
+            "Writing full flow data to files "
+            "with base '%s_00001.dat' (...).",
+            flowcr.fnbase.c_str()
+        );
 
     if (!flowcr.group_data.empty())
     {
-        fprintf(stderr,
-                "Multiple groups selected for flow output. Will collect individual flow\n"
-                "data for each group individually in addition to the combined field:\n\n");
+        GMX_LOG(mdlog.warning)
+            .asParagraph()
+            .appendText(
+                "Multiple groups selected for flow output. Will collect "
+                "individual flow data for each group individually in "
+                "addition to the combined field:\n"
+            );
 
         for (const auto& group : flowcr.group_data)
         {
-            fprintf(stderr,
-                    "  %s -> '%s_00001.dat' (...)\n", group.name.c_str(), group.fnbase.c_str());
+            GMX_LOG(mdlog.warning)
+                .appendTextFormatted(
+                    "  %s -> '%s_00001.dat' (...)\n",
+                    group.name.c_str(),
+                    group.fnbase.c_str()
+                );
         }
-
-        fprintf(stderr, "\n");
     }
 
-    fprintf(stderr, "Have a nice day.\n\n");
+    GMX_LOG(mdlog.warning)
+        .asParagraph()
+        .appendText("Have a nice day.");
 
-    fprintf(stderr, "****************************************\n");
-    fprintf(stderr, "* END FLOW DATA COLLECTION INFORMATION *\n");
-    fprintf(stderr, "****************************************\n\n");
+    GMX_LOG(mdlog.warning)
+        .asParagraph()
+        .appendText("****************************************\n")
+        .appendText("* END FLOW DATA COLLECTION INFORMATION *\n")
+        .appendText("****************************************");
 }
 
 

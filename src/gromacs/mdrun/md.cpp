@@ -810,7 +810,7 @@ void gmx::LegacySimulator::do_md()
 
         if (MASTER(cr))
         {
-            flow::print_flow_collection_information(flowcr, ir->delta_t);
+            flow::print_flow_collection_information(flowcr, ir->delta_t, mdlog);
         }
     }
 
