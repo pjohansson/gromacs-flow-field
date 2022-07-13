@@ -619,7 +619,7 @@ void gmx::LegacySimulator::do_md()
     }
     if (hasReadEkinState)
     {
-        restore_ekinstate_from_state(cr, ekind, &state_global->ekinstate);
+        restore_ekinstate_from_state(cr, ekind, MASTER(cr) ? &state_global->ekinstate : nullptr);
     }
 
     unsigned int cglo_flags =
@@ -1351,6 +1351,9 @@ void gmx::LegacySimulator::do_md()
          * coordinates at time t. We must output all of this before
          * the update.
          */
+        const EkindataState ekindataState = bGStat ? (bSumEkinhOld ? EkindataState::UsedNeedToReduce
+                                                                   : EkindataState::UsedDoNotNeedToReduce)
+                                                   : EkindataState::NotUsed;
         do_md_trajectory_writing(fplog,
                                  cr,
                                  nfile,
@@ -1372,7 +1375,7 @@ void gmx::LegacySimulator::do_md()
                                  bRerunMD,
                                  bLastStep,
                                  mdrunOptions.writeConfout,
-                                 bSumEkinhOld);
+                                 ekindataState);
         /* Check if IMD step and do IMD communication, if bIMD is TRUE. */
         bInteractiveMDstep = imdSession->run(step, bNS, state->box, state->x, t);
 
