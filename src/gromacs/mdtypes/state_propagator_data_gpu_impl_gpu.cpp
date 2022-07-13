@@ -117,8 +117,6 @@ StatePropagatorDataGpu::Impl::Impl(const DeviceStream*  pmeStream,
     nonLocalStream_ = nullptr;
     updateStream_   = nullptr;
 
-    isPmeOnly_ = true;
-
     // Only local/all coordinates are allowed to be copied in PME-only rank/ PME tests.
     // This it temporary measure to make it safe to use this class in those cases.
     xCopyStreams_[AtomLocality::Local]    = pmeStream_;
@@ -162,6 +160,8 @@ void StatePropagatorDataGpu::Impl::reinit(int numAtomsLocal, int numAtomsAll)
     {
         // The PME stream is used here because the padding region of d_x_ is only in the PME task.
         clearDeviceBufferAsync(&d_x_, numAtomsAll_, paddingAllocationSize, *pmeStream_);
+        // Wait for clearing to complete since with PME-PP pipelining PME will use different streams.
+        pmeStream_->synchronize();
     }
 
     reallocateDeviceBuffer(&d_v_, numAtomsAll_, &d_vSize_, &d_vCapacity_, deviceContext_);
@@ -406,6 +406,12 @@ void StatePropagatorDataGpu::Impl::setXUpdatedOnDeviceEvent(GpuEventSynchronizer
 void StatePropagatorDataGpu::Impl::setXUpdatedOnDeviceEventExpectedConsumptionCount(int expectedConsumptionCount)
 {
     xUpdatedOnDeviceEvent_->setConsumptionLimits(expectedConsumptionCount, expectedConsumptionCount);
+}
+
+void StatePropagatorDataGpu::Impl::setFReadyOnDeviceEventExpectedConsumptionCount(AtomLocality atomLocality,
+                                                                                  int expectedConsumptionCount)
+{
+    fReadyOnDevice_[atomLocality].setConsumptionLimits(expectedConsumptionCount, expectedConsumptionCount);
 }
 
 void StatePropagatorDataGpu::Impl::copyCoordinatesFromGpu(gmx::ArrayRef<gmx::RVec> h_x,
@@ -699,6 +705,12 @@ void StatePropagatorDataGpu::setXUpdatedOnDeviceEvent(GpuEventSynchronizer* xUpd
 void StatePropagatorDataGpu::setXUpdatedOnDeviceEventExpectedConsumptionCount(int expectedConsumptionCount)
 {
     impl_->setXUpdatedOnDeviceEventExpectedConsumptionCount(expectedConsumptionCount);
+}
+
+void StatePropagatorDataGpu::setFReadyOnDeviceEventExpectedConsumptionCount(AtomLocality atomLocality,
+                                                                            int expectedConsumptionCount)
+{
+    impl_->setFReadyOnDeviceEventExpectedConsumptionCount(atomLocality, expectedConsumptionCount);
 }
 
 void StatePropagatorDataGpu::copyCoordinatesFromGpu(gmx::ArrayRef<RVec>   h_x,

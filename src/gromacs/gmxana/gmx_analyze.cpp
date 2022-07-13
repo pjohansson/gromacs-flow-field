@@ -56,7 +56,6 @@
 #include "gromacs/utility/futil.h"
 #include "gromacs/utility/pleasecite.h"
 #include "gromacs/utility/smalloc.h"
-#include "gromacs/utility/snprintf.h"
 
 /* must correspond to char *avbar_opt[] declared in main() */
 enum

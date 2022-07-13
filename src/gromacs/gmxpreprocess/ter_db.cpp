@@ -35,11 +35,11 @@
 
 #include "ter_db.h"
 
-#include <array>
 #include <cctype>
 #include <cstring>
 
 #include <algorithm>
+#include <array>
 #include <optional>
 #include <string>
 #include <vector>
@@ -53,11 +53,13 @@
 #include "gromacs/gmxpreprocess/toputil.h"
 #include "gromacs/utility/cstringutil.h"
 #include "gromacs/utility/enumerationhelpers.h"
+#include "gromacs/utility/exceptions.h"
 #include "gromacs/utility/fatalerror.h"
 #include "gromacs/utility/futil.h"
 #include "gromacs/utility/smalloc.h"
 #include "gromacs/utility/strdb.h"
 #include "gromacs/utility/stringtoenumvalueconverter.h"
+#include "gromacs/utility/stringutil.h"
 
 #include "hackblock.h"
 #include "resall.h"
@@ -130,7 +132,18 @@ static void read_atom(char* line, bool bAdd, std::string* nname, t_atom* a, Prep
             *nname = "";
         }
     }
-    a->type = *atype->atomTypeFromName(buf[i++]);
+    auto atomType = atype->atomTypeFromName(buf[i++]);
+    if (atomType == std::nullopt)
+    {
+        GMX_THROW(gmx::InconsistentInputError(
+                gmx::formatString("Atom type %s specified in terminal database has not been "
+                                  "defined in the force field",
+                                  buf[i - 1])));
+    }
+    else
+    {
+        a->type = atomType.value();
+    }
     sscanf(buf[i++], "%lf", &m);
     a->m = m;
     sscanf(buf[i++], "%lf", &q);
@@ -147,7 +160,7 @@ static void read_atom(char* line, bool bAdd, std::string* nname, t_atom* a, Prep
 
 static void print_atom(FILE* out, const t_atom& a, PreprocessingAtomTypes* atype)
 {
-    fprintf(out, "\t%s\t%g\t%g\n", *atype->atomNameFromAtomType(a.type), a.m, a.q);
+    fprintf(out, "\t%s\t%g\t%g\n", atype->atomNameFromAtomType(a.type)->c_str(), a.m, a.q);
 }
 
 static void print_ter_db(const char*                                ff,

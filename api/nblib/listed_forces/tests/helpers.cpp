@@ -42,10 +42,11 @@
  */
 #include "gmxpre.h"
 
+#include "listed_forces/helpers.hpp"
+
 #include <gtest/gtest.h>
 
-#include "nblib/listed_forces/helpers.hpp"
-#include "nblib/listed_forces/traits.h"
+#include "listed_forces/traits.h"
 
 #include "testutils/testasserts.h"
 

@@ -93,6 +93,9 @@ template<typename, size_t>
 class FixedCapacityVector;
 } // namespace gmx
 
+//! Free \c gmx_domdec_t structure (free-function dtor). Can handle \c nullptr.
+void done_domdec(gmx_domdec_t* dd);
+
 /*! \brief Returns the global topology atom number belonging to local atom index i.
  *
  * This function is intended for writing ASCII output
@@ -161,9 +164,15 @@ bool dd_bonded_molpbc(const gmx_domdec_t& dd, PbcType pbcType);
  * \param[in] cr               Communication recrod
  * \param[in] box              Box matrix, used for computing the dimensions of the system
  * \param[in] x                Position vector, used for computing the dimensions of the system
- * \param[in] cutoffRequested  The requested atom to atom cut-off distance, usually the pair-list cutoff distance
+ * \param[in] cutoffRequested  The requested atom to atom cut-off distance, usually the pair-list
+ *                             cutoff distance
+ * \param[in] checkGpuDdLimitation Whether to check the GPU DD support limitation
  */
-bool change_dd_cutoff(t_commrec* cr, const matrix box, gmx::ArrayRef<const gmx::RVec> x, real cutoffRequested);
+bool change_dd_cutoff(t_commrec*                     cr,
+                      const matrix                   box,
+                      gmx::ArrayRef<const gmx::RVec> x,
+                      real                           cutoffRequested,
+                      bool                           checkGpuDdLimitation);
 
 /*! \brief Set up communication for averaging GPU wait times over domains
  *
@@ -197,12 +206,6 @@ void dd_move_x(struct gmx_domdec_t* dd, const matrix box, gmx::ArrayRef<gmx::RVe
  * the correct virial from the single sum including f.
  */
 void dd_move_f(struct gmx_domdec_t* dd, gmx::ForceWithShiftForces* forceWithShiftForces, gmx_wallcycle* wcycle);
-
-/*! \brief Communicate a real for each atom to the neighboring cells. */
-void dd_atom_spread_real(struct gmx_domdec_t* dd, real v[]);
-
-/*! \brief Sum the contributions to a real for each atom over the neighboring cells. */
-void dd_atom_sum_real(struct gmx_domdec_t* dd, real v[]);
 
 /*! \brief Reset all the statistics and counters for total run counting */
 void reset_dd_statistics_counters(struct gmx_domdec_t* dd);

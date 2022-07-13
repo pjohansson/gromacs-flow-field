@@ -41,14 +41,17 @@
  * \author Sebastian Keller <keller@cscs.ch>
  * \author Artem Zhmurov <zhmurov@gmail.com>
  */
+#include "nblib/listed_forces/calculator.h"
+
 #include <algorithm>
+
+#include "listed_forces/dataflow.hpp"
+#include "listed_forces/helpers.hpp"
 
 #include "nblib/box.h"
 #include "nblib/exception.h"
-#include "nblib/pbc.hpp"
-#include "nblib/listed_forces/calculator.h"
-#include "nblib/listed_forces/dataflow.hpp"
-#include "nblib/listed_forces/helpers.hpp"
+
+#include "pbc.hpp"
 
 namespace nblib
 {

@@ -40,7 +40,7 @@
  */
 #include "gmxpre.h"
 
-#include "filenameoption.h"
+#include "gromacs/options/filenameoption.h"
 
 #include <cstring>
 
@@ -66,17 +66,6 @@ namespace
 
 //! \addtogroup module_options
 //! \{
-
-/*! \brief
- * Mapping from OptionFileType to a file type in filetypes.h.
- */
-struct FileTypeMapping
-{
-    //! OptionFileType value to map.
-    OptionFileType optionType;
-    //! Corresponding file type from filetypes.h.
-    int fileType;
-};
 
 //! Mappings from OptionFileType to file types in filetypes.h.
 constexpr EnumerationArray<OptionFileType, int> sc_fileTypeMapping = { efTPS, efTPR, efTRX, efEDR,

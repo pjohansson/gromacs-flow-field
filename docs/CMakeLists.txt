@@ -318,7 +318,6 @@ if (SPHINX_FOUND)
         reference-manual/analysis/plots/hbond.pdf
         reference-manual/analysis/plots/hpr-wheel.pdf
         reference-manual/analysis/plots/msdwater.pdf
-        reference-manual/analysis/plots/ngmxdump.pdf
         reference-manual/analysis/plots/phipsi.pdf
         reference-manual/analysis/plots/rama.pdf
         reference-manual/analysis/plots/rdfO-O.pdf
@@ -364,6 +363,19 @@ if (SPHINX_FOUND)
         how-to/visualize.rst
         install-guide/index.rst
         release-notes/index.rst
+        release-notes/2023/major/highlights.rst
+        release-notes/2023/major/features.rst
+        release-notes/2023/major/performance.rst
+        release-notes/2023/major/tools.rst
+        release-notes/2023/major/bugs-fixed.rst
+        release-notes/2023/major/removed-functionality.rst
+        release-notes/2023/major/deprecated-functionality.rst
+        release-notes/2023/major/portability.rst
+        release-notes/2023/major/miscellaneous.rst
+        release-notes/2023/major/api.rst
+        release-notes/2022/2022.1.rst
+        release-notes/2022/2022.2.rst
+	release-notes/2022/2022.3.rst
         release-notes/2022/major/highlights.rst
         release-notes/2022/major/features.rst
         release-notes/2022/major/performance.rst
@@ -791,6 +803,8 @@ if (HTML_BUILD_IS_POSSIBLE)
     # Add a top-level target that builds everything related to the webpage,
     # for CI (and possibly others) to use
     add_custom_target(webpage ${_webpage_target_properties}
+        COMMAND ${CMAKE_COMMAND} -E echo
+            "Webpage output: file://${HTML_OUTPUT_DIR}/index.html"
         COMMENT "Building webpage"
         VERBATIM)
     add_dependencies(webpage webpage-sphinx doxygen-all)

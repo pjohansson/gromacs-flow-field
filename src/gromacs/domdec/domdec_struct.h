@@ -51,6 +51,7 @@
 #include "gromacs/gpu_utils/hostallocator.h"
 #include "gromacs/math/vectypes.h"
 #include "gromacs/topology/block.h"
+#include "gromacs/topology/idef.h"
 #include "gromacs/utility/gmxmpi.h"
 #include "gromacs/utility/range.h"
 #include "gromacs/utility/real.h"
@@ -204,13 +205,13 @@ struct gmx_domdec_t
     bool haveExclusions = false;
 
     /* Vsite stuff */
-    gmx::HashedMap<int>*      ga2la_vsite = nullptr;
-    gmx_domdec_specat_comm_t* vsite_comm  = nullptr;
-    std::vector<int>          vsite_requestedGlobalAtomIndices;
+    std::unique_ptr<gmx::HashedMap<int>>      ga2la_vsite;
+    std::unique_ptr<gmx_domdec_specat_comm_t> vsite_comm;
+    std::vector<int>                          vsite_requestedGlobalAtomIndices;
 
     /* Constraint stuff */
-    gmx_domdec_constraints_t* constraints     = nullptr;
-    gmx_domdec_specat_comm_t* constraint_comm = nullptr;
+    std::unique_ptr<gmx_domdec_constraints_t> constraints;
+    std::unique_ptr<gmx_domdec_specat_comm_t> constraint_comm;
 
     /* The number of home atoms */
     int numHomeAtoms = 0;
@@ -221,10 +222,10 @@ struct gmx_domdec_t
     std::vector<int> globalAtomIndices;
 
     /* Global atom number to local atom number list */
-    gmx_ga2la_t* ga2la = nullptr;
+    std::unique_ptr<gmx_ga2la_t> ga2la;
 
     /* Communication stuff */
-    gmx_domdec_comm_t* comm = nullptr;
+    std::unique_ptr<gmx_domdec_comm_t> comm;
 
     /* The partioning count, to keep track of the state */
     int64_t ddp_count = 0;

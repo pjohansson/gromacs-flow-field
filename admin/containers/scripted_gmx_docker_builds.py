@@ -408,6 +408,11 @@ def get_heffte(args):
     else:
         return None
 
+def get_nvhpcsdk(args):
+    if (args.nvhpcsdk is not None):
+        return hpccm.building_blocks.nvhpc(eula=True, cuda_multi=False, environment=False, mpi=False, version=args.nvhpcsdk)
+    else:
+        return None
 
 def get_hipsycl(args):
     if args.hipsycl is None:
@@ -587,7 +592,7 @@ def prepare_venv(version: StrictVersion) -> typing.Sequence[str]:
 
     commands.append(f'{venv_path}/bin/python -m pip install --upgrade pip setuptools')
     # Install dependencies for building and testing gmxapi Python package.
-    # WARNING: Please keep this list synchronized with python_packaging/requirements-test.txt
+    # WARNING: Please keep this list synchronized with python_packaging/src/requirements.txt
     # TODO: Get requirements.txt from an input argument.
     commands.append(f"""{venv_path}/bin/python -m pip install --upgrade \
             'breathe' \
@@ -596,13 +601,13 @@ def prepare_venv(version: StrictVersion) -> typing.Sequence[str]:
             'gcovr>=4.2' \
             'mpi4py>=3.0.3' \
             'networkx>=2.0' \
-            'numpy>=1' \
+            'numpy>1.7' \
+            'packaging' \
             'pip>=10.1' \
             'pybind11>2.6' \
             'Pygments>=2.2.0' \
-            'pytest>=3.9' \
+            'pytest>=4.6' \
             'setuptools>=42' \
-            'scikit-build>=0.10' \
             'Sphinx>=1.6.3' \
             'sphinxcontrib-plantuml>=0.14' \
             'wheel'""")
@@ -825,6 +830,11 @@ def build_stages(args) -> typing.Iterable[hpccm.Stage]:
     building_blocks['clfft'] = get_clfft(args)
 
     building_blocks['heffte'] = get_heffte(args)
+
+    building_blocks['nvhpcsdk'] = get_nvhpcsdk(args)
+    if building_blocks['nvhpcsdk'] is not None:
+          nvshmem_lib_path = '/opt/nvidia/hpc_sdk/Linux_x86_64/' + args.nvhpcsdk + '/comm_libs/nvshmem/lib/:$LD_LIBRARY_PATH'
+          building_blocks['nvhpcsdk_path'] = hpccm.primitives.environment(variables={'LD_LIBRARY_PATH': nvshmem_lib_path})
 
     building_blocks['hipSYCL'] = get_hipsycl(args)
 

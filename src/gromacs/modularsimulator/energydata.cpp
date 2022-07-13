@@ -88,7 +88,7 @@ EnergyData::EnergyData(StatePropagatorData*        statePropagatorData,
                        bool                        isMasterRank,
                        ObservablesHistory*         observablesHistory,
                        StartingBehavior            startingBehavior,
-                       bool                        simulationsShareState,
+                       bool                        simulationsShareHamiltonian,
                        pull_t*                     pullWork) :
     element_(std::make_unique<Element>(this, isMasterRank, inputrec->fepvals->nstdhdl)),
     isMasterRank_(isMasterRank),
@@ -112,7 +112,7 @@ EnergyData::EnergyData(StatePropagatorData*        statePropagatorData,
     mdModulesNotifiers_(mdModulesNotifiers),
     groups_(&globalTopology.groups),
     observablesHistory_(observablesHistory),
-    simulationsShareState_(simulationsShareState),
+    simulationsShareHamiltonian_(simulationsShareHamiltonian),
     pullWork_(pullWork)
 {
     clear_mat(forceVirial_);
@@ -170,7 +170,7 @@ void EnergyData::setup(gmx_mdoutf* outf)
                                                    mdoutf_get_fp_dhdl(outf),
                                                    false,
                                                    startingBehavior_,
-                                                   simulationsShareState_,
+                                                   simulationsShareHamiltonian_,
                                                    mdModulesNotifiers_);
 
     if (!isMasterRank_)
@@ -415,17 +415,17 @@ void EnergyData::Element::doCheckpointData(CheckpointData<operation>* checkpoint
 void EnergyData::Element::saveCheckpointState(std::optional<WriteCheckpointData> checkpointData,
                                               const t_commrec*                   cr)
 {
+    // Here we always store the ekinstate, even when it might be not be used at this step.
+    // It would be cleaner make it conditional on when it is used (and thus up to date).
+    update_ekinstate(MASTER(cr) ? &energyData_->ekinstate_ : nullptr,
+                     energyData_->ekind_,
+                     energyData_->needToSumEkinhOld_,
+                     cr);
+
     if (MASTER(cr))
     {
-        if (energyData_->needToSumEkinhOld_)
-        {
-            energyData_->ekinstate_.bUpToDate = false;
-        }
-        else
-        {
-            update_ekinstate(&energyData_->ekinstate_, energyData_->ekind_);
-            energyData_->ekinstate_.bUpToDate = true;
-        }
+        energyData_->ekinstate_.bUpToDate = true;
+
         energyData_->energyOutput_->fillEnergyHistory(
                 energyData_->observablesHistory_->energyHistory.get());
         doCheckpointData<CheckpointDataOperation::Write>(&checkpointData.value());
@@ -529,7 +529,7 @@ void EnergyData::updateKineticEnergy()
 
     enerd_->term[F_TEMP] = sum_ekin(
             &(inputrec_->opts), ekind_, dEkinDLambda, useFullStepKineticEnergy, ignoreScalingFactor);
-    enerd_->term[F_EKIN] = trace(ekind_->ekin);
+    enerd_->term[F_EKIN] = ::trace(ekind_->ekin);
 }
 
 EnergyData::Element* EnergyData::element()

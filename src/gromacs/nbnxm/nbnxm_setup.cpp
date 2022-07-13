@@ -46,6 +46,7 @@
 #include "gromacs/domdec/domdec.h"
 #include "gromacs/domdec/domdec_struct.h"
 #include "gromacs/hardware/hw_info.h"
+#include "gromacs/mdlib/calc_verletbuf.h"
 #include "gromacs/mdlib/gmx_omp_nthreads.h"
 #include "gromacs/mdtypes/commrec.h"
 #include "gromacs/mdtypes/enerdata.h"
@@ -143,7 +144,7 @@ static KernelSetup pick_nbnxn_kernel_cpu(const t_inputrec gmx_unused& inputrec,
          */
         kernelSetup.kernelType = KernelType::Cpu4xN_Simd_4xN;
 
-        if (!GMX_SIMD_HAVE_FMA && (EEL_PME_EWALD(inputrec.coulombtype) || EVDW_PME(inputrec.vdwtype)))
+        if (!GMX_SIMD_HAVE_FMA && (usingPmeOrEwald(inputrec.coulombtype) || usingLJPme(inputrec.vdwtype)))
         {
             /* We have Ewald kernels without FMA (Intel Sandy/Ivy Bridge).
              * There are enough instructions to make 2x(4+4) efficient.
@@ -281,7 +282,7 @@ static KernelSetup pick_nbnxn_kernel(const gmx::MDLogger&     mdlog,
                 .asParagraph()
                 .appendTextFormatted(
                         "WARNING: Using the slow %s kernels. This should\n"
-                        "not happen during routine usage on supported platforms.",
+                        "not happen during routine usage on common platforms.",
                         lookup_kernel_name(kernelSetup.kernelType));
     }
 
@@ -381,8 +382,9 @@ std::unique_ptr<nonbonded_verlet_t> init_nb_verlet(const gmx::MDLogger& mdlog,
                                                    bool                 useGpuForNonbonded,
                                                    const gmx::DeviceStreamManager* deviceStreamManager,
                                                    const gmx_mtop_t&               mtop,
-                                                   matrix                          box,
-                                                   gmx_wallcycle*                  wcycle)
+                                                   gmx::ArrayRef<const gmx::RVec> coordinates,
+                                                   matrix                         box,
+                                                   gmx_wallcycle*                 wcycle)
 {
     const bool emulateGpu = (getenv("GMX_EMULATE_GPU") != nullptr);
 
@@ -413,7 +415,10 @@ std::unique_ptr<nonbonded_verlet_t> init_nb_verlet(const gmx::MDLogger& mdlog,
     PairlistParams pairlistParams(
             kernelSetup.kernelType, bFEP_NonBonded, inputrec.rlist, haveMultipleDomains);
 
-    setupDynamicPairlistPruning(mdlog, inputrec, mtop, box, *forcerec.ic, &pairlistParams);
+    const real effectiveAtomDensity = computeEffectiveAtomDensity(
+            coordinates, box, std::max(inputrec.rcoulomb, inputrec.rvdw), commrec->mpi_comm_mygroup);
+
+    setupDynamicPairlistPruning(mdlog, inputrec, mtop, effectiveAtomDensity, *forcerec.ic, &pairlistParams);
 
     const int enbnxninitcombrule = getENbnxnInitCombRule(forcerec);
 

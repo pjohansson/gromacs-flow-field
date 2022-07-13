@@ -58,8 +58,6 @@
 #    include "sycl/nbnxm_sycl_types.h"
 #endif
 
-#include "nbnxm_gpu_data_mgmt.h"
-
 #include "gromacs/gpu_utils/device_stream_manager.h"
 #include "gromacs/gpu_utils/gputraits.h"
 #include "gromacs/gpu_utils/pmalloc.h"
@@ -71,12 +69,12 @@
 #include "gromacs/nbnxm/gridset.h"
 #include "gromacs/pbcutil/ishift.h"
 #include "gromacs/timing/gpu_timing.h"
-#include "gromacs/pbcutil/ishift.h"
 #include "gromacs/utility/cstringutil.h"
 #include "gromacs/utility/exceptions.h"
 #include "gromacs/utility/fatalerror.h"
 
 #include "nbnxm_gpu.h"
+#include "nbnxm_gpu_data_mgmt.h"
 #include "pairlistsets.h"
 
 namespace Nbnxm
@@ -329,11 +327,11 @@ static inline ElecType nbnxmGpuPickElectrostaticsKernelType(const interaction_co
     {
         return ElecType::Cut;
     }
-    else if (EEL_RF(ic.eeltype))
+    else if (usingRF(ic.eeltype))
     {
         return ElecType::RF;
     }
-    else if ((EEL_PME(ic.eeltype) || ic.eeltype == CoulombInteractionType::Ewald))
+    else if ((usingPme(ic.eeltype) || ic.eeltype == CoulombInteractionType::Ewald))
     {
         return nbnxn_gpu_pick_ewald_kernel_type(ic, deviceInfo);
     }

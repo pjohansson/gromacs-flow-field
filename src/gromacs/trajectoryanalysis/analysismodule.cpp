@@ -40,17 +40,15 @@
  */
 #include "gmxpre.h"
 
-#include "analysismodule.h"
+#include "gromacs/trajectoryanalysis/analysismodule.h"
 
 #include <map>
 #include <utility>
 
 #include "gromacs/analysisdata/analysisdata.h"
 #include "gromacs/selection/selection.h"
-#include "gromacs/selection/selectioncollection.h"
 #include "gromacs/utility/exceptions.h"
 #include "gromacs/utility/gmxassert.h"
-#include "gromacs/utility/stringutil.h"
 
 namespace gmx
 {
@@ -185,11 +183,8 @@ AnalysisDataHandle TrajectoryAnalysisModuleData::dataHandle(const AnalysisData& 
 
 Selection TrajectoryAnalysisModuleData::parallelSelection(const Selection& selection)
 {
-    std::optional<Selection> sel = impl_->selections_.selection(selection.name());
-    // Selections should never be missing in an analysis module, so this is an internal consistency check.
-    GMX_RELEASE_ASSERT(sel.has_value(),
-                       gmx::formatString("invalid selection %s", selection.name()).c_str());
-    return sel.value();
+    // TODO: Implement properly.
+    return selection;
 }
 
 

@@ -46,8 +46,6 @@
 #include "gromacs/topology/topology.h"
 #include "gromacs/utility/arraysize.h"
 #include "gromacs/utility/cstringutil.h"
-#include "gromacs/utility/fatalerror.h"
-#include "gromacs/utility/futil.h"
 #include "gromacs/utility/smalloc.h"
 
 typedef struct

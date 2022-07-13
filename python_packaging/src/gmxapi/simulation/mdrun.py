@@ -63,7 +63,6 @@ from .abc import ModuleObject
 logger = root_logger.getChild('mdrun')
 logger.info('Importing {}'.format(__name__))
 
-
 # Output in the gmxapi.operation Context.
 # TODO: Consider using a single base class for the DataProxy, but have distinct
 #  data descriptor behavior (or different descriptor implementations in different
@@ -85,7 +84,15 @@ _output = _op.OutputCollectionDescription(**{descriptor._name: descriptor._dtype
 
 class OutputDataProxy(_op.DataProxyBase,
                       descriptors=_output_descriptors):
-    """Implement the 'output' attribute of MDRun operations."""
+    """Implement the 'output' attribute of `mdrun` operations.
+
+    Attributes:
+        checkpoint: Full path to ``cpt`` file.
+        parameters: Dictionary of parameters with which the simulation was run.
+        trajectory: Full path to trajectory output (corresponding to the ``-o``
+                    flag, if provided).
+
+    """
 
 
 class PublishingDataProxy(_op.DataProxyBase,
@@ -326,7 +333,8 @@ class LegacyImplementationSubscription(object):
                         workdir_list = [os.path.abspath(_workdir) for _workdir in workdir_list]
                         # TODO: If we use better input file names, they need to be updated in multiple places.
                         tpr_filenames = [os.path.join(_workdir, 'topol.tpr') for _workdir in workdir_list]
-                        parameters_dict_list = [fileio.read_tpr(tprfile).parameters.extract() for tprfile in tpr_filenames]
+                        parameters_dict_list = [fileio.read_tpr(tprfile).parameters.extract() for tprfile in
+                                                tpr_filenames]
                         if isinstance(runtime_args, (list, tuple)):
                             runtime_args_list = list(runtime_args)
                         else:
@@ -821,8 +829,8 @@ def mdrun(input,
     Returns:
         runnable operation to perform the specified simulation
 
-    The *output* attribute of the returned operation handle contains dynamically
-    determined outputs from the operation.
+    See :py:class:`~gmxapi.simulation.mdrun.OutputDataProxy` for members of the
+    *output* attribute.
 
     *input* may be a TPR file name or a an object providing the SimulationInput interface.
 

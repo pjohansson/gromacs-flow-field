@@ -14,15 +14,7 @@ Configuration templates are found in the files in the
 Docker images used by GitLab Runner are available on `Docker Hub <https://hub.docker.com/u/gromacs>`__.
 Images are (re)built manually using details in :file:`admin/containers`.
 
-This documentation is incomplete, pending resolution of :issue:`3275`.
-
-..  todo:: Expand this documentation to resolve :issue:`3275`
-
-.. todo:: Discuss the distinct characteristics of |Gromacs| CI pipelines to relevant to job configuration.
-          (:issue:`3472` and :issue:`3617`)
-
-.. todo:: (:issue:`3472` and :issue:`3617`) Comment on the number of pipelines that can be or which are likely to be running at the same time.
-          (:issue:`3472` and :issue:`3617`)
+.. todo:: (:issue:`3617`) Comment on the number of pipelines that can be or which are likely to be running at the same time.
 
 .. note::
 
@@ -117,14 +109,14 @@ Scheduled pipelines may provide different variable definitions through the
 environment to jobs that run under the ``schedules``
 `condition <https://gitlab.com/help/ci/pipelines/schedules#using-only-and-except>`__.
 
-Nightly scheduled pipelines run against ``master`` and *release* branches in
+Nightly scheduled pipelines run against ``main`` and *release* branches in
 the GROMACS repository.
 
 Running post-merge-acceptance pipelines
 """""""""""""""""""""""""""""""""""""""
 
 The Gitlab CI for |Gromacs| runs a set of jobs by default only after a MR has been
-accepted and the resulting commit is included in the target branch if it is ``master``
+accepted and the resulting commit is included in the target branch if it is ``main``
 or one of the *release* branches. Those jobs can be triggered manually using the
 ``POST_MERGE_ACCEPTANCE`` input variable documented below when executing a new pipeline
 through the Gitlab web interface.
@@ -174,7 +166,7 @@ Updating regression tests
 Changes in |Gromacs| that require changes in regression-tests are notoriously hard,
 because a merge request that tests against the non-updated version of the
 regression tests will necessarily fail, while updating regression tests while
-the current change is not integrated into master, might cause other
+the current change is not integrated into main, might cause other
 merge request pipelines to fail.
 
 The solution is a new regression-test branch or commit, uploaded to gitlab.
@@ -204,6 +196,10 @@ or passed along to the environment of executed commands.
 Other important variable keys are as follows.
 
 .. glossary::
+    BUILD_DIR
+        GROMACS specific directory to perform configuration, building and testing in.
+        Usually job dependent, needs to be the same for all tasks of dependent jobs.
+
     CI_PROJECT_NAMESPACE
         Distinguishes pipelines created for repositories in the ``gromacs``
         GitLab project space. May be used to pre-screen jobs to determine
@@ -232,11 +228,17 @@ Other important variable keys are as follows.
     CMAKE_MPI_OPTIONS
         Provide CMake command line arguments to define GROMACS MPI build options.
 
+    DRY_RUN
+        Read-only environment variable used to control behaviour of script uploading
+        artifact files to the ftp and web servers. Set to false to actually upload
+        files. This is usually done through the pipeline submission script, but can
+        be done manual as well through the web interface.                                   
+
     GROMACS_MAJOR_VERSION
         Read-only environment variable for CI scripts to check the
         library API version to expect from the ``build`` job artifacts.
         Initially, this variable is only defined in
-        :file:`admin/gitlab-ci/api-client.matrix/gromacs-master.gitlab-ci.yml`
+        :file:`admin/gitlab-ci/api-client.matrix/gromacs-main.gitlab-ci.yml`
         but could be moved to :file:`admin/gitlab-ci/global.gitlab-ci.yml` if found
         to be of general utility.
 
@@ -246,20 +248,12 @@ Other important variable keys are as follows.
         Can be set when launching pipelines via the GitLab web interface.
         For example, see *rules* mix-ins in :file:`admin/gitlab-ci/global.gitlab-ci.yml`.
 
-    EXTRA_INSTALLS
-        List additional OS package requirements. Used in *before_script* for some
-        mix-in job definitions to install additional software dependencies. If
-        using such a job with *extends*, override this variable key with a
-        space-delimited list of packages (default: ``""``). Consider proposing a
-        patch to the base Docker images to include the dependency to reduce
-        pipeline execution time.
-
     REGRESSIONTESTBRANCH
-        Use this branch of the regressiontests rather than master to allow for
+        Use this branch of the regressiontests rather than main to allow for
         merge requests that require updated regression tests with valid CI tests.
 
     REGRESSIONTESTCOMMIT
-        Use this commit to the regressiontests rather than the head on master to
+        Use this commit to the regressiontests rather than the head on main to
         allow for merge requests that require updated regression tests with
         valid CI tests.
 
@@ -268,10 +262,6 @@ Other important variable keys are as follows.
         run after a commit has been merged into its target branch should be executed.
         Can be set to run pipelines through the web interface or as schedules.
         For use please see the *rules* mix-ins in :file:`admin/gitlab-ci/global.gitlab-ci.yml`.
-
-
-.. todo:: Define common variables.
-    ``BUILD_DIR``, ``INSTALL_DIR``, ``CACHE_FALLBACK_KEY``, ...
 
 Setting variables
 -----------------

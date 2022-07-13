@@ -88,7 +88,7 @@ static void find_nearest_neighbours(PbcType     pbcType,
                                     gmx_rmpbc_t gpbc)
 {
     int   ix, jx, nsgbin, *sgbin;
-    int   i, ibin, j, k, l, n, *nn[4];
+    int   i, ibin, j, k, *nn[4];
     rvec  dx, rj, rk, urk, urj;
     real  cost, cost2, *sgmol, *skmol, rmean, rmean2, r2, box2, *r_nn[4];
     t_pbc pbc;
@@ -122,7 +122,6 @@ static void find_nearest_neighbours(PbcType     pbcType,
 
     *sgmean = 0.0;
     *skmean = 0.0;
-    l       = 0;
     for (i = 0; (i < maxidx); i++) /* loop over index file */
     {
         ix = index[i];
@@ -185,7 +184,6 @@ static void find_nearest_neighbours(PbcType     pbcType,
         }
         rmean /= 4;
 
-        n        = 0;
         sgmol[i] = 0.0;
         skmol[i] = 0.0;
 
@@ -214,8 +212,6 @@ static void find_nearest_neighbours(PbcType     pbcType,
                     sgbin[ibin]++;
                 }
                 /* printf("%d %d %f %d %d\n", j, k, cost * cost, ibin, sgbin[ibin]);*/
-                l++;
-                n++;
             }
         }
 
@@ -402,7 +398,6 @@ static void calc_order(const char*             fn,
                        real*                   slWidth,
                        int                     nslices,
                        gmx_bool                bSliced,
-                       gmx_bool                bUnsat,
                        const t_topology*       top,
                        PbcType                 pbcType,
                        int                     ngrps,
@@ -420,21 +415,20 @@ static void calc_order(const char*             fn,
             *x1;      /* coordinates without pbc                        */
     matrix       box; /* box (3x3)                                      */
     t_trxstatus* status;
-    rvec         cossum,                   /* sum of vector angles for three axes            */
-            Sx, Sy, Sz,                    /* the three molecular axes                       */
-            tmp1, tmp2,                    /* temp. rvecs for calculating dot products       */
-            frameorder;                    /* order parameters for one frame                 */
-    real* slFrameorder;                    /* order parameter for one frame, per slice      */
-    real  length,                          /* total distance between two atoms               */
-            t,                             /* time from trajectory                           */
-            z_ave, z1, z2;                 /* average z, used to det. which slice atom is in */
-    int natoms,                            /* nr. atoms in trj                               */
-            nr_tails,                      /* nr tails, to check if index file is correct    */
-            size = 0,                      /* nr. of atoms in group. same as nr_tails        */
-            i, j, m, k, teller = 0, slice; /* current slice number                           */
+    rvec         cossum,       /* sum of vector angles for three axes            */
+            Sx, Sy, Sz,        /* the three molecular axes                       */
+            tmp1, tmp2,        /* temp. rvecs for calculating dot products       */
+            frameorder;        /* order parameters for one frame                 */
+    real* slFrameorder;        /* order parameter for one frame, per slice      */
+    real  length,              /* total distance between two atoms               */
+            t,                 /* time from trajectory                           */
+            z_ave, z1, z2;     /* average z, used to det. which slice atom is in */
+    int natoms,                /* nr. atoms in trj                               */
+            nr_tails,          /* nr tails, to check if index file is correct    */
+            size = 0,          /* nr. of atoms in group. same as nr_tails        */
+            i, j, m, k, slice; /* current slice number                           */
     real nr_frames = 0;
-    int* slCount;                /* nr. of atoms in one slice                      */
-    real sdbangle           = 0; /* sum of these angles                            */
+    int* slCount;                    /* nr. of atoms in one slice                      */
     gmx_bool use_unitvector = FALSE; /* use a specified unit vector instead of axis to specify unit normal*/
     rvec        direction, com;
     int         comsize, distsize;
@@ -519,8 +513,6 @@ static void calc_order(const char*             fn,
        in index*/
 #endif
 
-    teller = 0;
-
     gpbc = gmx_rmpbc_init(&top->idef, pbcType, natoms);
     /*********** Start processing trajectory ***********/
     do
@@ -529,7 +521,6 @@ static void calc_order(const char*             fn,
         {
             *slWidth = box[axis][axis] / static_cast<real>(nslices);
         }
-        teller++;
 
         set_pbc(&pbc, pbcType, box);
         gmx_rmpbc_copy(gpbc, natoms, box, x0, x1);
@@ -597,39 +588,14 @@ static void calc_order(const char*             fn,
                             direction[0],direction[1],direction[2]);*/
                 }
 
-                if (bUnsat)
-                {
-                    rvec dist;
-                    /* Using convention for unsaturated carbons */
-                    /* first get Sz, the vector from Cn to Cn+1 */
-                    rvec_sub(x1[a[index[i + 1] + j]], x1[a[index[i] + j]], dist);
-                    length = norm(dist);
-                    check_length(length, a[index[i] + j], a[index[i + 1] + j]);
-                    svmul(1.0 / length, dist, Sz);
+                rvec dist;
+                /* get vector dist(Cn-1,Cn+1) for tail atoms */
+                rvec_sub(x1[a[index[i + 1] + j]], x1[a[index[i - 1] + j]], dist);
+                length = norm(dist); /* determine distance between two atoms */
+                check_length(length, a[index[i - 1] + j], a[index[i + 1] + j]);
 
-                    /* this is actually the cosine of the angle between the double bond
-                       and axis, because Sz is normalized and the two other components of
-                       the axis on the bilayer are zero */
-                    if (use_unitvector)
-                    {
-                        sdbangle += gmx_angle(direction, Sz); /*this can probably be optimized*/
-                    }
-                    else
-                    {
-                        sdbangle += std::acos(Sz[axis]);
-                    }
-                }
-                else
-                {
-                    rvec dist;
-                    /* get vector dist(Cn-1,Cn+1) for tail atoms */
-                    rvec_sub(x1[a[index[i + 1] + j]], x1[a[index[i - 1] + j]], dist);
-                    length = norm(dist); /* determine distance between two atoms */
-                    check_length(length, a[index[i - 1] + j], a[index[i + 1] + j]);
-
-                    svmul(1.0 / length, dist, Sz);
-                    /* Sz is now the molecular axis Sz, normalized and all that */
-                }
+                svmul(1.0 / length, dist, Sz);
+                /* Sz is now the molecular axis Sz, normalized and all that */
 
                 /* now get Sx. Sx is normal to the plane of Cn-1, Cn and Cn+1 so
                    we can use the outer product of Cn-1->Cn and Cn+1->Cn, I hope */
@@ -772,13 +738,6 @@ static void calc_order(const char*             fn,
                 (*distvals)[k][i] /= nr_frames;
             }
         }
-    }
-
-    if (bUnsat)
-    {
-        fprintf(stderr,
-                "Average angle between double bond and normal: %f\n",
-                180 * sdbangle / (nr_frames * static_cast<real>(size) * M_PI));
     }
 
     sfree(x0); /* free memory used by coordinate arrays */
@@ -980,9 +939,16 @@ int gmx_order(int argc, char* argv[])
         "for more details."
     };
 
+    const char* bugs[] = {
+        "This tool only works for saturated carbons and united atom force fields.",
+        "For anything else, it is highly recommended to use a different analysis method!",
+        "The option [TT]-unsat[tt] claimed to do analysis for unsaturated carbons",
+        "this but hasn't worked ever since it was added and has thus been removed."
+    };
+
     static int         nslices       = 1;     /* nr of slices defined       */
     static gmx_bool    bSzonly       = FALSE; /* True if only Sz is wanted  */
-    static gmx_bool    bUnsat        = FALSE; /* True if carbons are unsat. */
+    static bool        bUnsatRemoved = false; /* Removed because it doesn't work. */
     static const char* normal_axis[] = { nullptr, "z", "x", "y", nullptr };
     static gmx_bool    permolecule   = FALSE; /*compute on a per-molecule basis */
     static gmx_bool    radial        = FALSE; /*compute a radial membrane normal */
@@ -1003,9 +969,8 @@ int gmx_order(int argc, char* argv[])
         { "-unsat",
           FALSE,
           etBOOL,
-          { &bUnsat },
-          "Calculate order parameters for unsaturated carbons. Note that this can"
-          "not be mixed with normal order parameters." },
+          { &bUnsatRemoved },
+          "HIDDENThis option has been removed as it didn't ever properly work." },
         { "-permolecule",
           FALSE,
           etBOOL,
@@ -1048,7 +1013,7 @@ int gmx_order(int argc, char* argv[])
     gmx_output_env_t* oenv;
 
     if (!parse_common_args(
-                &argc, argv, PCA_CAN_VIEW | PCA_CAN_TIME, NFILE, fnm, asize(pa), pa, asize(desc), desc, 0, nullptr, &oenv))
+                &argc, argv, PCA_CAN_VIEW | PCA_CAN_TIME, NFILE, fnm, asize(pa), pa, asize(desc), desc, asize(bugs), bugs, &oenv))
     {
         return 0;
     }
@@ -1127,9 +1092,11 @@ int gmx_order(int argc, char* argv[])
         {
             fprintf(stderr, "Only calculating Sz\n");
         }
-        if (bUnsat)
+        if (bUnsatRemoved)
         {
-            fprintf(stderr, "Taking carbons as unsaturated!\n");
+            gmx_fatal(FARGS,
+                      "The option to process unsaturated carbons has been removed because it never "
+                      "properly worked. Please use a different tool to analyse your data!\n");
         }
 
         top = read_top(ftp2fn(efTPR, NFILE, fnm), &pbcType); /* read topology file */
@@ -1165,7 +1132,6 @@ int gmx_order(int argc, char* argv[])
                    &slWidth,
                    nslices,
                    bSliced,
-                   bUnsat,
                    top,
                    pbcType,
                    ngrps,

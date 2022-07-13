@@ -40,17 +40,16 @@
  */
 #include "gmxpre.h"
 
-#include "gromacs/fft/fft.h"
-
 #include "config.h"
 
 #include <algorithm>
-#include <vector>
 #include <random>
+#include <vector>
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include "gromacs/fft/fft.h"
 #include "gromacs/fft/gpu_3dfft.h"
 #include "gromacs/gpu_utils/clfftinitializer.h"
 #if GMX_GPU
@@ -59,8 +58,8 @@
 #include "gromacs/utility/arrayref.h"
 #include "gromacs/utility/stringutil.h"
 
-#include "testutils/refdata.h"
 #include "testutils/mpitest.h"
+#include "testutils/refdata.h"
 #include "testutils/test_hardware_environment.h"
 #include "testutils/testasserts.h"
 #include "testutils/testmatchers.h"
@@ -69,10 +68,12 @@ namespace gmx
 {
 namespace test
 {
-using GpuFftTestParams = std::tuple<IVec, // size of grid
-                                    int,  // domains in x
-                                    int,  // domains in y
+using GpuFftTestParams = std::tuple<std::tuple<IVec, // size of grid
+                                               int,  // domains in x
+                                               int>, // domains in y
                                     FftBackend>;
+
+using GpuFftTestGridParams = std::tuple_element<0, GpuFftTestParams>::type;
 
 /*! \brief Check that the real grid after forward and backward
  * 3D transforms matches the input real grid. */
@@ -118,17 +119,19 @@ public:
         MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
         const auto& testDevice = deviceList[rank % deviceList.size()];
+        testDevice->activate();
 
         const DeviceContext& deviceContext = testDevice->deviceContext();
-        setActiveDevice(testDevice->deviceInfo());
-        const DeviceStream& deviceStream = testDevice->deviceStream();
+        const DeviceStream&  deviceStream  = testDevice->deviceStream();
 
         FftBackend backend;
 
-        int  numDomainsX;
-        int  numDomainsY;
-        IVec realGridSizeFull;
-        std::tie(realGridSizeFull, numDomainsX, numDomainsY, backend) = param;
+        int                  numDomainsX;
+        int                  numDomainsY;
+        IVec                 realGridSizeFull;
+        GpuFftTestGridParams gridParams;
+        std::tie(gridParams, backend)                        = param;
+        std::tie(realGridSizeFull, numDomainsX, numDomainsY) = gridParams;
 
         // define local grid sizes - this follows same logic as GROMACS implementation
         std::vector<int> localGridSizesX(numDomainsX);
@@ -154,10 +157,12 @@ public:
         // Allocate the device buffers
         DeviceBuffer<float> realGrid, complexGrid;
 
-        const bool     performOutOfPlaceFFT = true;
-        const MPI_Comm comm                 = MPI_COMM_WORLD;
-        const bool     allocateGrid         = true;
-        const int      nz                   = realGridSizeFull[ZZ];
+        const bool performOutOfPlaceFFT =
+                (backend != FftBackend::CuFFTMp); // CuFFTMp backend supports only in-place transform
+
+        const MPI_Comm comm         = MPI_COMM_WORLD;
+        const bool     allocateGrid = true;
+        const int      nz           = realGridSizeFull[ZZ];
         Gpu3dFft       gpu3dFft(backend,
                           allocateGrid,
                           comm,
@@ -194,7 +199,10 @@ public:
 
         // clear real grid after the forward FFT, so that we know the
         // final grid is one produced by the complex FFT, not just leftovers
-        clearDeviceBufferAsync(&realGrid, 0, sizeInReals, deviceStream);
+        if (performOutOfPlaceFFT)
+        {
+            clearDeviceBufferAsync(&realGrid, 0, sizeInReals, deviceStream);
+        }
 
         // Do the back transform
         gpu3dFft.perform3dFft(GMX_FFT_COMPLEX_TO_REAL, timingEvent);
@@ -221,12 +229,24 @@ TEST_P(GpuFftTest3D, GpuFftDecomposition)
     runTest(params);
 }
 
-std::vector<GpuFftTestParams> const inputs{
-    { IVec{ 5, 6, 9 }, 4, 1, FftBackend::HeFFTe_CUDA }, // slab decomposition
-    { IVec{ 5, 6, 9 }, 2, 2, FftBackend::HeFFTe_CUDA }  // pencil decomposition
+std::vector<GpuFftTestGridParams> const inputGrids{ { IVec{ 5, 6, 9 }, 4, 1 },
+                                                    { IVec{ 5, 6, 9 }, 2, 2 },
+                                                    { IVec{ 5, 5, 10 }, 4, 1 },
+                                                    { IVec{ 5, 5, 10 }, 2, 2 } };
+std::vector<FftBackend> const           inputBackends
+{
+#if GMX_USE_Heffte
+    FftBackend::HeFFTe_CUDA,
+#endif
+#if GMX_USE_cuFFTMp
+            FftBackend::CuFFTMp,
+#endif
 };
 
-INSTANTIATE_TEST_SUITE_P(GpuFft, GpuFftTest3D, ::testing::ValuesIn(inputs));
+INSTANTIATE_TEST_SUITE_P(GpuFft,
+                         GpuFftTest3D,
+                         ::testing::Combine(::testing::ValuesIn(inputGrids),
+                                            ::testing::ValuesIn(inputBackends)));
 
 } // namespace test
 } // namespace gmx

@@ -40,20 +40,21 @@
  * \author Prashanth Kanduri <kanduri@cscs.ch>
  * \author Sebastian Keller <keller@cscs.ch>
  */
-#include <gtest/gtest.h>
-
 #include "nblib/tpr.h"
+
+#include <gtest/gtest.h>
 
 #include "gromacs/tools/convert_tpr.h"
 
-#include "nblib/gmxcalculatorcpu.h"
-#include "nblib/tests/testsystems.h"
-#include "nblib/tests/testhelpers.h"
+#include "testutils/cmdlinetest.h"
+#include "testutils/simulationdatabase.h"
 
 #include "programs/mdrun/tests/moduletest.h"
 
-#include "testutils/cmdlinetest.h"
-#include "testutils/simulationdatabase.h"
+#include "nblib/gmxcalculatorcpu.h"
+
+#include "testhelpers.h"
+#include "testsystems.h"
 
 namespace nblib
 {

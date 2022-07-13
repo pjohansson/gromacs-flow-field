@@ -50,11 +50,12 @@
 
 #include <gtest/gtest.h>
 
-#include "buildinfo.h"
 #include "gromacs/utility/classhelpers.h"
 #include "gromacs/utility/path.h"
 
 #include "testutils/cmdlinetest.h"
+
+#include "buildinfo.h"
 
 using gmx::Path;
 
@@ -103,7 +104,7 @@ public:
     void testBinaryPathSearch(const char* argv0)
     {
         ASSERT_TRUE(env_.get() != nullptr);
-        gmx::CommandLineProgramContext info(1, &argv0, move(env_));
+        gmx::CommandLineProgramContext info(1, &argv0, std::move(env_));
         EXPECT_EQ(expectedExecutable_, info.fullBinaryPath());
     }
     void testBinaryPathSearch(const std::string& argv0) { testBinaryPathSearch(argv0.c_str()); }

@@ -38,7 +38,7 @@
  */
 #include "gmxpre.h"
 
-#include "coolstuff.h"
+#include "gromacs/utility/coolstuff.h"
 
 #include "config.h"
 
@@ -1631,7 +1631,64 @@ std::string getCoolQuote()
         { "Numbers have life; they’re not just symbols on paper.", "Shakuntala Devi" },
         { "Not everyone is capable of madness; and of those lucky enough to be capable, not many "
           "have the courage for it.",
-          "August Strindberg" }
+          "August Strindberg" },
+        { "The historical meaning of QM/MM: Quanto Mangi, Mamma Mia!",
+          "Attilio Vittorio Vargiu, at BioExcel 2022 Summer School in Sardinia" },
+        { "I wanted to have a real language where programmers could write real programs, "
+          "and see whether they would find the idea of data abstraction at all useful.",
+          "Barbara Liskov" },
+        { "I never thought about breaking barriers, I was just interested in what I was doing "
+          "and kept going.",
+          "Barbara Liskov" },
+        { "My husband was on the Internet everyday when I got the Turing award, and one day "
+          "he saw a quote by someone who said 'Why did she get the award? Everyone already knows "
+          "this!'",
+          "Barbara Liskov" },
+        { "When I got my first job as a programmer there were quite a number of women doing "
+          "programming "
+          "because there was no computer science education and people were hired from many "
+          "different "
+          "fields if it seemed like they could do the work. It was better then, probably, in terms "
+          "of "
+          "proportions, not necessarily in women being paid as much as men and so forth, but "
+          "definitely, "
+          "there were women around.",
+          "Barbara Liskov" },
+        { "Prior to 1965 there were none, and after 1965 there was a nun.",
+          "Sister Mary Kenneth Keller regarding women with PhDs in computer science" },
+        { "We're having an information explosion, among others, and it's certainly obvious that "
+          "information is of no use unless it's available.",
+          "Sister Mary Kenneth Keller" },
+        { "For the first time we can now mechanically simulate the cognitive process. We can "
+          "make studies in artificial intelligence. Beyond that, this mechanism can be used to "
+          "assist "
+          "humans in learning. As we are going to have more mature students in greater numbers as "
+          "time "
+          "goes on, this type of teaching will probably be increasingly important.",
+          "Sister Mary Kenneth Keller" },
+        { "Why would I pay GitHub $100/year for an AI to tell me what code to write when men "
+          "do it for free?",
+          "Safia Abdalla" },
+        { "So can we think of the canonical ensemble sort of like if you ran the same "
+          "season of temptation island over and over again and took statistics about how many "
+          "times each person hooks up with each other person?",
+          "Teddy Press" },
+        { "The biggest lie in science is 'data and code available upon request'", "Michael Eisen" },
+        { "What do you want out of life?", "Jack Kerouac, On The Road" },
+        { "Developer accused of unreadable code refuses to comment", "Molly Struve" },
+        { "It's hard to ignore 12 orders of magnitude", "John Urbanic" },
+        { "Success is going from one failure to another without loss of enthusiasm",
+          "Winston Churchill" },
+        { "Apologies to the astrophysics student I met at a party years ago. When you told me "
+          "how many hours a day you used 4chan and how much you love it, I gave you a funny "
+          "look and walked away. Now, a decade later, I realize you were talking about Fortran.",
+          "Anonymous" },
+        { "The only place success comes before work is in the dictionary", "Vince Lombardi" },
+        { "They call me 007: 0 pull requests reviewed, 0 features completed, 7 bugs created.",
+          "Anonymous" },
+        { "Optimist: The glass is 1/2 full. Pessimist: The glass is 1/2 empty. "
+          "Excel: The glass is January 2nd.",
+          "John Feminella" }
     };
 
     if (beCool())

@@ -83,10 +83,9 @@ getDatabaseEntry(const std::string& rtpname, gmx::ArrayRef<const PreprocessResid
  * Read atom types into database.
  *
  * \param[in] ffdir Force field directory.
- * \param[in] tab Symbol table for names.
  * \returns Atom type database.
  */
-PreprocessingAtomTypes read_atype(const char* ffdir, t_symtab* tab);
+PreprocessingAtomTypes read_atype(const char* ffdir);
 
 /*! \brief
  * Read in database, append to exisiting.

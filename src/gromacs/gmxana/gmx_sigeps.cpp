@@ -42,10 +42,7 @@
 #include "gromacs/gmxana/gmx_ana.h"
 #include "gromacs/math/functions.h"
 #include "gromacs/math/units.h"
-#include "gromacs/math/vec.h"
-#include "gromacs/mdtypes/md_enums.h"
 #include "gromacs/utility/arraysize.h"
-#include "gromacs/utility/smalloc.h"
 
 static real pot(real x, real qq, real c6, real cn, int npow)
 {

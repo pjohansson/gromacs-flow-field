@@ -51,7 +51,6 @@
 #include "gromacs/topology/topology.h"
 #include "gromacs/utility/arraysize.h"
 #include "gromacs/utility/cstringutil.h"
-#include "gromacs/utility/futil.h"
 #include "gromacs/utility/smalloc.h"
 
 static void gyro_eigen(double** gyr, double* eig, double** eigv, int* ord)

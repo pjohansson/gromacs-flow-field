@@ -51,11 +51,12 @@
 #include "gromacs/mdtypes/commrec.h"
 #include "gromacs/mdtypes/fcdata.h"
 #include "gromacs/mdtypes/inputrec.h"
-#include "gromacs/mdtypes/mdatom.h"
 #include "gromacs/mdtypes/md_enums.h"
+#include "gromacs/mdtypes/mdatom.h"
 #include "gromacs/mdtypes/state.h"
 #include "gromacs/pbcutil/ishift.h"
 #include "gromacs/pbcutil/pbc.h"
+#include "gromacs/topology/mtop_atomloops.h"
 #include "gromacs/topology/mtop_util.h"
 #include "gromacs/topology/topology.h"
 #include "gromacs/utility/arrayref.h"
@@ -564,7 +565,7 @@ real ta_disres(int              nfa,
             /* Correct the force for the number of restraints */
             if (bConservative)
             {
-                if (-f_scal / k0 > up2 - up1)
+                if ((k0 != 0) && (-f_scal / k0 > up2 - up1))
                 {
                     f_scal = fmax_scal;
                 }
@@ -582,7 +583,7 @@ real ta_disres(int              nfa,
             else
             {
                 f_scal /= npair;
-                if (-f_scal / k0 > up2 - up1)
+                if ((k0 != 0) && (-f_scal / k0 > up2 - up1))
                 {
                     f_scal = fmax_scal;
                 }

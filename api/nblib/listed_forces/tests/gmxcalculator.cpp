@@ -41,13 +41,15 @@
  * \author Prashanth Kanduri <kanduri@cscs.ch>
  * \author Sebastian Keller <keller@cscs.ch>
  */
-#include "nblib/exception.h"
-#include "nblib/listed_forces/conversionscommon.h"
-
 #include "gmxcalculator.h"
+
+#include "listed_forces/conversionscommon.h"
+
 #include "gromacs/listed_forces/listed_forces.h"
 #include "gromacs/pbcutil/ishift.h"
 #include "gromacs/timing/wallcycle.h"
+
+#include "nblib/exception.h"
 
 namespace nblib
 {
@@ -61,9 +63,9 @@ ListedGmxCalculator::ListedGmxCalculator(const ListedInteractionData& interactio
     box_(box),
     shiftBuffer(gmx::c_numShiftVectors, gmx::RVec{ 0, 0, 0 }),
     forceBuffer(2 * numParticles, gmx::RVec{ 0, 0, 0 }),
-    shiftProxy(gmx::ArrayRefWithPadding<gmx::RVec>(&forceBuffer[0],
-                                                   &forceBuffer[numParticles],
-                                                   &forceBuffer[2 * numParticles]),
+    shiftProxy(gmx::ArrayRefWithPadding<gmx::RVec>(forceBuffer.data(),
+                                                   forceBuffer.data() + numParticles,
+                                                   forceBuffer.data() + 2 * numParticles),
                true,
                shiftBuffer),
     virialProxy(forceBuffer, true),
@@ -96,8 +98,7 @@ ListedGmxCalculator::ListedGmxCalculator(const ListedInteractionData& interactio
 
     fr.natoms_force = numParticles;
 
-    mdatoms_.chargeA = nullptr;
-    mdatoms_.nr      = nP;
+    mdatoms_.nr = nP;
 }
 
 void ListedGmxCalculator::compute(gmx::ArrayRef<const gmx::RVec>     x,
@@ -146,7 +147,11 @@ void ListedGmxCalculator::compute(gmx::ArrayRef<const gmx::RVec>     x,
                                 &enerd,
                                 &nrnb,
                                 lambdaBuffer,
-                                &mdatoms_,
+                                mdatoms_.chargeA,
+                                mdatoms_.chargeB,
+                                makeConstArrayRef(mdatoms_.bPerturbed),
+                                mdatoms_.cENER,
+                                mdatoms_.nPerturbed,
                                 nullptr,
                                 stepWork);
 

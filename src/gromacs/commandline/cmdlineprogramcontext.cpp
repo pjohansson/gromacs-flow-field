@@ -54,11 +54,12 @@
 #include <string>
 #include <vector>
 
-#include "buildinfo.h"
 #include "gromacs/utility/exceptions.h"
 #include "gromacs/utility/gmxassert.h"
 #include "gromacs/utility/path.h"
 #include "gromacs/utility/stringutil.h"
+
+#include "buildinfo.h"
 
 namespace gmx
 {
@@ -355,7 +356,7 @@ CommandLineProgramContext::CommandLineProgramContext(int argc, const char* const
 CommandLineProgramContext::CommandLineProgramContext(int                          argc,
                                                      const char* const            argv[],
                                                      ExecutableEnvironmentPointer env) :
-    impl_(new Impl(argc, argv, move(env)))
+    impl_(new Impl(argc, argv, std::move(env)))
 {
 }
 

@@ -825,7 +825,7 @@ class GromacsTree(object):
         xmldir = os.path.join(self._build_root, 'docs', 'html', 'doxygen', 'xml')
         self._docset = xml.DocumentationSet(xmldir, self._reporter)
         if only_files:
-            if isinstance(only_files, collections.Iterable):
+            if isinstance(only_files, collections.abc.Iterable):
                 filelist = [x.get_relpath() for x in only_files]
                 self._docset.load_file_details(filelist)
             else:
@@ -1049,6 +1049,6 @@ class GromacsTree(object):
         """Get list of files that contain #define macros whose usage needs to
         be checked."""
         return (self._files['src/config.h'],
-                self._files['src/gromacs/simd/simd.h'],
+                self._files['src/gromacs/simd/include/gromacs/simd/simd.h'],
                 self._files['src/gromacs/ewald/pme_simd.h'],
                 self._files['src/gromacs/nbnxm/nbnxm_simd.h'])

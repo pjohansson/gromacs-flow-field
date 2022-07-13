@@ -127,7 +127,7 @@ function(gmx_add_nvcc_flag_if_supported _output_variable_name_to_append_to _flag
     if (NOT ${_flags_cache_variable_name} AND NOT WIN32)
         message(STATUS "Checking if nvcc accepts flags ${ARGN}")
         execute_process(
-            COMMAND ${CUDA_NVCC_EXECUTABLE} ${ARGN} "${CMAKE_SOURCE_DIR}/cmake/TestCUDA.cu"
+            COMMAND ${CUDA_NVCC_EXECUTABLE} ${ARGN} -ccbin ${CUDA_HOST_COMPILER} "${CMAKE_SOURCE_DIR}/cmake/TestCUDA.cu"
             RESULT_VARIABLE _cuda_success
             OUTPUT_QUIET
             ERROR_QUIET
@@ -185,7 +185,10 @@ else()
     gmx_add_nvcc_flag_if_supported(GMX_CUDA_NVCC_GENCODE_FLAGS NVCC_HAS_GENCODE_COMPUTE_AND_SM_70 -gencode arch=compute_70,code=sm_70)
     gmx_add_nvcc_flag_if_supported(GMX_CUDA_NVCC_GENCODE_FLAGS NVCC_HAS_GENCODE_COMPUTE_AND_SM_75 -gencode arch=compute_75,code=sm_75)
     gmx_add_nvcc_flag_if_supported(GMX_CUDA_NVCC_GENCODE_FLAGS NVCC_HAS_GENCODE_COMPUTE_AND_SM_80 -gencode arch=compute_80,code=sm_80)
-    gmx_add_nvcc_flag_if_supported(GMX_CUDA_NVCC_GENCODE_FLAGS NVCC_HAS_GENCODE_COMPUTE_AND_SM_86 -gencode arch=compute_86,code=sm_86)
+    # We use this to avoid a warning in our GitLab CI with a gcc 7 base image (see above for details)
+    if (CMAKE_CXX_COMPILER_ID MATCHES "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 8 AND NOT DEFINED ENV{GITLAB_CI})
+        gmx_add_nvcc_flag_if_supported(GMX_CUDA_NVCC_GENCODE_FLAGS NVCC_HAS_GENCODE_COMPUTE_AND_SM_86 -gencode arch=compute_86,code=sm_86)
+    endif()
     # Requesting sm or compute 35, 37, or 50 triggers deprecation messages with
     # nvcc 11.0, which we need to suppress for use in CI
     gmx_add_nvcc_flag_if_supported(GMX_CUDA_NVCC_GENCODE_FLAGS NVCC_HAS_WARNING_NO_DEPRECATED_GPU_TARGETS -Wno-deprecated-gpu-targets)
@@ -210,20 +213,14 @@ endif()
 # FindCUDA.cmake is unaware of the mechanism used by cmake to embed
 # the compiler flag for the required C++ standard in the generated
 # build files, so we have to pass it ourselves
-
-# gcc-7 pre-dated C++17, so uses the -std=c++1z compiler flag for it,
-# which modern nvcc does not recognize. So we work around that by
-# compiling in C++14 mode. Clang doesn't have this problem because nvcc
-# only supports version of clang that already understood -std=c++17
-if (CMAKE_CXX_COMPILER_ID MATCHES "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 8)
-    list(APPEND GMX_CUDA_NVCC_FLAGS "${CMAKE_CXX14_STANDARD_COMPILE_OPTION}")
-else()
-    list(APPEND GMX_CUDA_NVCC_FLAGS "${CMAKE_CXX17_STANDARD_COMPILE_OPTION}")
-endif()
+list(APPEND GMX_CUDA_NVCC_FLAGS "${CMAKE_CXX17_STANDARD_COMPILE_OPTION}")
 
 # assemble the CUDA flags
 list(APPEND GMX_CUDA_NVCC_FLAGS "${GMX_CUDA_NVCC_GENCODE_FLAGS}")
 gmx_add_nvcc_flag_if_supported(GMX_CUDA_NVCC_FLAGS NVCC_HAS_USE_FAST_MATH -use_fast_math)
+# Add warnings
+gmx_add_nvcc_flag_if_supported(GMX_CUDA_NVCC_FLAGS NVCC_HAS_PTXAS_WARN_DOUBLE_USAGE -Xptxas -warn-double-usage)
+gmx_add_nvcc_flag_if_supported(GMX_CUDA_NVCC_FLAGS NVCC_HAS_PTXAS_WERROR -Xptxas -Werror)
 
 # assemble the CUDA host compiler flags
 list(APPEND GMX_CUDA_NVCC_FLAGS "${CUDA_HOST_COMPILER_OPTIONS}")

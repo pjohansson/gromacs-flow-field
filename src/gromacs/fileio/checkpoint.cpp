@@ -45,7 +45,6 @@
 #include <array>
 #include <memory>
 
-#include "buildinfo.h"
 #include "gromacs/fileio/filetypes.h"
 #include "gromacs/fileio/gmxfio.h"
 #include "gromacs/fileio/gmxfio_xdr.h"
@@ -88,6 +87,8 @@
 #include "gromacs/utility/sysinfo.h"
 #include "gromacs/utility/textwriter.h"
 #include "gromacs/utility/txtdump.h"
+
+#include "buildinfo.h"
 
 #define CPT_MAGIC1 171817
 #define CPT_MAGIC2 171819
@@ -2323,10 +2324,11 @@ void write_checkpoint_data(t_fileio*                         fp,
     headerContents.flags_eks = 0;
     if (state->ekinstate.bUpToDate)
     {
+        // Likely only EkinNumber, EkinHalfStep, EkinFullStep and DEkinDLambda
+        // are necessary and the rest can go
         headerContents.flags_eks = (enumValueToBitMask(StateKineticEntry::EkinNumber)
                                     | enumValueToBitMask(StateKineticEntry::EkinHalfStep)
                                     | enumValueToBitMask(StateKineticEntry::EkinFullStep)
-                                    | enumValueToBitMask(StateKineticEntry::EkinHalfStepOld)
                                     | enumValueToBitMask(StateKineticEntry::EkinNoseHooverScaleFullStep)
                                     | enumValueToBitMask(StateKineticEntry::EkinNoseHooverScaleHalfStep)
                                     | enumValueToBitMask(StateKineticEntry::VelocityScale)

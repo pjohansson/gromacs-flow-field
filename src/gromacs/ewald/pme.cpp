@@ -108,9 +108,9 @@
 #include "gromacs/utility/gmxmpi.h"
 #include "gromacs/utility/gmxomp.h"
 #include "gromacs/utility/logger.h"
+#include "gromacs/utility/message_string_collector.h"
 #include "gromacs/utility/real.h"
 #include "gromacs/utility/smalloc.h"
-#include "gromacs/utility/message_string_collector.h"
 #include "gromacs/utility/unique_cptr.h"
 
 #include "calculate_spline_moduli.h"
@@ -159,10 +159,10 @@ bool pme_gpu_supports_input(const t_inputrec& ir, std::string* error)
     gmx::MessageStringCollector errorReasons;
     // Before changing the prefix string, make sure that it is not searched for in regression tests.
     errorReasons.startContext("PME GPU does not support:");
-    errorReasons.appendIf(!EEL_PME(ir.coulombtype),
+    errorReasons.appendIf(!usingPme(ir.coulombtype),
                           "Systems that do not use PME for electrostatics.");
     errorReasons.appendIf((ir.pme_order != 4), "Interpolation orders other than 4.");
-    errorReasons.appendIf(EVDW_PME(ir.vdwtype), "Lennard-Jones PME.");
+    errorReasons.appendIf(usingLJPme(ir.vdwtype), "Lennard-Jones PME.");
     errorReasons.appendIf(!EI_DYNAMICS(ir.eI), "Non-dynamical integrator (use md, sd, etc).");
     errorReasons.finishContext();
     if (error != nullptr)
@@ -200,7 +200,8 @@ static bool pme_gpu_check_restrictions(const gmx_pme_t* pme, std::string* error)
     gmx::MessageStringCollector errorReasons;
     // Before changing the prefix string, make sure that it is not searched for in regression tests.
     errorReasons.startContext("PME GPU does not support:");
-    errorReasons.appendIf((!GMX_GPU_CUDA && pme->nnodes != 1), "PME decomposition.");
+    errorReasons.appendIf((!GMX_GPU_CUDA && pme->nnodes != 1 && pme->ndecompdim >= 2),
+                          "2D PME decomposition (use GMX_PMEONEDD to force 1D).");
     errorReasons.appendIf((pme->pme_order != 4), "interpolation orders other than 4.");
     errorReasons.appendIf(pme->doLJ, "Lennard-Jones PME.");
     errorReasons.appendIf(GMX_DOUBLE, "Double precision build of GROMACS.");
@@ -242,8 +243,8 @@ static void setup_coordinate_communication(PmeAtomComm* atc)
     n = 0;
     for (i = 1; i <= nslab / 2; i++)
     {
-        fw = (atc->nodeid + i) % nslab;
-        bw = (atc->nodeid - i + nslab) % nslab;
+        fw = (atc->slabIndex + i) % nslab;
+        bw = (atc->slabIndex - i + nslab) % nslab;
         if (n < nslab - 1)
         {
             atc->slabCommSetup[n].node_dest = fw;
@@ -296,19 +297,22 @@ PmeAtomComm::PmeAtomComm(MPI_Comm   PmeMpiCommunicator,
     {
         mpi_comm = PmeMpiCommunicator;
 #    if GMX_MPI
+        // The MPI ranks are indentical to the slab indices
         MPI_Comm_size(mpi_comm, &nslab);
-        MPI_Comm_rank(mpi_comm, &nodeid);
+        MPI_Comm_rank(mpi_comm, &slabIndex);
 #    endif
     }
     if (debug)
     {
-        fprintf(debug, "For PME atom communication in dimind %d: nslab %d rank %d\n", dimind, nslab, nodeid);
+        fprintf(debug, "For PME atom communication in dimind %d: nslab %d rank %d\n", dimind, nslab, slabIndex);
     }
 
     if (nslab > 1)
     {
         slabCommSetup.resize(nslab);
         setup_coordinate_communication(this);
+
+        bufferIndices.resize(nslab);
 
         count_thread.resize(nthread);
         for (auto& countThread : count_thread)
@@ -718,8 +722,8 @@ gmx_pme_t* gmx_pme_init(const t_commrec*     cr,
      * not calculating free-energy for Coulomb and/or LJ while gmx_pme_init()
      * configures with free-energy, but that has never been tested.
      */
-    pme->doCoulomb = EEL_PME(ir->coulombtype);
-    pme->doLJ      = EVDW_PME(ir->vdwtype);
+    pme->doCoulomb = usingPme(ir->coulombtype);
+    pme->doLJ      = usingLJPme(ir->vdwtype);
     pme->bFEP_q    = ((ir->efep != FreeEnergyPerturbationType::No) && bFreeEnergy_q);
     pme->bFEP_lj   = ((ir->efep != FreeEnergyPerturbationType::No) && bFreeEnergy_lj);
     pme->bFEP      = (pme->bFEP_q || pme->bFEP_lj);

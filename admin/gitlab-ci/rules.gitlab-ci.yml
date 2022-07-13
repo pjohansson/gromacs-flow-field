@@ -31,6 +31,11 @@
   if: '$GROMACS_RELEASE == null'
   when: never
 
+# Include in pipelines triggered through the API.
+.rules-element:if-api-then-on-success: &if-api-then-on-success
+  if: '$CI_PIPELINE_SOURCE == "api"'
+  when: on_success
+
 # Include in pipelines triggered through the web interface.
 .rules-element:if-web-then-on-success: &if-web-then-on-success
   if: '$CI_PIPELINE_SOURCE == "web"'
@@ -45,6 +50,11 @@
 .rules-element:if-schedule-then-on-success: &if-schedule-then-on-success
   if: '$CI_PIPELINE_SOURCE == "schedule"'
   when: on_success
+
+# Only run this job manual, never automatic
+.rules-element:user-triggered-only: &user-triggered-only
+  if: '$GROMACS_RELEASE'
+  when: manual
 
 # Exclude from selective "schedule" pipelines, e.g. just those
 # that should run the post-merge-acceptance jobs.
@@ -68,13 +78,15 @@
 .rules-element:if-post-merge-acceptance-or-mr-then-on-success: &if-post-merge-acceptance-or-mr-then-on-success
   if: '$CI_PIPELINE_SOURCE == "merge_request_event" ||
        ($CI_PIPELINE_SOURCE == "push" &&
-        $CI_COMMIT_REF_NAME == "release-2022")'
+        ($CI_COMMIT_REF_NAME =~ /^release-.*/ ||
+         $CI_COMMIT_REF_NAME == "main"))'
   when: on_success
 
 # Include job only for post submit push
 .rules-element:if-post-merge-acceptance-then-on-success: &if-post-merge-acceptance-then-on-success
   if: '$CI_PIPELINE_SOURCE == "push" &&
-       $CI_COMMIT_REF_NAME == "release-2022"'
+       ($CI_COMMIT_REF_NAME =~ /^release-.*/ ||
+        $CI_COMMIT_REF_NAME == "main")'
   when: on_success
 
 # When composing a rule set, note that the first matching rule is applied.
@@ -85,7 +97,7 @@
 
 # Jobs to run after successful merge of a new commit.
 # Only run on GROMACS infrastructure and only when merging into
-# the master or release branches.
+# the main or release branches.
 .rules:post-merge-acceptance:
   rules:
     - *if-not-gromacs-then-never
@@ -127,7 +139,18 @@
     - *if-not-release-then-never
     - *if-post-merge-acceptance-then-never
     - *if-web-then-on-success
+    - *if-api-then-on-success
     - *if-schedule-then-on-success
+
+# Rule to run a job only in nightly release-preparation pipelines with manual control
+# Checks if the GROMACS_RELEASE variable was set (typically through the GitLab web interface).
+# Excludes merge_requests and non-gromacs projects.
+.rules:nightly-only-for-release-user-triggered:
+  rules:
+    - *if-not-gromacs-then-never
+    - *if-not-release-then-never
+    - *if-post-merge-acceptance-then-never
+    - *user-triggered-only
 
 # Jobs that run on schedules, but not for merge requests or when GROMACS_RELEASE
 # is set. Excludes non-gromacs projects.

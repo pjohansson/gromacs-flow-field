@@ -35,7 +35,9 @@
 #ifndef GMX_MDLIB_CALC_VERLETBUF_H
 #define GMX_MDLIB_CALC_VERLETBUF_H
 
+#include "gromacs/math/vectypes.h"
 #include "gromacs/utility/basedefinitions.h"
+#include "gromacs/utility/gmxmpi.h"
 #include "gromacs/utility/real.h"
 
 struct gmx_mtop_t;
@@ -76,6 +78,13 @@ static const real verlet_buffer_ratio_NVE_T0     = 0.10;
  */
 VerletbufListSetup verletbufGetListSetup(Nbnxm::KernelType nbnxnKernelType);
 
+//! \brief Chance target to use in minCellSizeForAtomDisplacement()
+enum class ChanceTarget
+{
+    Atom,  //<! Indicates that the chance passed is applied to each atom individually
+    System //<! Indicates that the chance passed is for the max displacement over all atoms
+};
+
 /* Enum for choosing the list type for verletbufGetSafeListSetup() */
 enum class ListSetupType
 {
@@ -89,6 +98,27 @@ enum class ListSetupType
  * buffer size estimated with this setup will be conservative.
  */
 VerletbufListSetup verletbufGetSafeListSetup(ListSetupType listType);
+
+/* Returns the atom density weighted over cells of size \p cutoff
+ *
+ * A grid is put over the unit cell with a grid size of, approximately, cutoff.
+ * The atom count is determined for each set. The effective density is then
+ * calculated as the cell density weighted by atom count.
+ * This in intended for passing to \p calcVerletBufferSize().
+ *
+ * \note This is an expensive function as it needs to loop over all atoms
+ *       in the system.
+ * \note When communicator!=MPI_COMM_NULL computes on rank 0 and broadcasts to the other ranks.
+ *
+ * \param[in] coordinates   The coordinates of all atoms, can be empty on non-master ranks
+ * \param[in] box           The simulation unit cell
+ * \param[in] cutoff        The maximum non-bonded interaction cut-off distance
+ * \param[in] communicator  MPI communicator, can be MPI_COMM_NULL when not called in parallel
+ */
+real computeEffectiveAtomDensity(gmx::ArrayRef<const gmx::RVec> coordinates,
+                                 const matrix                   box,
+                                 real                           cutoff,
+                                 MPI_Comm                       communicator);
 
 /* Returns the non-bonded pair-list radius including computed buffer
  *
@@ -106,7 +136,7 @@ VerletbufListSetup verletbufGetSafeListSetup(ListSetupType listType);
  *       contribution to the drift exaclty, so we approximate.
  *
  * \param[in] mtop          The system topology
- * \param[in] boxVolume     The volume of the unit cell
+ * \param[in] effectiveAtomDensity  The effective atom density, use computeEffectiveAtomDensity()
  * \param[in] inputrec      The input record
  * \param[in] nstlist       The pair list update frequency in steps (is not taken from \p inputrec)
  * \param[in] listLifetime  The lifetime of the pair-list, usually nstlist-1, but could be different
@@ -116,7 +146,7 @@ VerletbufListSetup verletbufGetSafeListSetup(ListSetupType listType);
  * \returns The computed pair-list radius including buffer
  */
 real calcVerletBufferSize(const gmx_mtop_t&         mtop,
-                          real                      boxVolume,
+                          real                      effectiveAtomDensity,
                           const t_inputrec&         inputrec,
                           int                       nstlist,
                           int                       listLifetime,
@@ -126,25 +156,37 @@ real calcVerletBufferSize(const gmx_mtop_t&         mtop,
 /* Convenience type */
 using PartitioningPerMoltype = gmx::ArrayRef<const gmx::RangePartitioning>;
 
-/* Determines the mininum cell size based on atom displacement
+/*! \brief Determines the minimum cell size based on atom displacement
  *
  * The value returned is the minimum size for which the chance that
- * an atom or update group crosses to non nearest-neighbor cells
- * is <= chanceRequested within ir.nstlist steps.
- * Update groups are used when !updateGrouping.empty().
+ * each atom (with \p chanceTarget=ChangeTarget::Atom) or any atom or
+ * update group (with \p chanceTarget=ChangeTarget::System) crosses into
+ * a non nearest-neighbor cell is <= chanceRequested within ir.nstlist steps.
+ * Update groups are used when !updateGrouping.empty(). In that case
+ * the displacement of the center of geometry of the update group is considered.
  * Without T-coupling, SD or BD, we can not estimate atom displacements
- * and fall back to the, crude, estimate of using the pairlist buffer size.
+ * and fall back to the, crude, estimate of using the pair list buffer size.
  *
  * Note: Like the Verlet buffer estimate, this estimate is based on
  *       non-interacting atoms and constrained atom-pairs. Therefore for
  *       any system that is not an ideal gas, this will be an overestimate.
  *
- * Note: This size increases (very slowly) with system size.
+ * Note: With \p chanceTarget=ChangeTarget::System this size increases
+ *       (very slowly) with the number of atoms in the system.
+ *
+ * \param[in] mtop            The system topology
+ * \param[in] ir              The input record
+ * \param[in] updateGrouping  The update grouping within each molecule type
+ * \param[in] chanceRequested The requested chance
+ * \param[in] chanceTarget    Whether \p chance refors to a displacement per-atom or maximum over all atoms
+ *
+ * \returns  The minimum cell size given \p chanceRequested.
  */
 real minCellSizeForAtomDisplacement(const gmx_mtop_t&      mtop,
                                     const t_inputrec&      ir,
                                     PartitioningPerMoltype updateGrouping,
-                                    real                   chanceRequested);
+                                    real                   chanceRequested,
+                                    ChanceTarget           chanceTarget);
 
 /* Struct for unique atom type for calculating the energy drift.
  * The atom displacement depends on mass and constraints.

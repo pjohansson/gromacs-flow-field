@@ -54,6 +54,7 @@
 #include "gromacs/pbcutil/pbc.h"
 #include "gromacs/topology/idef.h"
 #include "gromacs/topology/ifunc.h"
+#include "gromacs/topology/mtop_atomloops.h"
 #include "gromacs/topology/mtop_util.h"
 #include "gromacs/topology/topology.h"
 #include "gromacs/utility/listoflists.h"
@@ -751,11 +752,6 @@ real computeMaxUpdateGroupRadius(const gmx_mtop_t&                      mtop,
     }
 
     return maxRadius;
-}
-
-real computeCutoffMargin(PbcType pbcType, matrix box, const real rlist)
-{
-    return std::sqrt(max_cutoff2(pbcType, box)) - rlist;
 }
 
 UpdateGroups::UpdateGroups(std::vector<RangePartitioning>&& updateGroupingPerMoleculeType,

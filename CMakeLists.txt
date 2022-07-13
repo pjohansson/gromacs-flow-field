@@ -40,20 +40,30 @@ cmake_policy(SET CMP0048 NEW) # As of CMake 3.22, default is still "OLD"
 # This needs to be set before project() in order to pick up toolchain files
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake ${CMAKE_CURRENT_SOURCE_DIR}/cmake/Platform)
 
-if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
-    # Providing a default value >=10.14 helps to find modern C++ compatibility,
-    # such as by defaulting to the Clang libc++ instead of libstdc++.
-    set(CMAKE_OSX_DEPLOYMENT_TARGET 10.14 CACHE STRING
-        "OS X deployment target affects default SDK version and compiler flags.")
-    # By default, limit the binary architecture to a single 64-bit build.
-    set(CMAKE_OSX_ARCHITECTURES x86_64 CACHE STRING
-        "OS X architecture affects the compatibility of the (potentially fat) binaries produced."
-        FORCE)
+if(APPLE)
+    if(CMAKE_OSX_DEPLOYMENT_TARGET)
+        # Providing a default value >=10.14 helps to find modern C++ compatibility,
+        # such as by defaulting to the Clang libc++ instead of libstdc++.
+        if(CMAKE_OSX_DEPLOYMENT_TARGET VERSION_LESS "10.14")
+            if((NOT DEFINED _gmx_osx_deployment_target_checked)
+                    OR NOT (_gmx_osx_deployment_target_checked VERSION_EQUAL CMAKE_OSX_DEPLOYMENT_TARGET))
+                message(WARNING "CMAKE_OSX_DEPLOYMENT_TARGET less than 10.14 may have compatibility problems.")
+            endif()
+        endif()
+        set(_gmx_osx_deployment_target_checked ${CMAKE_OSX_DEPLOYMENT_TARGET} CACHE STRING
+                "Last seen CMAKE_OSX_DEPLOYMENT_TARGET, if previously set." FORCE)
+    endif()
+    if(CMAKE_OSX_ARCHITECTURES)
+        string(FIND ${CMAKE_OSX_ARCHITECTURES} i386 _substring_index)
+        if(_substring_index GREATER_EQUAL 0)
+            message(FATAL_ERROR "CMAKE_OSX_ARCHITECTURES includes i386, but GROMACS requires 64-bit architecture.")
+        endif()
+    endif()
 endif()
 
 # The GROMACS convention is that these are the version number of the next
 # release that is going to be made from this branch.
-project(Gromacs VERSION 2022.0)
+project(Gromacs VERSION 2023.0)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -238,6 +248,11 @@ mark_as_advanced(GMX_DISABLE_FFTW_MEASURE)
 gmx_dependent_option(
     GMX_USE_HEFFTE
     "Use HeFFTe for FFT support. Used with CUDA backend"
+    OFF
+    "GMX_GPU STREQUAL CUDA;GMX_MPI")
+gmx_dependent_option(
+    GMX_USE_CUFFTMP
+    "Use cuFFTMp for FFT support. Used with CUDA backend"
     OFF
     "GMX_GPU STREQUAL CUDA;GMX_MPI")
 
@@ -530,10 +545,13 @@ option(GMX_EXTERNAL_TINYXML2 "Use external TinyXML-2 instead of compiling the ve
 mark_as_advanced(GMX_EXTERNAL_TINYXML2)
 if(GMX_EXTERNAL_TINYXML2)
     # Find an external TinyXML-2 library.
-    find_package(TinyXML-2 3.0.0)
+    find_package(TinyXML2 3.0.0)
     set(HAVE_TINYXML2 ${TinyXML2_FOUND})
     if(NOT HAVE_TINYXML2)
         message(FATAL_ERROR "External TinyXML-2 could not be found, please adjust your search paths")
+    endif()
+    if (TinyXML2_FOUND AND TinyXML2_VERSION VERSION_GREATER "6")
+        message(FATAL_ERROR "External TinyXML-2 is later than the highest supported version 6. Please adjust your search paths to include a supported version")
     endif()
 endif()
 
@@ -548,19 +566,6 @@ if (GMX_EXTRAE)
   else()
     message(FATAL_ERROR "EXTRAE library was not found. Please add the correct path to CMAKE_PREFIX_PATH")
   endif()
-endif()
-
-option(GMX_X11 "Use X window system" OFF)
-if (GMX_X11)
-    find_package(X11)
-    # X11 includes/libraries are only set in the ngmx subdirectory!
-    if(NOT X11_FOUND)
-        message(FATAL_ERROR
-                "X11 include files and/or libraries were not found. "
-                "Set GMX_X11=OFF to compile without X11 support. "
-                "gmx view will not be available.")
-    endif()
-    include_directories(SYSTEM ${X11_INCLUDE_DIR})
 endif()
 
 include(ThreadMPI)
@@ -670,6 +675,18 @@ if(GMX_USE_HEFFTE)
         message(FATAL_ERROR "HeFFTe support requires a library MPI build")
     endif()
     find_package(Heffte 2.2.0 REQUIRED CUDA)
+    set(GMX_USE_Heffte ${Heffte_FOUND})
+endif()
+
+if(GMX_USE_CUFFTMP)
+    if(NOT GMX_GPU_CUDA)
+        message(FATAL_ERROR "cuFFTMp support requires a CUDA build")
+    endif()
+    if(NOT GMX_LIB_MPI)
+        message(FATAL_ERROR "cuFFTMp support requires a library MPI build")
+    endif()
+    find_package(cuFFTMp REQUIRED CUDA)
+    set(GMX_USE_cuFFTMp ${cuFFTMp_FOUND})
 endif()
 
 if(WIN32)
@@ -854,8 +871,6 @@ mark_as_advanced(GMX_PYTHON_PACKAGE)
 find_package(ImageMagick QUIET COMPONENTS convert)
 include(gmxTestImageMagick)
 GMX_TEST_IMAGEMAGICK(IMAGE_CONVERT_POSSIBLE)
-# TODO: Resolve circular dependency between docs, gromacs, and python_packaging
-add_subdirectory(docs)
 add_subdirectory(share)
 add_subdirectory(scripts)
 add_subdirectory(api)
@@ -868,6 +883,8 @@ endif()
 if(GMX_PYTHON_PACKAGE)
     add_subdirectory(python_packaging)
 endif()
+
+add_subdirectory(docs)
 
 gmx_cpack_write_config()
 

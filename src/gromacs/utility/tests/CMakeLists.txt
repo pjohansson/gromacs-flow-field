@@ -35,6 +35,7 @@ gmx_add_unit_test(UtilityUnitTests utility-test
     CPP_SOURCE_FILES
         alignedallocator.cpp
         arrayref.cpp
+        booltype.cpp
         bitmask32.cpp bitmask64.cpp bitmask128.cpp
         cstringutil.cpp
         defaultinitializationallocator.cpp
@@ -58,8 +59,9 @@ gmx_add_unit_test(UtilityUnitTests utility-test
         textwriter.cpp
         typetraits.cpp
         )
-# TODO: Explicitly link specific modules.
+# TODO: Remove `legacy_modules` once specific modules are explicitly linked.
 target_link_libraries(utility-test PRIVATE legacy_modules)
+target_link_libraries(utility-test PRIVATE utility)
 
 gmx_add_mpi_unit_test(UtilityMpiUnitTests utility-mpi-test 2
     CPP_SOURCE_FILES

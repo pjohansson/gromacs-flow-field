@@ -46,7 +46,8 @@
 
 #include "gromacs/math/multidimarray.h"
 #include "gromacs/math/utilities.h"
-#include "gromacs/math/vec.h"
+#include "gromacs/math/vectypes.h"
+#include "gromacs/utility/gmxassert.h"
 #include "gromacs/utility/real.h"
 
 namespace gmx
@@ -81,6 +82,28 @@ constexpr real trace(Matrix3x3ConstSpan matrixView)
     return matrixView(0, 0) + matrixView(1, 1) + matrixView(2, 2);
 }
 
+/*! \brief Create a diagonal matrix of ElementType with N * M elements.
+ *
+ * \tparam ElementType type of matrix elements
+ * \tparam N           number of rows
+ * \tparam M           number of columns, defaults to number of rows if not set
+ * \param  value       The value that fills the leading diagonal
+ *
+ * \returns a matrix with values \c value where row equals column index and null
+ *          where row does not equal column index
+ */
+template<typename ElementType, int N, int M = N>
+MultiDimArray<std::array<ElementType, N * M>, extents<N, M>> diagonalMatrix(const ElementType value)
+{
+    std::array<ElementType, N * M>                               matrixEntries{};
+    MultiDimArray<std::array<ElementType, N * M>, extents<N, M>> matrix(matrixEntries);
+    for (int i = 0; i < std::min(N, M); i++)
+    {
+        matrix(i, i) = value;
+    }
+    return matrix;
+}
+
 /*! \brief Create an identity matrix of ElementType with N * M elements.
  *
  * \tparam ElementType type of matrix elements
@@ -93,13 +116,7 @@ constexpr real trace(Matrix3x3ConstSpan matrixView)
 template<typename ElementType, int N, int M = N>
 MultiDimArray<std::array<ElementType, N * M>, extents<N, M>> identityMatrix()
 {
-    std::array<ElementType, N * M>                               matrixEntries{};
-    MultiDimArray<std::array<ElementType, N * M>, extents<N, M>> idMatrix(matrixEntries);
-    for (int i = 0; i < std::min(N, M); i++)
-    {
-        idMatrix(i, i) = 1;
-    }
-    return idMatrix;
+    return diagonalMatrix<ElementType, N, M>(1);
 }
 
 //! Calculate the transpose of a 3x3 matrix, from its view
@@ -134,6 +151,40 @@ static inline void fillLegacyMatrix(Matrix3x3ConstSpan newMatrix, matrix legacyM
             legacyMatrix[i][j] = newMatrix(i, j);
         }
     }
+}
+
+//! Return the product of multiplying the vector \c v by the 3x3 matrix \c m
+template<typename ElementType>
+BasicVector<ElementType> multiplyVectorByMatrix(const BasicMatrix3x3<ElementType>& m, const rvec v)
+{
+    BasicVector<ElementType> result;
+    for (int d = 0; d < DIM; ++d)
+    {
+        result[d] = m(d, 0) * v[0] + m(d, 1) * v[1] + m(d, 2) * v[2];
+    }
+    return result;
+}
+
+//! Return the product of multiplying the 3x3 matrix \c m by the scalar \c s
+template<typename ElementType>
+BasicMatrix3x3<ElementType> operator*(const BasicMatrix3x3<ElementType>& m, const real s)
+{
+    BasicMatrix3x3<ElementType> result;
+    for (int i = 0; i < DIM; i++)
+    {
+        for (int j = 0; j < DIM; j++)
+        {
+            result(i, j) = m(i, j) * s;
+        }
+    }
+    return result;
+}
+
+//! Return a vector that is the diagonal of the 3x3 matrix \c m
+template<typename ElementType>
+BasicVector<ElementType> diagonal(const BasicMatrix3x3<ElementType>& m)
+{
+    return { m(XX, XX), m(YY, YY), m(ZZ, ZZ) };
 }
 
 } // namespace gmx

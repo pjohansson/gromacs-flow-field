@@ -38,6 +38,7 @@
 #include <cstring>
 
 #include <algorithm>
+#include <optional>
 #include <unordered_map>
 
 #include "gromacs/commandline/pargs.h"
@@ -441,7 +442,7 @@ static void dump_clust_stats(FILE*                          fp,
                              int                            isize,
                              int                            index[])
 {
-    int         k, nra, mmm = 0;
+    int         k, nra;
     double      sumV, maxV, sumVT3, sumVT6, maxVT3, maxVT6;
     t_dr_stats* drs;
 
@@ -507,10 +508,6 @@ static void dump_clust_stats(FILE*                          fp,
 
             // We have processed restraint i, mark it as such
             restraintHasBeenProcessed[i] = true;
-        }
-        if (std::strcmp(clust_name[k], "1000") == 0)
-        {
-            mmm++;
         }
         fprintf(fp,
                 "%-10s%6d%8.3f  %8.3f  %8.3f  %8.3f  %8.3f  %8.3f\n",
@@ -744,13 +741,12 @@ int gmx_disre(int argc, char* argv[])
     int          isize;
     int *        index = nullptr, *ind_fit = nullptr;
     char*        grpname;
-    t_cluster_ndx*    clust = nullptr;
-    t_dr_result       dr, *dr_clust = nullptr;
-    char**            leg;
-    real *            vvindex = nullptr, *w_rls = nullptr;
-    t_pbc             pbc, *pbc_null;
-    int               my_clust;
-    FILE*             fplog;
+    t_dr_result  dr, *dr_clust = nullptr;
+    char**       leg;
+    real *       vvindex = nullptr, *w_rls = nullptr;
+    t_pbc        pbc, *pbc_null;
+    int          my_clust;
+    FILE*        fplog;
     gmx_output_env_t* oenv;
     gmx_rmpbc_t       gpbc = nullptr;
 
@@ -851,10 +847,11 @@ int gmx_disre(int argc, char* argv[])
     int natoms = read_first_x(oenv, &status, ftp2fn(efTRX, NFILE, fnm), &t, &x, box);
     snew(f, 5 * natoms);
 
+    std::optional<t_cluster_ndx> clust;
     init_dr_res(&dr, disresdata.nres);
     if (opt2bSet("-c", NFILE, fnm))
     {
-        clust = cluster_index(fplog, opt2fn("-c", NFILE, fnm));
+        clust = std::optional<t_cluster_ndx>(cluster_index(fplog, opt2fn("-c", NFILE, fnm)));
         snew(dr_clust, clust->clust->nr + 1);
         for (i = 0; (i <= clust->clust->nr); i++)
         {

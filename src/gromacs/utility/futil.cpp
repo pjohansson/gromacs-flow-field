@@ -33,9 +33,11 @@
  */
 #include "gmxpre.h"
 
-#include "futil.h"
+#include "gromacs/utility/futil.h"
 
 #include "config.h"
+
+#include <fcntl.h>
 
 #include <cerrno>
 #include <cstdio>
@@ -45,7 +47,6 @@
 #include <mutex>
 #include <tuple>
 
-#include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 

@@ -49,8 +49,8 @@ macro(gmx_test_compiler_problems)
     # cmake feature detection is currently inconsistent: gitlab.kitware.com/cmake/cmake/issues/18869
     # We might want to switch to using feature test macros some time.
     if(CMAKE_COMPILER_IS_GNUCXX)
-        if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS 7)
-            set(cxx_required_version "GCC version 7")
+        if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS 9)
+            set(cxx_required_version "GCC version 9")
         endif()
     elseif(CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
         if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS 19.15)
@@ -76,7 +76,11 @@ macro(gmx_test_compiler_problems)
     # Intel LLVM 2021.2 defaults to no-finite-math which isn't OK for GROMACS and its dependencies (muParser and GTest).
     # This is why we set the flags globally via CMAKE_CXX_FLAGS
     if(GMX_INTEL_LLVM AND GMX_INTEL_LLVM_VERSION GREATER_EQUAL 2021020)
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-finite-math-only")
+        if (NOT WIN32)
+            set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-finite-math-only")
+        else()
+            set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /fp:precise")
+        endif()
     endif()
 
 

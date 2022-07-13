@@ -81,7 +81,7 @@ void UpdateConstrainGpu::Impl::integrate(GpuEventSynchronizer*             fRead
                                          gmx::ArrayRef<const t_grp_tcstat> tcstat,
                                          const bool                        doParrinelloRahman,
                                          const float                       dtPressureCouple,
-                                         const matrix                      prVelocityScalingMatrix)
+                                         const Matrix3x3&                  prVelocityScalingMatrix)
 {
     wallcycle_start_nocount(wcycle_, WallCycleCounter::LaunchGpu);
     wallcycle_sub_start(wcycle_, WallCycleSubCounter::LaunchGpuUpdateConstrain);
@@ -93,26 +93,29 @@ void UpdateConstrainGpu::Impl::integrate(GpuEventSynchronizer*             fRead
     // Make sure that the forces are ready on device before proceeding with the update.
     fReadyOnDevice->enqueueWaitEvent(deviceStream_);
 
-    // The integrate should save a copy of the current coordinates in d_xp_ and write updated
-    // once into d_x_. The d_xp_ is only needed by constraints.
-    integrator_->integrate(
-            d_x_, d_xp_, d_v_, d_f_, dt, doTemperatureScaling, tcstat, doParrinelloRahman, dtPressureCouple, prVelocityScalingMatrix);
-    // Constraints need both coordinates before (d_x_) and after (d_xp_) update. However, after constraints
-    // are applied, the d_x_ can be discarded. So we intentionally swap the d_x_ and d_xp_ here to avoid the
-    // d_xp_ -> d_x_ copy after constraints. Note that the integrate saves them in the wrong order as well.
-    if (sc_haveGpuConstraintSupport)
+    if (numAtoms_ != 0)
     {
-        lincsGpu_->apply(d_xp_, d_x_, updateVelocities, d_v_, 1.0 / dt, computeVirial, virial, pbcAiuc_);
-        settleGpu_->apply(d_xp_, d_x_, updateVelocities, d_v_, 1.0 / dt, computeVirial, virial, pbcAiuc_);
-    }
-
-    // scaledVirial -> virial (methods above returns scaled values)
-    float scaleFactor = 0.5F / (dt * dt);
-    for (int i = 0; i < DIM; i++)
-    {
-        for (int j = 0; j < DIM; j++)
+        // The integrate should save a copy of the current coordinates in d_xp_ and write updated
+        // once into d_x_. The d_xp_ is only needed by constraints.
+        integrator_->integrate(
+                d_x_, d_xp_, d_v_, d_f_, dt, doTemperatureScaling, tcstat, doParrinelloRahman, dtPressureCouple, prVelocityScalingMatrix);
+        // Constraints need both coordinates before (d_x_) and after (d_xp_) update. However, after constraints
+        // are applied, the d_x_ can be discarded. So we intentionally swap the d_x_ and d_xp_ here to avoid the
+        // d_xp_ -> d_x_ copy after constraints. Note that the integrate saves them in the wrong order as well.
+        if (sc_haveGpuConstraintSupport)
         {
-            virial[i][j] = scaleFactor * virial[i][j];
+            lincsGpu_->apply(d_xp_, d_x_, updateVelocities, d_v_, 1.0 / dt, computeVirial, virial, pbcAiuc_);
+            settleGpu_->apply(d_xp_, d_x_, updateVelocities, d_v_, 1.0 / dt, computeVirial, virial, pbcAiuc_);
+        }
+
+        // scaledVirial -> virial (methods above returns scaled values)
+        float scaleFactor = 0.5F / (dt * dt);
+        for (int i = 0; i < DIM; i++)
+        {
+            for (int j = 0; j < DIM; j++)
+            {
+                virial[i][j] = scaleFactor * virial[i][j];
+            }
         }
     }
 
@@ -122,8 +125,13 @@ void UpdateConstrainGpu::Impl::integrate(GpuEventSynchronizer*             fRead
     wallcycle_stop(wcycle_, WallCycleCounter::LaunchGpu);
 }
 
-void UpdateConstrainGpu::Impl::scaleCoordinates(const matrix scalingMatrix)
+void UpdateConstrainGpu::Impl::scaleCoordinates(const Matrix3x3& scalingMatrix)
 {
+    if (numAtoms_ == 0)
+    {
+        return;
+    }
+
     wallcycle_start_nocount(wcycle_, WallCycleCounter::LaunchGpu);
     wallcycle_sub_start(wcycle_, WallCycleSubCounter::LaunchGpuUpdateConstrain);
 
@@ -135,8 +143,13 @@ void UpdateConstrainGpu::Impl::scaleCoordinates(const matrix scalingMatrix)
     wallcycle_stop(wcycle_, WallCycleCounter::LaunchGpu);
 }
 
-void UpdateConstrainGpu::Impl::scaleVelocities(const matrix scalingMatrix)
+void UpdateConstrainGpu::Impl::scaleVelocities(const Matrix3x3& scalingMatrix)
 {
+    if (numAtoms_ == 0)
+    {
+        return;
+    }
+
     wallcycle_start_nocount(wcycle_, WallCycleCounter::LaunchGpu);
     wallcycle_sub_start(wcycle_, WallCycleSubCounter::LaunchGpuUpdateConstrain);
 
@@ -183,7 +196,7 @@ void UpdateConstrainGpu::Impl::set(DeviceBuffer<Float3>          d_x,
     d_v_ = d_v;
     d_f_ = d_f;
 
-    numAtoms_ = md.nr;
+    numAtoms_ = md.homenr;
 
     reallocateDeviceBuffer(&d_xp_, numAtoms_, &numXp_, &numXpAlloc_, deviceContext_);
 
@@ -239,7 +252,7 @@ void UpdateConstrainGpu::integrate(GpuEventSynchronizer*             fReadyOnDev
                                    gmx::ArrayRef<const t_grp_tcstat> tcstat,
                                    const bool                        doParrinelloRahman,
                                    const float                       dtPressureCouple,
-                                   const matrix                      prVelocityScalingMatrix)
+                                   const gmx::Matrix3x3&             prVelocityScalingMatrix)
 {
     impl_->integrate(fReadyOnDevice,
                      dt,
@@ -253,12 +266,12 @@ void UpdateConstrainGpu::integrate(GpuEventSynchronizer*             fReadyOnDev
                      prVelocityScalingMatrix);
 }
 
-void UpdateConstrainGpu::scaleCoordinates(const matrix scalingMatrix)
+void UpdateConstrainGpu::scaleCoordinates(const gmx::Matrix3x3& scalingMatrix)
 {
     impl_->scaleCoordinates(scalingMatrix);
 }
 
-void UpdateConstrainGpu::scaleVelocities(const matrix scalingMatrix)
+void UpdateConstrainGpu::scaleVelocities(const gmx::Matrix3x3& scalingMatrix)
 {
     impl_->scaleVelocities(scalingMatrix);
 }
