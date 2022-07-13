@@ -24,17 +24,23 @@
 
 #include "flow_field.h"
 
+namespace flow
+{
+
+// using namespace flow;
+
 /*! \brief Get the number of groups in User1
 
-    This is slightly complicated by how Gromacs adds a "rest" group 
-    to the array of names if the other groups do not add up to all 
-    atoms in the system. Thus, we detect if the final group is called 
+    This is slightly complicated by how Gromacs adds a "rest" group
+    to the array of names if the other groups do not add up to all
+    atoms in the system. Thus, we detect if the final group is called
     exactly "rest" and if so do not count it as one of the groups. */
-static size_t get_num_groups(const SimulationGroups *groups)
+static size_t
+get_num_groups(const SimulationGroups *groups)
 {
     size_t num_groups = 0;
 
-    for (const auto global_group_index 
+    for (const auto global_group_index
          : groups->groups[SimulationAtomGroupType::User1])
     {
         const auto name = groups->groupNames[global_group_index];
@@ -111,12 +117,12 @@ init_flow_container(const int               nfile,
     const int ext_length = static_cast<int>(strlen(ftp2ext(efDAT)));
     const int base_length = static_cast<int>(fnbase.size()) - ext_length - 1;
 
-    if (base_length > 0) 
+    if (base_length > 0)
     {
         fnbase.resize(static_cast<size_t>(base_length));
     }
 
-    // If more than one group is selected for output, collect them to do separate 
+    // If more than one group is selected for output, collect them to do separate
     // collection for each individual group (as well as them all combined)
     //
     // Get the number of selected groups, subtract 1 because "rest" is always present
@@ -129,7 +135,7 @@ init_flow_container(const int               nfile,
     {
         for (size_t i = 0; i < num_groups; ++i)
         {
-            const auto global_group_index 
+            const auto global_group_index
                 = groups->groups[SimulationAtomGroupType::User1].at(i);
 
             const char *name = *groups->groupNames[global_group_index];
@@ -144,8 +150,8 @@ init_flow_container(const int               nfile,
 }
 
 
-void 
-print_flow_collection_information(const FlowData &flowcr, const double dt) 
+void
+print_flow_collection_information(const FlowData &flowcr, const double dt)
 {
     fprintf(stderr, "\n\n************************************\n");
     fprintf(stderr, "* FLOW DATA COLLECTION INFORMATION *\n");
@@ -153,31 +159,31 @@ print_flow_collection_information(const FlowData &flowcr, const double dt)
 
     fprintf(stderr,
             "Data for flow field maps will be collected every %g ps "
-            "(%lu steps).\n\n", 
+            "(%lu steps).\n\n",
             flowcr.step_collect * dt, flowcr.step_collect);
 
     fprintf(stderr,
             "It will be averaged and output to data maps every %g ps "
-            "(%lu steps).\n\n", 
+            "(%lu steps).\n\n",
             flowcr.step_output * dt, flowcr.step_output);
 
     fprintf(stderr,
             "The system has been divided into %lu x %lu bins "
             "of size %g x %g nm^2 \nin x and z.\n\n",
             flowcr.nx(), flowcr.nz(), flowcr.dx(), flowcr.dz());
-    
+
     fprintf(stderr,
             "Writing full flow data to files with base '%s_00001.dat' (...).\n\n", flowcr.fnbase.c_str());
-    
-    if (!flowcr.group_data.empty()) 
+
+    if (!flowcr.group_data.empty())
     {
-        fprintf(stderr, 
+        fprintf(stderr,
                 "Multiple groups selected for flow output. Will collect individual flow\n"
                 "data for each group individually in addition to the combined field:\n\n");
-        
+
         for (const auto& group : flowcr.group_data)
         {
-            fprintf(stderr, 
+            fprintf(stderr,
                     "  %s -> '%s_00001.dat' (...)\n", group.name.c_str(), group.fnbase.c_str());
         }
 
@@ -192,8 +198,8 @@ print_flow_collection_information(const FlowData &flowcr, const double dt)
 }
 
 
-static void 
-add_flow_to_bin(std::vector<double> &data, 
+static void
+add_flow_to_bin(std::vector<double> &data,
                 const size_t         atom,
                 const size_t         bin,
                 const real           mass,
@@ -212,7 +218,7 @@ add_flow_to_bin(std::vector<double> &data,
 
 
 static void
-collect_flow_data(FlowData           &flowcr,
+collect_flow_data(flow::FlowData           &flowcr,
                   const t_commrec    *cr,
                   const t_inputrec   *ir,
                   const t_mdatoms    *mdatoms,
@@ -226,8 +232,8 @@ collect_flow_data(FlowData           &flowcr,
     {
         // Check for match to the input group using the global atom index,
         // since groups contain these indices instead of MPI rank local indices
-        const auto index_global = haveDDAtomOrdering(*cr) 
-            ? cr->dd->globalAtomIndices[i] 
+        const auto index_global = haveDDAtomOrdering(*cr)
+            ? cr->dd->globalAtomIndices[i]
             : static_cast<int>(i);
 
         const auto index_group = getGroupType(*groups, SimulationAtomGroupType::User1, index_global);
@@ -255,12 +261,12 @@ collect_flow_data(FlowData           &flowcr,
 
             add_flow_to_bin(flowcr.data, i, bin, mass, state);
 
-            /* This checks for whether the current atom belongs to a specific 
+            /* This checks for whether the current atom belongs to a specific
                group, if multiple groups are selected. But, I no longer understand
-               exactly what the check does. 
+               exactly what the check does.
 
                TODO: Figure this out. // Petter */
-            if (!flowcr.group_data.empty() 
+            if (!flowcr.group_data.empty()
                     && (index_group < static_cast<int>(flowcr.group_data.size())))
             {
                 add_flow_to_bin(flowcr.group_data.at(index_group).data, i, bin, mass, state);
@@ -271,10 +277,10 @@ collect_flow_data(FlowData           &flowcr,
 
 
 struct FlowBinData {
-    float mass, 
-          temp, 
-          num_atoms, 
-          u, 
+    float mass,
+          temp,
+          num_atoms,
+          u,
           v;
 };
 
@@ -282,7 +288,7 @@ struct FlowBinData {
 struct GroupOutput {
     GroupOutput() = default;
 
-    GroupOutput(const size_t num_elements, const std::string fnbase) 
+    GroupOutput(const size_t num_elements, const std::string fnbase)
     :fnbase { fnbase }
     {
         ix.reserve(num_elements);
@@ -327,7 +333,7 @@ struct FlowFieldOutput {
 };
 
 
-static FlowBinData 
+static FlowBinData
 calc_values_in_bin(const std::vector<double> &data,
                    const size_t               bin,
                    const uint64_t             samples_per_output)
@@ -335,7 +341,7 @@ calc_values_in_bin(const std::vector<double> &data,
     const auto num_atoms = data[bin + static_cast<size_t>(FlowVariable::NumAtoms)];
     const auto mass      = data[bin + static_cast<size_t>(FlowVariable::Mass)    ];
 
-    /* The temperature and flow is averaged by the sampled number 
+    /* The temperature and flow is averaged by the sampled number
        of atoms and mass in each bin. To not divide by zero in empty
        bins we take care to check. */
     double flow_x = 0.0,
@@ -344,7 +350,7 @@ calc_values_in_bin(const std::vector<double> &data,
 
     if (num_atoms > 0.0)
     {
-        temperature = data[bin + static_cast<size_t>(FlowVariable::Temp)] 
+        temperature = data[bin + static_cast<size_t>(FlowVariable::Temp)]
             / (2.0 * gmx::c_boltz * num_atoms);
     }
 
@@ -354,7 +360,7 @@ calc_values_in_bin(const std::vector<double> &data,
         flow_z = data[bin + static_cast<size_t>(FlowVariable::V)] / mass;
     }
 
-    /* In contrast to above, the mass and number of atoms has to be divided by 
+    /* In contrast to above, the mass and number of atoms has to be divided by
        the number of samples taken to get their average. */
     const auto num_samples = static_cast<float>(samples_per_output);
     const auto avg_num_atoms = num_atoms / num_samples;
@@ -379,7 +385,7 @@ add_bin_if_non_empty(GroupOutput       &data,
                      const double       bin_volume,
                      const FlowBinData &bin_data)
 {
-    if (bin_data.mass > 0.0) 
+    if (bin_data.mass > 0.0)
     {
         data.ix.push_back(static_cast<uint64_t>(ix));
         data.iy.push_back(static_cast<uint64_t>(iy));
@@ -393,7 +399,7 @@ add_bin_if_non_empty(GroupOutput       &data,
 }
 
 
-static void 
+static void
 write_header(FILE         *fp,
              const size_t  nx,
              const size_t  ny,
@@ -433,9 +439,9 @@ write_header(FILE         *fp,
 }
 
 
-static void 
-write_flow_data(const GroupOutput &output, 
-                const size_t       num_file, 
+static void
+write_flow_data(const GroupOutput &output,
+                const size_t       num_file,
                 const size_t       nx,
                 const size_t       ny,
                 const double       dx,
@@ -443,9 +449,9 @@ write_flow_data(const GroupOutput &output,
 {
     char fn[STRLEN];
 
-    snprintf(fn, 
-             STRLEN, 
-             "%s_%05lu.%s", 
+    snprintf(fn,
+             STRLEN,
+             "%s_%05lu.%s",
              output.fnbase.c_str(), num_file, ftp2ext(efDAT));
 
     FILE *fp = gmx_ffopen(fn, "wb");
@@ -554,7 +560,7 @@ flow_collect_or_output(FlowData               &flowcr,
 {
     collect_flow_data(flowcr, cr, ir, mdatoms, state, groups);
 
-    if (do_per_step(current_step, flowcr.step_output) 
+    if (do_per_step(current_step, flowcr.step_output)
         && (static_cast<int64_t>(current_step) != ir->init_step))
     {
         mpi_collect_flow_data_on_master(flowcr, cr);
@@ -568,3 +574,5 @@ flow_collect_or_output(FlowData               &flowcr,
         flowcr.reset_data();
     }
 }
+
+} // namespace flow

@@ -802,15 +802,15 @@ void gmx::LegacySimulator::do_md()
     // [FLOW_FIELD]
     // Prepare for (optional) flow field output by setting up the container
     // and reading all parameter values.
-    FlowData flowcr;
+    flow::FlowData flowcr;
 
     if (opt2bSet("-flow", nfile, fnm))
     {
-        flowcr = init_flow_container(nfile, fnm, ir, groups, state);
+        flowcr = flow::init_flow_container(nfile, fnm, ir, groups, state);
 
         if (MASTER(cr))
         {
-            print_flow_collection_information(flowcr, ir->delta_t);
+            flow::print_flow_collection_information(flowcr, ir->delta_t);
         }
     }
 
@@ -1078,8 +1078,8 @@ void gmx::LegacySimulator::do_md()
         clear_mat(force_vir);
 
         // [FLOW_FIELD]
-        // Add condition for checkpointing only on flow map output step. This is because we do 
-        // not save any data from the flow maps in a checkpoint, so if we resume from a checkpoint 
+        // Add condition for checkpointing only on flow map output step. This is because we do
+        // not save any data from the flow maps in a checkpoint, so if we resume from a checkpoint
         // in between output steps, all data since the last output has been lost. By only checkpointing
         // at flow output steps we do not throw away any data.
         //
@@ -2001,7 +2001,7 @@ void gmx::LegacySimulator::do_md()
         // [FLOW_FIELD]
         if (flowcr.bDoFlowCollection && do_per_step(step, flowcr.step_collect))
         {
-            flow_collect_or_output(flowcr, step, cr, ir, md, state, groups);
+            flow::flow_collect_or_output(flowcr, step, cr, ir, md, state, groups);
         }
 
         /* #######  SET VARIABLES FOR NEXT ITERATION IF THEY STILL NEED IT ###### */
