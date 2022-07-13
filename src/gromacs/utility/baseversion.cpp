@@ -61,16 +61,6 @@ const char* gmxDOI()
     return gmxSourceDoiString;
 }
 
-const char* gmxReleaseSourceChecksum()
-{
-    return gmxReleaseSourceFileChecksum;
-}
-
-const char* gmxCurrentSourceChecksum()
-{
-    return gmxCurrentSourceFileChecksum;
-}
-
 #if GMX_DOUBLE
 void gmx_is_double_precision() {}
 #else

@@ -416,12 +416,6 @@ int ConvertTpr::run()
         return 1;
     }
 
-    if (zeroQIsSet_ && !haveReadIndexFile_)
-    {
-        printf("Charge zeroing need an index file.\n");
-        return 1;
-    }
-
 
     t_inputrec  irInstance;
     t_inputrec* ir = &irInstance;
@@ -474,7 +468,6 @@ int ConvertTpr::run()
     else
     {
         // If zeroQIsSet_, then we are doing charge zero-ing; otherwise index group extraction
-        // In both cases an index filename has been provided
 
         atoms                     = gmx_mtop_global_atoms(mtop);
         int         gnx           = 0;

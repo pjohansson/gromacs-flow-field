@@ -104,18 +104,4 @@ const char* getGpuImplementationString();
  */
 const char* gmxDOI();
 
-/*! \brief
- * Hash of the complete source released in the tarball.
- *
- * Empty when not a release tarball build.
- */
-const char* gmxReleaseSourceChecksum();
-
-/*! \brief
- * Hash of the complete source actually used when building.
- *
- * Always computed when building from tarball.
- */
-const char* gmxCurrentSourceChecksum();
-
 #endif

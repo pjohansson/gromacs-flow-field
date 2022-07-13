@@ -490,7 +490,7 @@ convey the exclusion of warranty; and each file should have at least the
 ============================================
 
 GROMACS includes optional code covered by several different more permissible
-licences as described below. While the GROMACS package in its entirety may
+licences as described below. While the GROMACS package in its entirety may 
 always be copied, modified or distributed according to LGPL v2.1 as described
 above, in the interests of clarity and completeness, you may also choose to
 license these parts (including our modifications) under their original
