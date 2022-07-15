@@ -40,7 +40,6 @@
 
 #include "gmxpre.h"
 
-#include "gromacs/utility/enumerationhelpers.h"
 #include "statepropagatordata.h"
 
 #include "gromacs/commandline/filenm.h"
@@ -65,6 +64,7 @@
 #include "gromacs/topology/atoms.h"
 #include "gromacs/topology/topology.h"
 #include "gromacs/trajectory/trajectoryframe.h"
+#include "gromacs/utility/enumerationhelpers.h"
 
 #include "freeenergyperturbationdata.h"
 #include "modularsimulator.h"
@@ -119,7 +119,7 @@ public:
             getThreadAtomRange(nth, threadIndex, statePropagatorData_->localNAtoms_, &startAtom, &endAtom);
             for (int atomIdx = startAtom; atomIdx < endAtom; ++atomIdx)
             {
-                const int temperatureGroup = (mdatoms_->cTC != nullptr) ? mdatoms_->cTC[atomIdx] : 0;
+                const int temperatureGroup = !mdatoms_->cTC.empty() ? mdatoms_->cTC[atomIdx] : 0;
                 velocities[atomIdx] *= velocityScalingFactors_[temperatureGroup];
             }
         }
@@ -221,7 +221,7 @@ StatePropagatorData::StatePropagatorData(int                numAtoms,
                 {
                     clear_rvec(v[i]);
                 }
-                else if (mdatoms->cFREEZE)
+                else if (!mdatoms->cFREEZE.empty())
                 {
                     for (int m = 0; m < DIM; m++)
                     {

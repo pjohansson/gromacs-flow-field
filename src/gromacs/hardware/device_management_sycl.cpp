@@ -299,7 +299,7 @@ static std::optional<sycl::backend> chooseBestBackend(const std::vector<std::uni
 std::vector<std::unique_ptr<DeviceInformation>> findDevices()
 {
     std::vector<std::unique_ptr<DeviceInformation>> deviceInfos(0);
-    std::vector<sycl::device>                       devices = sycl::device::get_devices();
+    std::vector<sycl::device> devices = sycl::device::get_devices(sycl::info::device_type::gpu);
     if (getenv("GMX_GPU_SYCL_USE_SUBDEVICES") != nullptr)
     {
         std::vector<sycl::device> allSubDevices;
@@ -374,11 +374,13 @@ std::string getDeviceInformationString(const DeviceInformation& deviceInfo)
     }
     else
     {
-        return gmx::formatString("#%d: name: %s, vendor: %s, device version: %s, status: %s",
-                                 deviceInfo.id,
-                                 deviceInfo.syclDevice.get_info<sycl::info::device::name>().c_str(),
-                                 deviceInfo.syclDevice.get_info<sycl::info::device::vendor>().c_str(),
-                                 deviceInfo.syclDevice.get_info<sycl::info::device::version>().c_str(),
-                                 c_deviceStateString[deviceInfo.status]);
+        return gmx::formatString(
+                "#%d: name: %s, vendor: %s, device version: %s, driver version %s, status: %s",
+                deviceInfo.id,
+                deviceInfo.syclDevice.get_info<sycl::info::device::name>().c_str(),
+                deviceInfo.syclDevice.get_info<sycl::info::device::vendor>().c_str(),
+                deviceInfo.syclDevice.get_info<sycl::info::device::version>().c_str(),
+                deviceInfo.syclDevice.get_info<sycl::info::device::driver_version>().c_str(),
+                c_deviceStateString[deviceInfo.status]);
     }
 }

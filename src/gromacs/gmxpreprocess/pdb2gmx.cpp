@@ -33,7 +33,6 @@
  */
 #include "gmxpre.h"
 
-#include "gromacs/utility/enumerationhelpers.h"
 #include "pdb2gmx.h"
 
 #include <cctype>
@@ -75,6 +74,7 @@
 #include "gromacs/topology/symtab.h"
 #include "gromacs/topology/topology.h"
 #include "gromacs/utility/dir_separator.h"
+#include "gromacs/utility/enumerationhelpers.h"
 #include "gromacs/utility/exceptions.h"
 #include "gromacs/utility/fatalerror.h"
 #include "gromacs/utility/filestream.h"
@@ -2342,7 +2342,7 @@ int pdb2gmx::run()
     check_occupancy(&pdba_all, inputConfFile_.c_str(), bVerbose_, logger);
 
     /* Read atomtypes... */
-    PreprocessingAtomTypes atype = read_atype(ffdir_, &symtab);
+    PreprocessingAtomTypes atype = read_atype(ffdir_);
 
     /* read residue database */
     GMX_LOG(logger.info).asParagraph().appendTextFormatted("Reading residue database... (%s)", forcefield_);

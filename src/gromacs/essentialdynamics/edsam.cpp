@@ -267,10 +267,8 @@ gmx_edsam::~gmx_edsam()
 
 struct t_do_edsam
 {
-    matrix old_rotmat;
-    real   oldrad;
-    rvec   old_transvec, older_transvec, transvec_compact;
-    rvec*  xcoll;                 /* Positions from all nodes, this is the
+    real  oldrad;
+    rvec* xcoll;                  /* Positions from all nodes, this is the
                                      collective set we work on.
                                      These are the positions of atoms with
                                      average structure indices */
@@ -1987,7 +1985,7 @@ void dd_make_local_ed_indices(gmx_domdec_t* dd, struct gmx_edsam* ed)
              * if their indices differ from the average ones */
             if (!edi.bRefEqAv)
             {
-                dd_make_local_group_indices(dd->ga2la,
+                dd_make_local_group_indices(dd->ga2la.get(),
                                             edi.sref.nr,
                                             edi.sref.anrs,
                                             &edi.sref.nr_loc,
@@ -1997,7 +1995,7 @@ void dd_make_local_ed_indices(gmx_domdec_t* dd, struct gmx_edsam* ed)
             }
 
             /* Local atoms of the average structure (on these ED will be performed) */
-            dd_make_local_group_indices(dd->ga2la,
+            dd_make_local_group_indices(dd->ga2la.get(),
                                         edi.sav.nr,
                                         edi.sav.anrs,
                                         &edi.sav.nr_loc,
@@ -3147,7 +3145,7 @@ void do_edsam(const t_inputrec*        ir,
               const matrix             box,
               gmx_edsam*               ed)
 {
-    int    i, edinr, iupdate = 500;
+    int    i, iupdate = 500;
     matrix rotmat;         /* rotation matrix */
     rvec   transvec;       /* translation vector */
     rvec   dv, dx, x_unsh; /* tmp vectors for velocity, distance, unshifted x coordinate */
@@ -3166,10 +3164,8 @@ void do_edsam(const t_inputrec*        ir,
     dt_1 = 1.0 / ir->delta_t;
 
     /* Loop over all ED groups (usually one) */
-    edinr = 0;
     for (auto& edi : ed->edpar)
     {
-        edinr++;
         if (bNeedDoEdsam(edi))
         {
 

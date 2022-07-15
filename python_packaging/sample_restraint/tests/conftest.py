@@ -43,14 +43,13 @@ pytest_plugins = ('gmxapi.testsupport',)
 
 
 @pytest.fixture(scope='class')
-def spc_water_box(gmxcli, remove_tempdir):
+def spc_water_box(gmxcli, tmp_path_factory):
     """Provide a TPR input file for a simple simulation.
 
     Prepare the MD input in a freshly created working directory.
     """
     import gmxapi as gmx
-    # TODO: Remove this import when the the spc_water_box fixture is migrated to gmxapi.testsupport
-    from gmxapi.testsupport import _cleandir
+    from gmxapi.testsupport import scoped_chdir
 
     # TODO: (#2896) Fetch MD input from package / library data.
     # Example:
@@ -60,7 +59,7 @@ def spc_water_box(gmxcli, remove_tempdir):
     #     # Ref https://setuptools.readthedocs.io/en/latest/setuptools.html#including-data-files
     #     from gmx.data import tprfilename
 
-    with _cleandir(remove_tempdir) as tempdir:
+    with scoped_chdir(tmp_path_factory.mktemp('spc_water_box')) as tempdir:
 
         testdir = os.path.dirname(__file__)
         with open(os.path.join(testdir, 'testdata.json'), 'r') as fh:
@@ -84,13 +83,15 @@ def spc_water_box(gmxcli, remove_tempdir):
             fh.write('\n')
 
         assert os.path.exists(topfile)
+        assert gmx.version.api_is_at_least(0, 3, 1)
         solvate = gmx.commandline_operation(gmxcli,
                                             arguments=['solvate', '-box', '5', '5', '5'],
                                             # We use the default solvent instead of specifying one.
                                             # input_files={'-cs': structurefile},
                                             output_files={'-p': topfile,
                                                           '-o': structurefile,
-                                                          }
+                                                          },
+                                            env={'PATH': os.getenv('PATH')},
                                             )
         assert os.path.exists(topfile)
 
@@ -128,7 +129,9 @@ def spc_water_box(gmxcli, remove_tempdir):
                                                '-c': solvate.output.file['-o'],
                                                '-po': mdout_mdp,
                                            },
-                                           output_files={'-o': tprfile})
+                                           output_files={'-o': tprfile},
+                                           env={'PATH': os.getenv('PATH')},
+                                           )
         tprfilename = grompp.output.file['-o'].result()
         if grompp.output.returncode.result() != 0:
             logging.debug(grompp.output.stderr.result())

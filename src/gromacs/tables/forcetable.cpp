@@ -328,9 +328,10 @@ real ewald_spline3_table_scale(const interaction_const_t& ic,
                                const bool                 generateCoulombTables,
                                const bool                 generateVdwTables)
 {
-    GMX_RELEASE_ASSERT(!generateCoulombTables || EEL_PME_EWALD(ic.eeltype),
+    GMX_RELEASE_ASSERT(!generateCoulombTables || usingPmeOrEwald(ic.eeltype),
                        "Can only use tables with Ewald");
-    GMX_RELEASE_ASSERT(!generateVdwTables || EVDW_PME(ic.vdwtype), "Can only use tables with Ewald");
+    GMX_RELEASE_ASSERT(!generateVdwTables || usingLJPme(ic.vdwtype),
+                       "Can only use tables with Ewald");
 
     real sc = 0;
 
@@ -465,21 +466,6 @@ static void spline_forces(int nx, double h, const double v[], gmx_bool bS3, gmx_
         }
         b_s   = 2 * (v[1] - v[0]) + v3 / 6;
         start = 0;
-
-        if (FALSE)
-        {
-            /* Fit V'' at the start */
-            real v2;
-
-            v2 = -v[3] + 4 * v[2] - 5 * v[1] + 2 * v[0];
-            /* v2  = v[2] - 2*v[1] + v[0]; */
-            if (debug)
-            {
-                fprintf(debug, "The left second derivative is %g\n", v2 / (h * h));
-            }
-            b_s   = 3 * (v[1] - v[0]) - v2 / 2;
-            start = 0;
-        }
     }
     else
     {

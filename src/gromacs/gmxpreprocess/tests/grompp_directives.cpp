@@ -44,10 +44,10 @@
 #include "gromacs/gmxpreprocess/grompp.h"
 #include "gromacs/mdtypes/inputrec.h"
 #include "gromacs/mdtypes/state.h"
+#include "gromacs/topology/topology.h"
 #include "gromacs/utility/futil.h"
 #include "gromacs/utility/textreader.h"
 #include "gromacs/utility/textwriter.h"
-#include "gromacs/topology/topology.h"
 
 #include "testutils/cmdlinetest.h"
 #include "testutils/conftest.h"
@@ -98,19 +98,20 @@ TEST_F(GromppDirectiveTest, edgeCaseAtomTypeNames)
     cmdline.addOption("-o", outTprFilename);
 
     ASSERT_EQ(0, gmx_grompp(cmdline.argc(), cmdline.argv()));
-
     {
         gmx_mtop_t top_after;
         t_inputrec ir_after;
         t_state    state;
         read_tpx_state(outTprFilename.c_str(), &ir_after, &state, &top_after);
 
+        int indexInMoltype = top_after.molblock[0].type;
+
         // Check atomic numbers (or lack thereof coded as -1)
-        ASSERT_EQ(top_after.atomtypes.nr, 4);
-        EXPECT_EQ(top_after.atomtypes.atomnumber[0], -1);
-        EXPECT_EQ(top_after.atomtypes.atomnumber[1], 6);
-        EXPECT_EQ(top_after.atomtypes.atomnumber[2], 7);
-        EXPECT_EQ(top_after.atomtypes.atomnumber[3], -1);
+        ASSERT_EQ(top_after.moltype[indexInMoltype].atoms.nr, 4);
+        EXPECT_EQ(top_after.moltype[indexInMoltype].atoms.atom[0].atomnumber, -1);
+        EXPECT_EQ(top_after.moltype[indexInMoltype].atoms.atom[1].atomnumber, 6);
+        EXPECT_EQ(top_after.moltype[indexInMoltype].atoms.atom[2].atomnumber, 7);
+        EXPECT_EQ(top_after.moltype[indexInMoltype].atoms.atom[3].atomnumber, -1);
     }
 }
 

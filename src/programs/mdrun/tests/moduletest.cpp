@@ -60,12 +60,13 @@
 #include "gromacs/utility/gmxmpi.h"
 #include "gromacs/utility/physicalnodecommunicator.h"
 #include "gromacs/utility/textwriter.h"
-#include "programs/mdrun/mdrun_main.h"
 
 #include "testutils/cmdlinetest.h"
 #include "testutils/mpitest.h"
 #include "testutils/testfilemanager.h"
 #include "testutils/testoptions.h"
+
+#include "programs/mdrun/mdrun_main.h"
 
 namespace gmx
 {
@@ -359,8 +360,8 @@ std::unique_ptr<gmx_hw_info_t> MdrunTestFixtureBase::s_hwinfo;
 void MdrunTestFixtureBase::SetUpTestSuite()
 {
     s_communicator = MPI_COMM_WORLD;
-    auto newHwinfo =
-            gmx_detect_hardware(PhysicalNodeCommunicator{ s_communicator, gmx_physicalnode_id_hash() });
+    auto newHwinfo = gmx_detect_hardware(
+            PhysicalNodeCommunicator{ s_communicator, gmx_physicalnode_id_hash() }, s_communicator);
     std::swap(s_hwinfo, newHwinfo);
 }
 
@@ -388,6 +389,15 @@ MdrunTestFixture::~MdrunTestFixture()
 #if GMX_LIB_MPI
     // fileManager_ should only clean up after all the ranks are done.
     MPI_Barrier(MdrunTestFixtureBase::s_communicator);
+#endif
+}
+
+int getNumberOfTestOpenMPThreads()
+{
+#if GMX_OPENMP
+    return g_numOpenMPThreads;
+#else
+    return 1;
 #endif
 }
 

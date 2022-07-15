@@ -31,6 +31,10 @@
 # To help us fund GROMACS development, we humbly ask that you cite
 # the research papers on the package. Check out https://www.gromacs.org.
 
+if("${CMAKE_SOURCE_DIR}" STREQUAL "${CMAKE_CURRENT_SOURCE_DIR}")
+    message(FATAL_ERROR "CMake called with the wrong directory; please use the top GROMACS directory (${CMAKE_CURRENT_SOURCE_DIR}/../../)")
+endif()
+
 set(LIBGROMACS_SOURCES)
 
 if (GMX_CLANG_CUDA)
@@ -142,15 +146,6 @@ if (WIN32)
 endif()
 list(APPEND libgromacs_object_library_dependencies thread_mpi)
 
-if(GMX_INSTALL_LEGACY_API)
-  install(FILES
-	  analysisdata.h
-	  options.h
-	  selection.h
-	  trajectoryanalysis.h
-          DESTINATION include/gromacs)
-endif()
-
 # This code is here instead of utility/CMakeLists.txt, because CMake
 # custom commands and source file properties can only be set in the directory
 # that contains the target that uses them.
@@ -174,6 +169,10 @@ if (GMX_GPU_CUDA)
 endif()
 
 if (GMX_GPU_CUDA)
+    if(GMX_USE_cuFFTMp)
+        # needed as we need to inlude cufftmp include path before CUDA include path
+        cuda_include_directories(${cuFFTMp_INCLUDE_DIR})
+    endif()
     # Work around FindCUDA that prevents using target_link_libraries()
     # with keywords otherwise...
     set(CUDA_LIBRARIES PRIVATE ${CUDA_LIBRARIES})
@@ -182,7 +181,13 @@ if (GMX_GPU_CUDA)
     else()
         add_library(libgromacs ${LIBGROMACS_SOURCES})
     endif()
-    target_link_libraries(libgromacs PRIVATE ${CUDA_CUFFT_LIBRARIES})
+
+    #we cannot link with both cufftmp and cufft
+    if(GMX_USE_cuFFTMp)
+        target_link_libraries(libgromacs PRIVATE ${cuFFTMp_LIBRARY})
+    else()
+        target_link_libraries(libgromacs PRIVATE ${CUDA_CUFFT_LIBRARIES})
+    endif()
 else()
     add_library(libgromacs ${LIBGROMACS_SOURCES})
 endif()

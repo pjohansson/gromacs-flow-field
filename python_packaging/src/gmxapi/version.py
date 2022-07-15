@@ -69,9 +69,9 @@ from .exceptions import FeatureNotAvailableError
 
 # TODO(#3851): Version management policy and procedures.
 _major = 0
-_minor = 3
-_micro = 2
-_suffix = ''
+_minor = 4
+_micro = 0
+_suffix = 'a1'
 
 # Reference https://www.python.org/dev/peps/pep-0440/
 # and https://packaging.pypa.io/en/latest/version/
@@ -80,10 +80,6 @@ __version__ = '{major}.{minor}.{micro}{suffix}'.format(major=_major,
                                                        micro=_micro,
                                                        suffix=_suffix)
 
-# Features added since the initial gmxapi prototype, targeted for version 0.1.
-_named_features_0_0 = ['fr1', 'fr3', 'fr7', 'fr15']
-# Features named since the finalization of the 0.1 specification with GROMACS 2020.
-_named_features_0_1 = []
 # Named features describe functionality or behavior introduced since the last
 # major release, and should be described in gmxapi documentation or issue
 # tracking system. Note that, as features become part of the specification,
@@ -94,43 +90,26 @@ _named_features_0_1 = []
 # a few years, to avoid introducing errors to client code.
 #
 # Bugs and bug fixes may be indicated with names consisting of tracked issue URLs.
-#
-# Features consisting of 'fr' and a numeric suffix are the functional requirements
-# described in roadmap.rst, as described at https://gitlab.com/gromacs/gromacs/-/issues/2893
-#
-# fr1: wrap importable Python code.
-# fr2: output proxy establishes execution dependency (superseded by fr3)
-# fr3: output proxy can be used as input
-# fr4: dimensionality and typing of named data causes generation of correct work topologies
-# fr5: explicit many-to-one or many-to-many data flow
-# fr7: Python bindings for launching simulations
-# fr8: gmx.mdrun understands ensemble work
-# fr9: MD plugins
-# fr10: fused operations for use in looping constructs
-# fr11: Python access to TPR file contents
-# fr12: Simulation checkpoint handling
-# fr13: ``run`` module function simplifies user experience
-# fr14: Easy access to GROMACS run time parameters
-# fr15: Simulation input modification
-# fr16: Create simulation input from simulation output
-# fr17: Prepare simulation input from multiple sources
-# fr18: GROMACS CLI tools receive improved Python-level support over generic commandline_operations
-# fr19: GROMACS CLI tools receive improved C++-level support over generic commandline_operations
-# fr20: Python bindings use C++ API for expressing user interface
-# fr21 User insulated from filesystem paths
-# fr22 MPI-based ensemble management from Python
-# fr23 Ensemble simulations can themselves use MPI
 
-_named_features_0_2 = [
+# Named features for gmxapi 0.x (pre-1.0 versions).
+_named_features_0 = [[]] * (_minor + 1)
+
+# Features added since the initial gmxapi prototype, targeted for version 0.1.
+# Functional requirements were described in issues #2045 and #2893. See also
+# https://gitlab.com/gromacs/gromacs/-/blob/release-2020/python_packaging/roadmap.rst
+_named_features_0[0] = ['fr1', 'fr3', 'fr7', 'fr15']
+# Features named since the finalization of the 0.1 specification with GROMACS 2020.
+_named_features_0[1] = []
+
+_named_features_0[2] = [
     'container_futures',
     'mdrun_checkpoint_output',
     'mdrun_runtime_args',
 ]
 
-_named_features_0_3 = [
+_named_features_0[3] = [
     'cli_env_kwarg',
 ]
-
 
 def api_is_at_least(major_version, minor_version=0, patch_version=0):
     """Allow client to check whether installed module supports the requested API level.
@@ -195,20 +174,20 @@ def has_feature(name='', enable_exception=False) -> bool:
     """
     # First, issue a warning if the feature name is subject to removal because
     # of the history of the API specification.
-    if api_is_at_least(0, 3):
+    for version in range(_minor):
         # For sufficiently advanced API versions, we want to warn that old
         # feature checks lose meaning and should no longer be checked.
         # We provide a suggestion with the API version that absorbed their
         # specification.
-        if name in _named_features_0_0:
+        if name in _named_features_0[version]:
             warnings.warn(
-                f'Old feature name. Use `api_is_at_least(0, 1)` instead of `has_feature({name})`.',
+                f'Old feature name. Use `api_is_at_least({_major}, {version + 1})` instead of `has_feature({name})`.',
                 category=DeprecationWarning,
                 stacklevel=2
             )
 
     # Check whether the feature is listed in the API specification amendments.
-    if name in _named_features_0_0 + _named_features_0_1 + _named_features_0_2 + _named_features_0_3:
+    if any(name in features for features in _named_features_0):
         return True
     else:
         if enable_exception:

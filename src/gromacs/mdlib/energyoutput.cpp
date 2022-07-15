@@ -75,6 +75,7 @@
 #include "gromacs/pbcutil/pbc.h"
 #include "gromacs/pulling/pull.h"
 #include "gromacs/topology/mtop_util.h"
+#include "gromacs/topology/topology.h"
 #include "gromacs/trajectory/energyframe.h"
 #include "gromacs/utility/arraysize.h"
 #include "gromacs/utility/enumerationhelpers.h"
@@ -221,9 +222,9 @@ EnergyOutput::EnergyOutput(ener_file*                fp_ene,
 
     bEner_[F_LJ]   = !bBHAM;
     bEner_[F_BHAM] = bBHAM;
-    bEner_[F_RF_EXCL] = (EEL_RF(inputrec.coulombtype) && inputrec.cutoff_scheme == CutoffScheme::Group);
-    bEner_[F_COUL_RECIP]   = EEL_FULL(inputrec.coulombtype);
-    bEner_[F_LJ_RECIP]     = EVDW_PME(inputrec.vdwtype);
+    bEner_[F_RF_EXCL] = (usingRF(inputrec.coulombtype) && inputrec.cutoff_scheme == CutoffScheme::Group);
+    bEner_[F_COUL_RECIP]   = usingFullElectrostatics(inputrec.coulombtype);
+    bEner_[F_LJ_RECIP]     = usingLJPme(inputrec.vdwtype);
     bEner_[F_LJ14]         = b14;
     bEner_[F_COUL14]       = b14;
     bEner_[F_LJC14_Q]      = false;
@@ -278,12 +279,15 @@ EnergyOutput::EnergyOutput(ener_file*                fp_ene,
         }
     }
 
-    epc_       = isRerun ? PressureCoupling::No : inputrec.epc;
-    bDiagPres_ = !TRICLINIC(inputrec.ref_p) && !isRerun;
-    ref_p_     = (inputrec.ref_p[XX][XX] + inputrec.ref_p[YY][YY] + inputrec.ref_p[ZZ][ZZ]) / DIM;
-    bTricl_    = TRICLINIC(inputrec.compress) || TRICLINIC(inputrec.deform);
-    bDynBox_   = inputrecDynamicBox(&inputrec);
-    etc_       = isRerun ? TemperatureCoupling::No : inputrec.etc;
+    epc_       = isRerun ? PressureCoupling::No : inputrec.pressureCouplingOptions.epc;
+    bDiagPres_ = !TRICLINIC(inputrec.pressureCouplingOptions.ref_p) && !isRerun;
+    ref_p_     = (inputrec.pressureCouplingOptions.ref_p[XX][XX]
+              + inputrec.pressureCouplingOptions.ref_p[YY][YY]
+              + inputrec.pressureCouplingOptions.ref_p[ZZ][ZZ])
+             / DIM;
+    bTricl_  = TRICLINIC(inputrec.pressureCouplingOptions.compress) || TRICLINIC(inputrec.deform);
+    bDynBox_ = inputrecDynamicBox(&inputrec);
+    etc_     = isRerun ? TemperatureCoupling::No : inputrec.etc;
     bNHC_trotter_   = inputrecNvtTrotter(&inputrec) && !isRerun;
     bPrintNHChains_ = inputrec.bPrintNHChains && !isRerun;
     bMTTK_          = (inputrecNptTrotter(&inputrec) || inputrecNphTrotter(&inputrec)) && !isRerun;
@@ -720,7 +724,8 @@ FILE* open_dhdl(const char* filename, const t_inputrec* ir, const gmx_output_env
     }
 
     nsetsextend = nsets;
-    if ((ir->epc != PressureCoupling::No) && (fep->n_lambda > 0) && (fep->init_lambda < 0))
+    if ((ir->pressureCouplingOptions.epc != PressureCoupling::No) && (fep->n_lambda > 0)
+        && (fep->init_lambda < 0))
     {
         nsetsextend += 1; /* for PV term, other terms possible if required for
                              the reduced potential (only needed with foreign

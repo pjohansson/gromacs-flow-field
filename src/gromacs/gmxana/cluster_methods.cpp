@@ -38,7 +38,6 @@
 #include "gromacs/fileio/matio.h"
 #include "gromacs/fileio/xvgr.h"
 #include "gromacs/gmxana/cmat.h"
-#include "gromacs/linearalgebra/eigensolver.h"
 #include "gromacs/random/threefry.h"
 #include "gromacs/random/uniformintdistribution.h"
 #include "gromacs/random/uniformrealdistribution.h"

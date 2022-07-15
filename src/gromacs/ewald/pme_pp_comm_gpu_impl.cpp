@@ -76,6 +76,7 @@ PmePpCommGpu::PmePpCommGpu(MPI_Comm /* comm */,
 PmePpCommGpu::~PmePpCommGpu() = default;
 
 /*!\brief init PME-PP GPU communication stub */
+//NOLINTNEXTLINE(readability-convert-member-functions-to-static)
 void PmePpCommGpu::reinit(int /* size */)
 {
     GMX_ASSERT(!impl_,
@@ -83,6 +84,7 @@ void PmePpCommGpu::reinit(int /* size */)
                "correct implementation.");
 }
 
+//NOLINTNEXTLINE(readability-convert-member-functions-to-static)
 void PmePpCommGpu::receiveForceFromPme(RVec* /* recvPtr */, int /* recvSize */, bool /* receivePmeForceToGpu */)
 {
     GMX_ASSERT(!impl_,
@@ -90,6 +92,7 @@ void PmePpCommGpu::receiveForceFromPme(RVec* /* recvPtr */, int /* recvSize */, 
                "implementation.");
 }
 
+//NOLINTNEXTLINE(readability-convert-member-functions-to-static)
 void PmePpCommGpu::sendCoordinatesToPmeFromGpu(DeviceBuffer<RVec> /* sendPtr */,
                                                int /* sendSize */,
                                                GpuEventSynchronizer* /* coordinatesOnDeviceEvent */)
@@ -99,6 +102,7 @@ void PmePpCommGpu::sendCoordinatesToPmeFromGpu(DeviceBuffer<RVec> /* sendPtr */,
                "implementation.");
 }
 
+//NOLINTNEXTLINE(readability-convert-member-functions-to-static)
 void PmePpCommGpu::sendCoordinatesToPmeFromCpu(RVec* /* sendPtr */,
                                                int /* sendSize */,
                                                GpuEventSynchronizer* /* coordinatesOnDeviceEvent */)
@@ -108,6 +112,7 @@ void PmePpCommGpu::sendCoordinatesToPmeFromCpu(RVec* /* sendPtr */,
                "implementation.");
 }
 
+//NOLINTNEXTLINE(readability-convert-member-functions-to-static)
 DeviceBuffer<gmx::RVec> PmePpCommGpu::getGpuForceStagingPtr()
 {
     GMX_ASSERT(!impl_,
@@ -116,6 +121,7 @@ DeviceBuffer<gmx::RVec> PmePpCommGpu::getGpuForceStagingPtr()
     return DeviceBuffer<gmx::RVec>{};
 }
 
+//NOLINTNEXTLINE(readability-convert-member-functions-to-static)
 GpuEventSynchronizer* PmePpCommGpu::getForcesReadySynchronizer()
 {
     GMX_ASSERT(!impl_,

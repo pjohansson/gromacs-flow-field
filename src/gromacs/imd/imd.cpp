@@ -46,7 +46,6 @@
  */
 #include "gmxpre.h"
 
-#include "gromacs/utility/enumerationhelpers.h"
 #include "imd.h"
 
 #include "config.h"
@@ -255,8 +254,6 @@ public:
 
     //! Shall we block and wait for connection?
     bool bWConnect = false;
-    //! Set if MD is terminated.
-    bool bTerminated = false;
     //! Set if MD can be terminated.
     bool bTerminatable = false;
     //! Set if connection is present.
@@ -282,8 +279,6 @@ public:
     //! The IMD pulling forces.
     rvec* f = nullptr;
 
-    //! Buffer for force sending.
-    char* forcesendbuf = nullptr;
     //! Buffer for coordinate sending.
     char* coordsendbuf = nullptr;
     //! Send buffer for energies.
@@ -553,7 +548,7 @@ void ImdSession::dd_make_local_IMD_atoms(const gmx_domdec_t* dd)
     }
 
     dd_make_local_group_indices(
-            dd->ga2la, impl_->nat, impl_->ind, &impl_->nat_loc, &impl_->ind_loc, &impl_->nalloc_loc, impl_->xa_ind);
+            dd->ga2la.get(), impl_->nat, impl_->ind, &impl_->nat_loc, &impl_->ind_loc, &impl_->nalloc_loc, impl_->xa_ind);
 }
 
 
@@ -950,8 +945,7 @@ void ImdSession::Impl::readCommand()
                                     " %s Terminating connection and running simulation (if "
                                     "supported by integrator).",
                                     IMDstr);
-                    bTerminated = true;
-                    bWConnect   = false;
+                    bWConnect = false;
                     gmx_set_stop_condition(StopCondition::Next);
                 }
                 else

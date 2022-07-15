@@ -55,22 +55,10 @@ target_link_libraries(pbcutil INTERFACE
 #target_link_libraries(pbcutil PUBLIC legacy_api)
 #target_link_libraries(pbcutil PRIVATE common)
 
-# Module dependencies
-# pbcutil interfaces convey transitive dependence on these modules.
-#target_link_libraries(pbcutil PUBLIC
-target_link_libraries(pbcutil INTERFACE
-                      utility
-                      )
 # Source files have the following private module dependencies.
 #target_link_libraries(pbcutil PRIVATE NOTHING)
 # TODO: Explicitly link specific modules.
 #target_link_libraries(pbcutil PRIVATE legacy_modules)
-
-if(GMX_INSTALL_LEGACY_API)
-  install(FILES
-          pbc.h
-          DESTINATION include/gromacs/pbcutil)
-endif()
 
 if (BUILD_TESTING)
     add_subdirectory(tests)

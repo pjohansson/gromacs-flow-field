@@ -239,7 +239,7 @@ gmx_register_gtest_test(MdrunMpi2RankPmeTests ${exename} MPI_RANKS 2 OPENMP_THRE
 # These tests are extremely slow without optimization or OpenMP, so only run them for
 # build types like Release or RelWithDebInfo and if the build has been configured
 # with OpenMP enabled
-set(exename "mdrun-mpi-coordination-basic-test")
+set(exename "mdrun-coordination-basic-test")
 gmx_add_gtest_executable(${exename} MPI
     CPP_SOURCE_FILES
         # files with code for tests
@@ -251,13 +251,13 @@ gmx_add_gtest_executable(${exename} MPI
 target_link_libraries(${exename} PRIVATE mdrun_test_infrastructure)
 
 if (CMAKE_BUILD_TYPE MATCHES "Rel" AND GMX_OPENMP)
-    set(testname "MdrunMpiCoordinationBasicTestsOneRank")
+    set(testname "MdrunCoordinationBasicTests1Rank")
     gmx_register_gtest_test(${testname} ${exename} MPI_RANKS 1 SLOW_TEST IGNORE_LEAKS QUICK_GPU_TEST)
-    set(testname "MdrunMpiCoordinationBasicTestsTwoRanks")
+    set(testname "MdrunCoordinationBasicTests2Ranks")
     gmx_register_gtest_test(${testname} ${exename} MPI_RANKS 2 SLOW_TEST IGNORE_LEAKS QUICK_GPU_TEST)
 endif()
 
-set(exename "mdrun-mpi-coordination-coupling-test")
+set(exename "mdrun-coordination-coupling-test")
 gmx_add_gtest_executable(${exename} MPI
     CPP_SOURCE_FILES
         # files with code for tests
@@ -269,13 +269,13 @@ gmx_add_gtest_executable(${exename} MPI
 target_link_libraries(${exename} PRIVATE mdrun_test_infrastructure)
 
 if (CMAKE_BUILD_TYPE MATCHES "Rel" AND GMX_OPENMP)
-    set(testname "MdrunMpiCoordinationCouplingTestsOneRank")
+    set(testname "MdrunCoordinationCouplingTests1Rank")
     gmx_register_gtest_test(${testname} ${exename} MPI_RANKS 1 SLOW_TEST IGNORE_LEAKS)
-    set(testname "MdrunMpiCoordinationCouplingTestsTwoRanks")
+    set(testname "MdrunCoordinationCouplingTests2Ranks")
     gmx_register_gtest_test(${testname} ${exename} MPI_RANKS 2 SLOW_TEST IGNORE_LEAKS)
 endif()
 
-set(exename "mdrun-mpi-coordination-constraints-test")
+set(exename "mdrun-coordination-constraints-test")
 gmx_add_gtest_executable(${exename} MPI
     CPP_SOURCE_FILES
         # files with code for tests
@@ -287,9 +287,9 @@ gmx_add_gtest_executable(${exename} MPI
 target_link_libraries(${exename} PRIVATE mdrun_test_infrastructure)
 
 if (CMAKE_BUILD_TYPE MATCHES "Rel" AND GMX_OPENMP)
-    set(testname "MdrunMpiCoordinationConstraintsTestsOneRank")
+    set(testname "MdrunCoordinationConstraintsTests1Rank")
     gmx_register_gtest_test(${testname} ${exename} MPI_RANKS 1 SLOW_TEST IGNORE_LEAKS)
-    set(testname "MdrunMpiCoordinationConstraintsTestsTwoRanks")
+    set(testname "MdrunCoordinationConstraintsTests2Ranks")
     gmx_register_gtest_test(${testname} ${exename} MPI_RANKS 2 SLOW_TEST IGNORE_LEAKS)
 endif()
 

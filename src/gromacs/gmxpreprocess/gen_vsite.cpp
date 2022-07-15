@@ -1675,7 +1675,6 @@ void do_vsites(gmx::ArrayRef<const PreprocessResidue> rtpFFDB,
     matrix  tmpmat;
     real    mHtot, mtot, fact, fact2;
     rvec    rpar, rperp, temp;
-    char    tpname[32], nexttpname[32];
     int *   o2n, *newvsite_type, *newcgnr, ats[MAXATOMSPERRESIDUE];
     t_atom* newatom;
     char*** newatomname;
@@ -1964,8 +1963,8 @@ void do_vsites(gmx::ArrayRef<const PreprocessResidue> rtpFFDB,
                and return H atom numbers (Hatoms) and heavy atom numbers (heavies) */
             count_bonds(i, &plist[F_BONDS], at->atomname, &nrbonds, &nrHatoms, Hatoms, &Heavy, &nrheavies, heavies);
             /* get Heavy atom type */
-            tpHeavy = get_atype(Heavy, at, rtpFFDB, residueTypeMap);
-            strcpy(tpname, *atype->atomNameFromAtomType(tpHeavy));
+            tpHeavy     = get_atype(Heavy, at, rtpFFDB, residueTypeMap);
+            auto tpname = atype->atomNameFromAtomType(tpHeavy);
 
             bWARNING       = FALSE;
             bAddVsiteParam = TRUE;
@@ -2029,10 +2028,10 @@ void do_vsites(gmx::ArrayRef<const PreprocessResidue> rtpFFDB,
                 if ((nrHatoms == 2) && ((*at->atomname[Heavy])[0] == 'N'))
                 {
                     isN   = TRUE;
-                    int j = nitrogen_is_planar(vsiteconflist, tpname);
+                    int j = nitrogen_is_planar(vsiteconflist, *tpname);
                     if (j < 0)
                     {
-                        gmx_fatal(FARGS, "No vsite database NH2 entry for type %s\n", tpname);
+                        gmx_fatal(FARGS, "No vsite database NH2 entry for type %s\n", tpname->c_str());
                     }
                     planarN = (j == 1);
                 }
@@ -2062,9 +2061,9 @@ void do_vsites(gmx::ArrayRef<const PreprocessResidue> rtpFFDB,
                     }
                     /* get dummy mass type from first char of heavy atom type (N or C) */
 
-                    strcpy(nexttpname,
-                           *atype->atomNameFromAtomType(get_atype(heavies[0], at, rtpFFDB, residueTypeMap)));
-                    std::string ch = get_dummymass_name(vsiteconflist, tpname, nexttpname);
+                    auto nexttpname = atype->atomNameFromAtomType(
+                            get_atype(heavies[0], at, rtpFFDB, residueTypeMap));
+                    std::string ch = get_dummymass_name(vsiteconflist, *tpname, *nexttpname);
                     std::string name;
                     if (ch.empty())
                     {
@@ -2074,16 +2073,16 @@ void do_vsites(gmx::ArrayRef<const PreprocessResidue> rtpFFDB,
                                     FARGS,
                                     "Can't find dummy mass for type %s bonded to type %s in the "
                                     "virtual site database (.vsd files). Add it to the database!\n",
-                                    tpname,
-                                    nexttpname);
+                                    tpname->c_str(),
+                                    nexttpname->c_str());
                         }
                         else
                         {
                             gmx_fatal(FARGS,
                                       "A dummy mass for type %s bonded to type %s is required, but "
                                       "no virtual site database (.vsd) files where found.\n",
-                                      tpname,
-                                      nexttpname);
+                                      tpname->c_str(),
+                                      nexttpname->c_str());
                         }
                     }
                     else
@@ -2215,7 +2214,7 @@ void do_vsites(gmx::ArrayRef<const PreprocessResidue> rtpFFDB,
                           "         %d bonds and %d bound hydrogens atoms) to virtual site\n",
                           i + 1,
                           *(at->atomname[i]),
-                          tpname,
+                          tpname->c_str(),
                           nrbonds,
                           nrHatoms);
             }

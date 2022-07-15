@@ -33,8 +33,7 @@
  */
 #include "gmxpre.h"
 
-#include "gromacs/utility/enumerationhelpers.h"
-#include "inputrec.h"
+#include "gromacs/mdtypes/inputrec.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -55,6 +54,7 @@
 #include "gromacs/pbcutil/pbc.h"
 #include "gromacs/utility/compare.h"
 #include "gromacs/utility/cstringutil.h"
+#include "gromacs/utility/enumerationhelpers.h"
 #include "gromacs/utility/fatalerror.h"
 #include "gromacs/utility/keyvaluetree.h"
 #include "gromacs/utility/smalloc.h"
@@ -200,7 +200,7 @@ int pcouple_min_integration_steps(PressureCoupling epc)
 
 int ir_optimal_nstpcouple(const t_inputrec* ir)
 {
-    const int minIntegrationSteps = pcouple_min_integration_steps(ir->epc);
+    const int minIntegrationSteps = pcouple_min_integration_steps(ir->pressureCouplingOptions.epc);
 
     const int nwanted = c_defaultNstPCouple;
 
@@ -208,13 +208,13 @@ int ir_optimal_nstpcouple(const t_inputrec* ir)
     const int minNstPCouple = (ir->useMts ? ir->mtsLevels.back().stepFactor : 1);
 
     int n;
-    if (minIntegrationSteps == 0 || ir->delta_t * nwanted <= ir->tau_p)
+    if (minIntegrationSteps == 0 || ir->delta_t * nwanted <= ir->pressureCouplingOptions.tau_p)
     {
         n = nwanted;
     }
     else
     {
-        n = static_cast<int>(ir->tau_p / (ir->delta_t * minIntegrationSteps) + 0.001);
+        n = static_cast<int>(ir->pressureCouplingOptions.tau_p / (ir->delta_t * minIntegrationSteps) + 0.001);
         if (n < minNstPCouple)
         {
             n = minNstPCouple;
@@ -285,16 +285,10 @@ static void done_t_rot(t_rot* rot)
     {
         return;
     }
-    if (rot->grp != nullptr)
+    for (auto& grp : rot->grp)
     {
-        for (int i = 0; i < rot->ngrp; i++)
-        {
-            sfree(rot->grp[i].ind);
-            sfree(rot->grp[i].x_ref);
-        }
-        sfree(rot->grp);
+        sfree(grp.ind);
     }
-    sfree(rot);
 }
 
 static void done_t_swapCoords(t_swapcoords* swapCoords)
@@ -331,7 +325,7 @@ void done_inputrec(t_inputrec* ir)
     sfree(ir->opts.egp_flags);
 
     done_t_swapCoords(ir->swap);
-    done_t_rot(ir->rot);
+    done_t_rot(ir->rot.get());
     delete ir->params;
 }
 
@@ -715,7 +709,7 @@ static void pr_rotgrp(FILE* fp, int indent, int g, const t_rotgrp* rotg)
     PS("rot-type", enumValueToString(rotg->eType));
     PS("rot-massw", EBOOL(rotg->bMassW));
     pr_ivec_block(fp, indent, "atom", rotg->ind, rotg->nat, TRUE);
-    pr_rvecs(fp, indent, "x-ref", rotg->x_ref, rotg->nat);
+    pr_rvecs(fp, indent, "x-ref", as_vec_array(rotg->x_ref_original.data()), rotg->x_ref_original.size());
     pr_rvec(fp, indent, "rot-vec", rotg->inputVec, DIM, TRUE);
     pr_rvec(fp, indent, "rot-pivot", rotg->pivot, DIM, TRUE);
     PR("rot-rate", rotg->rate);
@@ -734,8 +728,8 @@ static void pr_rot(FILE* fp, int indent, const t_rot* rot)
 
     PI("rot-nstrout", rot->nstrout);
     PI("rot-nstsout", rot->nstsout);
-    PI("rot-ngroups", rot->ngrp);
-    for (g = 0; g < rot->ngrp; g++)
+    PI("rot-ngroups", rot->grp.size());
+    for (g = 0; g < gmx::ssize(rot->grp); g++)
     {
         pr_rotgrp(fp, indent, g, &rot->grp[g]);
     }
@@ -940,13 +934,13 @@ void pr_inputrec(FILE* fp, int indent, const char* title, const t_inputrec* ir, 
         PI("nh-chain-length", ir->opts.nhchainlength);
         PS("print-nose-hoover-chain-variables", EBOOL(ir->bPrintNHChains));
 
-        PS("pcoupl", enumValueToString(ir->epc));
-        PS("pcoupltype", enumValueToString(ir->epct));
-        PI("nstpcouple", ir->nstpcouple);
-        PR("tau-p", ir->tau_p);
-        pr_matrix(fp, indent, "compressibility", ir->compress, bMDPformat);
-        pr_matrix(fp, indent, "ref-p", ir->ref_p, bMDPformat);
-        PS("refcoord-scaling", enumValueToString(ir->refcoord_scaling));
+        PS("pcoupl", enumValueToString(ir->pressureCouplingOptions.epc));
+        PS("pcoupltype", enumValueToString(ir->pressureCouplingOptions.epct));
+        PI("nstpcouple", ir->pressureCouplingOptions.nstpcouple);
+        PR("tau-p", ir->pressureCouplingOptions.tau_p);
+        pr_matrix(fp, indent, "compressibility", ir->pressureCouplingOptions.compress, bMDPformat);
+        pr_matrix(fp, indent, "ref-p", ir->pressureCouplingOptions.ref_p, bMDPformat);
+        PS("refcoord-scaling", enumValueToString(ir->pressureCouplingOptions.refcoord_scaling));
 
         if (bMDPformat)
         {
@@ -1004,7 +998,7 @@ void pr_inputrec(FILE* fp, int indent, const char* title, const t_inputrec* ir, 
         PS("rotation", EBOOL(ir->bRot));
         if (ir->bRot)
         {
-            pr_rot(fp, indent, ir->rot);
+            pr_rot(fp, indent, ir->rot.get());
         }
 
         /* INTERACTIVE MD */
@@ -1461,16 +1455,67 @@ void cmp_inputrec(FILE* fp, const t_inputrec* ir1, const t_inputrec* ir2, real f
             -1,
             static_cast<int>(ir1->bPrintNHChains),
             static_cast<int>(ir2->bPrintNHChains));
-    cmpEnum(fp, "inputrec->epc", ir1->epc, ir2->epc);
-    cmpEnum(fp, "inputrec->epct", ir1->epct, ir2->epct);
-    cmp_real(fp, "inputrec->tau_p", -1, ir1->tau_p, ir2->tau_p, ftol, abstol);
-    cmp_rvec(fp, "inputrec->ref_p(x)", -1, ir1->ref_p[XX], ir2->ref_p[XX], ftol, abstol);
-    cmp_rvec(fp, "inputrec->ref_p(y)", -1, ir1->ref_p[YY], ir2->ref_p[YY], ftol, abstol);
-    cmp_rvec(fp, "inputrec->ref_p(z)", -1, ir1->ref_p[ZZ], ir2->ref_p[ZZ], ftol, abstol);
-    cmp_rvec(fp, "inputrec->compress(x)", -1, ir1->compress[XX], ir2->compress[XX], ftol, abstol);
-    cmp_rvec(fp, "inputrec->compress(y)", -1, ir1->compress[YY], ir2->compress[YY], ftol, abstol);
-    cmp_rvec(fp, "inputrec->compress(z)", -1, ir1->compress[ZZ], ir2->compress[ZZ], ftol, abstol);
-    cmpEnum(fp, "refcoord_scaling", ir1->refcoord_scaling, ir2->refcoord_scaling);
+    cmpEnum(fp,
+            "inputrec->pressureCouplingOptions.epc",
+            ir1->pressureCouplingOptions.epc,
+            ir2->pressureCouplingOptions.epc);
+    cmpEnum(fp,
+            "inputrec->pressureCouplingOptions.epct",
+            ir1->pressureCouplingOptions.epct,
+            ir2->pressureCouplingOptions.epct);
+    cmp_real(fp,
+             "inputrec->pressureCouplingOptions.tau_p",
+             -1,
+             ir1->pressureCouplingOptions.tau_p,
+             ir2->pressureCouplingOptions.tau_p,
+             ftol,
+             abstol);
+    cmp_rvec(fp,
+             "inputrec->pressureCouplingOptions.ref_p(x)",
+             -1,
+             ir1->pressureCouplingOptions.ref_p[XX],
+             ir2->pressureCouplingOptions.ref_p[XX],
+             ftol,
+             abstol);
+    cmp_rvec(fp,
+             "inputrec->pressureCouplingOptions.ref_p(y)",
+             -1,
+             ir1->pressureCouplingOptions.ref_p[YY],
+             ir2->pressureCouplingOptions.ref_p[YY],
+             ftol,
+             abstol);
+    cmp_rvec(fp,
+             "inputrec->pressureCouplingOptions.ref_p(z)",
+             -1,
+             ir1->pressureCouplingOptions.ref_p[ZZ],
+             ir2->pressureCouplingOptions.ref_p[ZZ],
+             ftol,
+             abstol);
+    cmp_rvec(fp,
+             "inputrec->pressureCouplingOptions.compress(x)",
+             -1,
+             ir1->pressureCouplingOptions.compress[XX],
+             ir2->pressureCouplingOptions.compress[XX],
+             ftol,
+             abstol);
+    cmp_rvec(fp,
+             "inputrec->pressureCouplingOptions.compress(y)",
+             -1,
+             ir1->pressureCouplingOptions.compress[YY],
+             ir2->pressureCouplingOptions.compress[YY],
+             ftol,
+             abstol);
+    cmp_rvec(fp,
+             "inputrec->pressureCouplingOptions.compress(z)",
+             -1,
+             ir1->pressureCouplingOptions.compress[ZZ],
+             ir2->pressureCouplingOptions.compress[ZZ],
+             ftol,
+             abstol);
+    cmpEnum(fp,
+            "refcoord_scaling",
+            ir1->pressureCouplingOptions.refcoord_scaling,
+            ir2->pressureCouplingOptions.refcoord_scaling);
     cmp_rvec(fp, "inputrec->posres_com", -1, ir1->posres_com, ir2->posres_com, ftol, abstol);
     cmp_rvec(fp, "inputrec->posres_comB", -1, ir1->posres_comB, ir2->posres_comB, ftol, abstol);
     cmp_real(fp, "inputrec->verletbuf_tol", -1, ir1->verletbuf_tol, ir2->verletbuf_tol, ftol, abstol);
@@ -1589,43 +1634,47 @@ gmx_bool inputrecDeform(const t_inputrec* ir)
 
 gmx_bool inputrecDynamicBox(const t_inputrec* ir)
 {
-    return (ir->epc != PressureCoupling::No || ir->eI == IntegrationAlgorithm::TPI || inputrecDeform(ir));
+    return (ir->pressureCouplingOptions.epc != PressureCoupling::No
+            || ir->eI == IntegrationAlgorithm::TPI || inputrecDeform(ir));
 }
 
-gmx_bool inputrecPreserveShape(const t_inputrec* ir)
+bool shouldPreserveBoxShape(const PressureCouplingOptions& pressureCouplingOptions, const tensor deform)
 {
-    return (ir->epc != PressureCoupling::No && ir->deform[XX][XX] == 0
-            && (ir->epct == PressureCouplingType::Isotropic
-                || ir->epct == PressureCouplingType::SemiIsotropic));
+    return (pressureCouplingOptions.epc != PressureCoupling::No && deform[XX][XX] == 0
+            && (pressureCouplingOptions.epct == PressureCouplingType::Isotropic
+                || pressureCouplingOptions.epct == PressureCouplingType::SemiIsotropic));
 }
 
 gmx_bool inputrecNeedMutot(const t_inputrec* ir)
 {
-    return ((ir->coulombtype == CoulombInteractionType::Ewald || EEL_PME(ir->coulombtype))
+    return ((ir->coulombtype == CoulombInteractionType::Ewald || usingPme(ir->coulombtype))
             && (ir->ewald_geometry == EwaldGeometry::ThreeDC || ir->epsilon_surface != 0));
 }
 
 gmx_bool inputrecExclForces(const t_inputrec* ir)
 {
-    return (EEL_FULL(ir->coulombtype) || (EEL_RF(ir->coulombtype)));
+    return (usingFullElectrostatics(ir->coulombtype) || (usingRF(ir->coulombtype)));
 }
 
 gmx_bool inputrecNptTrotter(const t_inputrec* ir)
 {
     return (((ir->eI == IntegrationAlgorithm::VV) || (ir->eI == IntegrationAlgorithm::VVAK))
-            && (ir->epc == PressureCoupling::Mttk) && (ir->etc == TemperatureCoupling::NoseHoover));
+            && (ir->pressureCouplingOptions.epc == PressureCoupling::Mttk)
+            && (ir->etc == TemperatureCoupling::NoseHoover));
 }
 
 gmx_bool inputrecNvtTrotter(const t_inputrec* ir)
 {
     return (((ir->eI == IntegrationAlgorithm::VV) || (ir->eI == IntegrationAlgorithm::VVAK))
-            && (ir->epc != PressureCoupling::Mttk) && (ir->etc == TemperatureCoupling::NoseHoover));
+            && (ir->pressureCouplingOptions.epc != PressureCoupling::Mttk)
+            && (ir->etc == TemperatureCoupling::NoseHoover));
 }
 
 gmx_bool inputrecNphTrotter(const t_inputrec* ir)
 {
     return (((ir->eI == IntegrationAlgorithm::VV) || (ir->eI == IntegrationAlgorithm::VVAK))
-            && (ir->epc == PressureCoupling::Mttk) && (ir->etc != TemperatureCoupling::NoseHoover));
+            && (ir->pressureCouplingOptions.epc == PressureCoupling::Mttk)
+            && (ir->etc != TemperatureCoupling::NoseHoover));
 }
 
 bool inputrecPbcXY2Walls(const t_inputrec* ir)
@@ -1647,7 +1696,7 @@ bool integratorHasConservedEnergyQuantity(const t_inputrec* ir)
         // Energy minimization or stochastic integrator: no conservation
         return false;
     }
-    else if (ir->etc == TemperatureCoupling::No && ir->epc == PressureCoupling::No)
+    else if (ir->etc == TemperatureCoupling::No && ir->pressureCouplingOptions.epc == PressureCoupling::No)
     {
         // The total energy is conserved, no additional conserved quanitity
         return false;
@@ -1655,9 +1704,11 @@ bool integratorHasConservedEnergyQuantity(const t_inputrec* ir)
     else
     {
         // Shear stress with Parrinello-Rahman is not supported (tedious)
-        bool shearWithPR =
-                ((ir->epc == PressureCoupling::ParrinelloRahman || ir->epc == PressureCoupling::Mttk)
-                 && (ir->ref_p[YY][XX] != 0 || ir->ref_p[ZZ][XX] != 0 || ir->ref_p[ZZ][YY] != 0));
+        bool shearWithPR = ((ir->pressureCouplingOptions.epc == PressureCoupling::ParrinelloRahman
+                             || ir->pressureCouplingOptions.epc == PressureCoupling::Mttk)
+                            && (ir->pressureCouplingOptions.ref_p[YY][XX] != 0
+                                || ir->pressureCouplingOptions.ref_p[ZZ][XX] != 0
+                                || ir->pressureCouplingOptions.ref_p[ZZ][YY] != 0));
 
         return !ETC_ANDERSEN(ir->etc) && !shearWithPR;
     }
@@ -1727,7 +1778,7 @@ real maxReferenceTemperature(const t_inputrec& ir)
 
 bool haveEwaldSurfaceContribution(const t_inputrec& ir)
 {
-    return EEL_PME_EWALD(ir.coulombtype)
+    return usingPmeOrEwald(ir.coulombtype)
            && (ir.ewald_geometry == EwaldGeometry::ThreeDC || ir.epsilon_surface != 0);
 }
 

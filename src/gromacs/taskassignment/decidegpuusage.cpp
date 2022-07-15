@@ -40,7 +40,7 @@
 
 #include "gmxpre.h"
 
-#include "decidegpuusage.h"
+#include "gromacs/taskassignment/decidegpuusage.h"
 
 #include "config.h"
 
@@ -486,7 +486,7 @@ bool decideWhetherToUseGpusForPme(const bool              useGpuForNonbonded,
 
 PmeRunMode determinePmeRunMode(const bool useGpuForPme, const TaskTarget& pmeFftTarget, const t_inputrec& inputrec)
 {
-    if (!EEL_PME(inputrec.coulombtype) && !EVDW_PME(inputrec.vdwtype))
+    if (!usingPme(inputrec.coulombtype) && !usingLJPme(inputrec.vdwtype))
     {
         return PmeRunMode::None;
     }
@@ -588,9 +588,9 @@ bool decideWhetherToUseGpusForBonded(bool              useGpuForNonbonded,
     // (It would be better to dynamically assign bondeds based on timings)
     // Note that here we assume that the auto setting of PME ranks will not
     // choose separate PME ranks when nonBonded are assigned to the GPU.
-    bool usingOurCpuForPmeOrEwald =
-            (EVDW_PME(inputrec.vdwtype)
-             || (EEL_PME_EWALD(inputrec.coulombtype) && !useGpuForPme && numPmeRanksPerSimulation <= 0));
+    bool usingOurCpuForPmeOrEwald = (usingLJPme(inputrec.vdwtype)
+                                     || (usingPmeOrEwald(inputrec.coulombtype) && !useGpuForPme
+                                         && numPmeRanksPerSimulation <= 0));
 
     return gpusWereDetected && usingOurCpuForPmeOrEwald;
 }
@@ -679,8 +679,10 @@ bool decideWhetherToUseGpuForUpdate(const bool                     isDomainDecom
     {
         errorMessage += "Nose-Hoover temperature coupling is not supported.\n";
     }
-    if (!(inputrec.epc == PressureCoupling::No || inputrec.epc == PressureCoupling::ParrinelloRahman
-          || inputrec.epc == PressureCoupling::Berendsen || inputrec.epc == PressureCoupling::CRescale))
+    if (!(inputrec.pressureCouplingOptions.epc == PressureCoupling::No
+          || inputrec.pressureCouplingOptions.epc == PressureCoupling::ParrinelloRahman
+          || inputrec.pressureCouplingOptions.epc == PressureCoupling::Berendsen
+          || inputrec.pressureCouplingOptions.epc == PressureCoupling::CRescale))
     {
         errorMessage +=
                 "Only Parrinello-Rahman, Berendsen, and C-rescale pressure coupling are "
@@ -690,7 +692,7 @@ bool decideWhetherToUseGpuForUpdate(const bool                     isDomainDecom
     {
         errorMessage += "Acceleration is not supported.\n";
     }
-    if (EEL_PME_EWALD(inputrec.coulombtype) && inputrec.epsilon_surface != 0)
+    if (usingPmeOrEwald(inputrec.coulombtype) && inputrec.epsilon_surface != 0)
     {
         // The graph is needed, but not supported
         errorMessage += "Ewald surface correction is not supported.\n";

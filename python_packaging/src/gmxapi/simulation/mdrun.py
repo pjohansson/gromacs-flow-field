@@ -63,7 +63,6 @@ from .abc import ModuleObject
 logger = root_logger.getChild('mdrun')
 logger.info('Importing {}'.format(__name__))
 
-
 # Output in the gmxapi.operation Context.
 # TODO: Consider using a single base class for the DataProxy, but have distinct
 #  data descriptor behavior (or different descriptor implementations in different
@@ -334,7 +333,8 @@ class LegacyImplementationSubscription(object):
                         workdir_list = [os.path.abspath(_workdir) for _workdir in workdir_list]
                         # TODO: If we use better input file names, they need to be updated in multiple places.
                         tpr_filenames = [os.path.join(_workdir, 'topol.tpr') for _workdir in workdir_list]
-                        parameters_dict_list = [fileio.read_tpr(tprfile).parameters.extract() for tprfile in tpr_filenames]
+                        parameters_dict_list = [fileio.read_tpr(tprfile).parameters.extract() for tprfile in
+                                                tpr_filenames]
                         if isinstance(runtime_args, (list, tuple)):
                             runtime_args_list = list(runtime_args)
                         else:

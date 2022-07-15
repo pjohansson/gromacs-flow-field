@@ -52,6 +52,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <optional>
 
 #include "gromacs/commandline/filenm.h"
 #include "gromacs/domdec/builder.h"
@@ -81,8 +82,8 @@
 #include "gromacs/hardware/printhardware.h"
 #include "gromacs/imd/imd.h"
 #include "gromacs/listed_forces/disre.h"
-#include "gromacs/listed_forces/listed_forces_gpu.h"
 #include "gromacs/listed_forces/listed_forces.h"
+#include "gromacs/listed_forces/listed_forces_gpu.h"
 #include "gromacs/listed_forces/orires.h"
 #include "gromacs/math/functions.h"
 #include "gromacs/math/utilities.h"
@@ -151,6 +152,7 @@
 #include "gromacs/timing/wallcycle.h"
 #include "gromacs/timing/wallcyclereporting.h"
 #include "gromacs/topology/mtop_util.h"
+#include "gromacs/topology/topology.h"
 #include "gromacs/trajectory/trajectoryframe.h"
 #include "gromacs/utility/basenetwork.h"
 #include "gromacs/utility/cstringutil.h"
@@ -163,12 +165,12 @@
 #include "gromacs/utility/logger.h"
 #include "gromacs/utility/loggerbuilder.h"
 #include "gromacs/utility/mdmodulesnotifiers.h"
+#include "gromacs/utility/mpiinfo.h"
 #include "gromacs/utility/physicalnodecommunicator.h"
 #include "gromacs/utility/pleasecite.h"
 #include "gromacs/utility/programcontext.h"
 #include "gromacs/utility/smalloc.h"
 #include "gromacs/utility/stringutil.h"
-#include "gromacs/utility/mpiinfo.h"
 
 #include "isimulator.h"
 #include "membedholder.h"
@@ -320,7 +322,9 @@ static DevelopmentFeatureFlags manageDevelopmentFeatures(const gmx::MDLogger& md
             && ((numRanksPerSimulation > 1 && numPmeRanksPerSimulation == 0)
                 || numPmeRanksPerSimulation > 1);
     const bool pmeGpuDecompositionSupported =
-            (devFlags.canUseGpuAwareMpi && pmeRunMode == PmeRunMode::Mixed);
+            (devFlags.canUseGpuAwareMpi && GMX_GPU_CUDA
+             && ((pmeRunMode == PmeRunMode::GPU && (GMX_USE_Heffte || GMX_USE_cuFFTMp))
+                 || pmeRunMode == PmeRunMode::Mixed));
 
     const bool forcePmeGpuDecomposition = getenv("GMX_GPU_PME_DECOMPOSITION") != nullptr;
 
@@ -348,10 +352,21 @@ static DevelopmentFeatureFlags manageDevelopmentFeatures(const gmx::MDLogger& md
 
     if (!pmeGpuDecompositionSupported && pmeGpuDecompositionRequested)
     {
-        gmx_fatal(FARGS,
-                  "PME tasks were required to run on GPUs, but that is not implemented with "
-                  "more than one PME rank. Use a single rank simulation, or a separate PME rank, "
-                  "or permit PME tasks to be assigned to the CPU.");
+        if (GMX_GPU_CUDA)
+        {
+            gmx_fatal(FARGS,
+                      "PME tasks were required to run on more than one CUDA-devices. To enable "
+                      "this feature, "
+                      "use MPI with CUDA-aware support and build GROMACS with cuFFTMp support.");
+        }
+        else
+        {
+            gmx_fatal(
+                    FARGS,
+                    "PME tasks were required to run on GPUs, but that is not implemented with "
+                    "more than one PME rank. Use a single rank simulation, or a separate PME rank, "
+                    "or permit PME tasks to be assigned to the CPU.");
+        }
     }
 
     devFlags.enableGpuPmeDecomposition =
@@ -460,18 +475,19 @@ void Mdrunner::spawnThreads(int numThreadsToLaunch)
 } // namespace gmx
 
 /*! \brief Initialize variables for Verlet scheme simulation */
-static void prepare_verlet_scheme(FILE*               fplog,
-                                  t_commrec*          cr,
-                                  t_inputrec*         ir,
-                                  int                 nstlist_cmdline,
-                                  const gmx_mtop_t&   mtop,
-                                  const matrix        box,
-                                  bool                makeGpuPairList,
-                                  const gmx::CpuInfo& cpuinfo)
+static void prepare_verlet_scheme(FILE*                          fplog,
+                                  t_commrec*                     cr,
+                                  t_inputrec*                    ir,
+                                  int                            nstlist_cmdline,
+                                  const gmx_mtop_t&              mtop,
+                                  gmx::ArrayRef<const gmx::RVec> coordinates,
+                                  const matrix                   box,
+                                  bool                           makeGpuPairList,
+                                  const gmx::CpuInfo&            cpuinfo)
 {
     // We checked the cut-offs in grompp, but double-check here.
     // We have PME+LJcutoff kernels for rcoulomb>rvdw.
-    if (EEL_PME_EWALD(ir->coulombtype) && ir->vdwtype == VanDerWaalsType::Cut)
+    if (usingPmeOrEwald(ir->coulombtype) && ir->vdwtype == VanDerWaalsType::Cut)
     {
         GMX_RELEASE_ASSERT(ir->rcoulomb >= ir->rvdw,
                            "With Verlet lists and PME we should have rcoulomb>=rvdw");
@@ -481,6 +497,14 @@ static void prepare_verlet_scheme(FILE*               fplog,
         GMX_RELEASE_ASSERT(ir->rcoulomb == ir->rvdw,
                            "With Verlet lists and no PME rcoulomb and rvdw should be identical");
     }
+
+    std::optional<real> effectiveAtomDensity;
+    if (EI_DYNAMICS(ir->eI))
+    {
+        effectiveAtomDensity = computeEffectiveAtomDensity(
+                coordinates, box, std::max(ir->rcoulomb, ir->rvdw), cr->mpiDefaultCommunicator);
+    }
+
     /* For NVE simulations, we will retain the initial list buffer */
     if (EI_DYNAMICS(ir->eI) && ir->verletbuf_tol > 0
         && !(EI_MD(ir->eI) && ir->etc == TemperatureCoupling::No))
@@ -495,8 +519,8 @@ static void prepare_verlet_scheme(FILE*               fplog,
                 (makeGpuPairList ? ListSetupType::Gpu : ListSetupType::CpuSimdWhenSupported);
         VerletbufListSetup listSetup = verletbufGetSafeListSetup(listType);
 
-        const real rlist_new =
-                calcVerletBufferSize(mtop, det(box), *ir, ir->nstlist, ir->nstlist - 1, -1, listSetup);
+        const real rlist_new = calcVerletBufferSize(
+                mtop, effectiveAtomDensity.value(), *ir, ir->nstlist, ir->nstlist - 1, -1, listSetup);
 
         if (rlist_new != ir->rlist)
         {
@@ -523,7 +547,8 @@ static void prepare_verlet_scheme(FILE*               fplog,
     if (EI_DYNAMICS(ir->eI))
     {
         /* Set or try nstlist values */
-        increaseNstlist(fplog, cr, ir, nstlist_cmdline, &mtop, box, makeGpuPairList, cpuinfo);
+        increaseNstlist(
+                fplog, cr, ir, nstlist_cmdline, &mtop, box, effectiveAtomDensity.value(), makeGpuPairList, cpuinfo);
     }
 }
 
@@ -1050,7 +1075,8 @@ int Mdrunner::mdrunner()
     const bool useDomainDecomposition =
             canUseDomainDecomposition
             && (PAR(cr)
-                || (!useGpuForNonbonded && EEL_FULL(inputrec->coulombtype) && useDDWithSingleRank != 0)
+                || (!useGpuForNonbonded && usingFullElectrostatics(inputrec->coulombtype)
+                    && useDDWithSingleRank != 0)
                 || useDDWithSingleRank == 1);
 
     ObservablesReducerBuilder observablesReducerBuilder;
@@ -1301,6 +1327,7 @@ int Mdrunner::mdrunner()
                           inputrec.get(),
                           nstlist_cmdline,
                           mtop,
+                          MASTER(cr) ? globalState->x : gmx::ArrayRef<const gmx::RVec>(),
                           box,
                           useGpuForNonbonded || (emulateGpuNonbonded == EmulateGpuNonbonded::Yes),
                           *hwinfo_->cpuInfo);
@@ -1424,7 +1451,7 @@ int Mdrunner::mdrunner()
             thisRankHasDuty(cr, DUTY_PP),
             // TODO cr->duty & DUTY_PME should imply that a PME
             // algorithm is active, but currently does not.
-            EEL_PME(inputrec->coulombtype) && thisRankHasDuty(cr, DUTY_PME));
+            usingPme(inputrec->coulombtype) && thisRankHasDuty(cr, DUTY_PME));
 
     // Get the device handles for the modules, nullptr when no task is assigned.
     int                deviceId   = -1;
@@ -1441,9 +1468,10 @@ int Mdrunner::mdrunner()
     // now, because DD needs them for the LocalTopologyChecker, but
     // they do not contain valid data until after the first DD
     // partition.
-    std::unique_ptr<t_state> localStateInstance;
-    t_state*                 localState;
-    gmx_localtop_t           localTopology(mtop.ffparams);
+    std::unique_ptr<t_state>      localStateInstance;
+    t_state*                      localState;
+    gmx_localtop_t                localTopology(mtop.ffparams);
+    std::unique_ptr<gmx_domdec_t> ddManager;
 
     if (ddBuilder)
     {
@@ -1451,7 +1479,8 @@ int Mdrunner::mdrunner()
         localState         = localStateInstance.get();
         // TODO Pass the GPU streams to ddBuilder to use in buffer
         // transfers (e.g. halo exchange)
-        cr->dd = ddBuilder->build(&atomSets, localTopology, *localState, &observablesReducerBuilder);
+        ddManager = ddBuilder->build(&atomSets, localTopology, *localState, &observablesReducerBuilder);
+        cr->dd = ddManager.get();
         // The builder's job is done, so destruct it
         ddBuilder.reset(nullptr);
         // Note that local state still does not exist yet.
@@ -1498,7 +1527,7 @@ int Mdrunner::mdrunner()
     // Also populates the simulation constant workload description.
     // Note: currently the default duty is DUTY_PP | DUTY_PME for all simulations, including those without PME,
     // so this boolean is sufficient on all ranks to determine whether separate PME ranks are used,
-    // but this will no longer be the case if cr->duty is changed for !EEL_PME(fr->ic->eeltype).
+    // but this will no longer be the case if cr->duty is changed for !usingPme(fr->ic->eeltype).
     const bool haveSeparatePmeRank = (!thisRankHasDuty(cr, DUTY_PP) || !thisRankHasDuty(cr, DUTY_PME));
     runScheduleWork.simulationWork = createSimulationWorkload(*inputrec,
                                                               disableNonbondedCalculation,
@@ -1589,7 +1618,8 @@ int Mdrunner::mdrunner()
     // that existing affinity setting was from OpenMP or something
     // else, so we run this code both before and after we initialize
     // the OpenMP support.
-    gmx_check_thread_affinity_set(mdlog, &hw_opt, hwinfo_->hardwareTopology->maxThreads(), FALSE);
+    gmx_check_thread_affinity_set(
+            mdlog, &hw_opt, hwinfo_->hardwareTopology->maxThreads(), FALSE, libraryWorldCommunicator);
     /* Check and update the number of OpenMP threads requested */
     checkAndUpdateRequestedNumOpenmpThreads(
             &hw_opt, *hwinfo_, cr, ms, physicalNodeComm.size_, pmeRunMode, mtop, *inputrec);
@@ -1638,7 +1668,8 @@ int Mdrunner::mdrunner()
          * - which indicates that probably the OpenMP library has changed it
          * since we first checked).
          */
-        gmx_check_thread_affinity_set(mdlog, &hw_opt, hwinfo_->hardwareTopology->maxThreads(), TRUE);
+        gmx_check_thread_affinity_set(
+                mdlog, &hw_opt, hwinfo_->hardwareTopology->maxThreads(), TRUE, libraryWorldCommunicator);
 
         int numThreadsOnThisNode, intraNodeThreadOffset;
         analyzeThreadsOnThisNode(
@@ -1742,16 +1773,18 @@ int Mdrunner::mdrunner()
                     deviceStreamManager->stream(DeviceStreamType::PmePpTransfer));
         }
 
-        fr->nbv = Nbnxm::init_nb_verlet(mdlog,
-                                        *inputrec,
-                                        *fr,
-                                        cr,
-                                        *hwinfo_,
-                                        runScheduleWork.simulationWork.useGpuNonbonded,
-                                        deviceStreamManager.get(),
-                                        mtop,
-                                        box,
-                                        wcycle.get());
+        fr->nbv = Nbnxm::init_nb_verlet(
+                mdlog,
+                *inputrec,
+                *fr,
+                cr,
+                *hwinfo_,
+                runScheduleWork.simulationWork.useGpuNonbonded,
+                deviceStreamManager.get(),
+                mtop,
+                isSimulationMasterRank ? globalState->x : gmx::ArrayRef<const gmx::RVec>(),
+                box,
+                wcycle.get());
         // TODO: Move the logic below to a GPU bonded builder
         if (runScheduleWork.simulationWork.useGpuBonded)
         {
@@ -1823,7 +1856,7 @@ int Mdrunner::mdrunner()
             dd_make_reverse_top(fplog, cr->dd, mtop, vsite.get(), *inputrec, domdecOptions.ddBondedChecking);
         }
 
-        if (EEL_PME(fr->ic->eeltype) || EVDW_PME(fr->ic->vdwtype))
+        if (usingPme(fr->ic->eeltype) || usingLJPme(fr->ic->vdwtype))
         {
             ewaldcoeff_q  = fr->ic->ewaldcoeff_q;
             ewaldcoeff_lj = fr->ic->ewaldcoeff_lj;
@@ -1864,12 +1897,12 @@ int Mdrunner::mdrunner()
 
     /* Initiate PME if necessary,
      * either on all nodes or on dedicated PME nodes only. */
-    if (EEL_PME(inputrec->coulombtype) || EVDW_PME(inputrec->vdwtype))
+    if (usingPme(inputrec->coulombtype) || usingLJPme(inputrec->vdwtype))
     {
         if (mdAtoms && mdAtoms->mdatoms())
         {
             nChargePerturbed = mdAtoms->mdatoms()->nChargePerturbed;
-            if (EVDW_PME(inputrec->vdwtype))
+            if (usingLJPme(inputrec->vdwtype))
             {
                 nTypePerturbed = mdAtoms->mdatoms()->nTypePerturbed;
             }
@@ -2014,6 +2047,7 @@ int Mdrunner::mdrunner()
         auto constr = makeConstraints(mtop,
                                       *inputrec,
                                       pull_work,
+                                      pull_work != nullptr ? pull_have_constraint(*pull_work) : false,
                                       doEssentialDynamics,
                                       fplog,
                                       cr,
@@ -2176,6 +2210,8 @@ int Mdrunner::mdrunner()
     // before we destroy the GPU context(s)
     // Pinned buffers are associated with contexts in CUDA.
     // As soon as we destroy GPU contexts after mdrunner() exits, these lines should go.
+    ddManager.reset(nullptr);
+    cr->dd = nullptr; // cr->dd is destroyed via ddManager
     mdAtoms.reset(nullptr);
     globalState.reset(nullptr);
     localStateInstance.reset(nullptr);
@@ -2285,8 +2321,7 @@ Mdrunner::Mdrunner(std::unique_ptr<MDModules> mdModules) : mdModules_(std::move(
 
 Mdrunner::Mdrunner(Mdrunner&&) noexcept = default;
 
-//NOLINTNEXTLINE(performance-noexcept-move-constructor) working around GCC bug 58265 in CentOS 7
-Mdrunner& Mdrunner::operator=(Mdrunner&& /*handle*/) noexcept(BUGFREE_NOEXCEPT_STRING) = default;
+Mdrunner& Mdrunner::operator=(Mdrunner&& /*handle*/) noexcept = default;
 
 class Mdrunner::BuilderImplementation
 {

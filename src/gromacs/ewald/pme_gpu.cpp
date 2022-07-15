@@ -47,6 +47,7 @@
 
 #include "gromacs/ewald/ewald_utils.h"
 #include "gromacs/ewald/pme.h"
+#include "gromacs/ewald/pme_coordinate_receiver_gpu.h"
 #include "gromacs/fft/parallel_3dfft.h"
 #include "gromacs/math/invertmatrix.h"
 #include "gromacs/mdlib/gmx_omp_nthreads.h"
@@ -58,7 +59,6 @@
 #include "gromacs/utility/fatalerror.h"
 #include "gromacs/utility/gmxassert.h"
 #include "gromacs/utility/stringutil.h"
-#include "gromacs/ewald/pme_coordinate_receiver_gpu.h"
 
 #include "pme_gpu_internal.h"
 #include "pme_gpu_settings.h"
@@ -255,8 +255,7 @@ void pme_gpu_launch_complex_transforms(gmx_pme_t* pme, gmx_wallcycle* wcycle, co
             /* solve in k-space for our local cells */
             if (settings.performGPUSolve)
             {
-                const auto gridOrdering =
-                        settings.useDecomposition ? GridOrdering::YZX : GridOrdering::XYZ;
+                const auto gridOrdering = GridOrdering::XYZ;
                 wallcycle_start_nocount(wcycle, WallCycleCounter::LaunchGpu);
                 wallcycle_sub_start_nocount(wcycle, WallCycleSubCounter::LaunchGpuPme);
                 pme_gpu_solve(pmeGpu, gridIndex, cfftgrid, gridOrdering, computeEnergyAndVirial);

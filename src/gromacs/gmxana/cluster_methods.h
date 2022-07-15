@@ -37,7 +37,6 @@
 
 #include <stdio.h>
 
-#include "gromacs/utility/basedefinitions.h"
 #include "gromacs/utility/real.h"
 
 struct gmx_output_env_t;

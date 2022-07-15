@@ -70,6 +70,7 @@ target_link_libraries(modularsimulator PRIVATE
                       gmxlib
                       math
                       mdtypes
+                      pulling
                       tng_io
                       )
 
@@ -86,5 +87,6 @@ target_link_libraries(modularsimulator PUBLIC
                       utility
                       )
 
-list(APPEND libgromacs_object_library_dependencies modularsimulator)
-set(libgromacs_object_library_dependencies ${libgromacs_object_library_dependencies} PARENT_SCOPE)
+if (BUILD_SHARED_LIBS)
+    set_target_properties(modularsimulator PROPERTIES POSITION_INDEPENDENT_CODE ON)
+endif()

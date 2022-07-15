@@ -206,9 +206,6 @@
 /* Define for Linux pthread_setaffinity_np */
 #cmakedefine HAVE_PTHREAD_SETAFFINITY
 
-/* Define for X-Windows */
-#cmakedefine01 GMX_X11
-
 /* Enable x86 gcc inline assembly */
 #cmakedefine01 GMX_X86_GCC_INLINE_ASM
 
@@ -247,7 +244,10 @@
 #cmakedefine01 MPI_SUPPORTS_CUDA_AWARE_DETECTION
 
 /* Define if HeFFTe library found */
-#cmakedefine01 Heffte_FOUND
+#cmakedefine01 GMX_USE_Heffte
+
+/* Define if cuFFTMp library found */
+#cmakedefine01 GMX_USE_cuFFTMp
 
 /* Cluster size used by nonbonded kernel. Should be 8 for NVIDIA/AMD and 4 for Intel */
 #define GMX_GPU_NB_CLUSTER_SIZE @GMX_GPU_NB_CLUSTER_SIZE@

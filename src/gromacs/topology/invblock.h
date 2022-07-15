@@ -34,18 +34,19 @@
 #ifndef GMX_TOPOLOGY_INVBLOCK_H
 #define GMX_TOPOLOGY_INVBLOCK_H
 
+#include <vector>
 
-struct t_block;
-struct t_blocka;
+namespace gmx
+{
+template<typename>
+class ListOfLists;
+}
 
-int* make_invblock(const struct t_block* block, int nr);
-/* Inverse the block structure. nr is the maximum entry in the inversed
- * array, and therefore the dimension of the returned array
+/*! \brief Returns a vector of size \p maxElement + 1 with the list index for every element
+ *
+ * The index will be -1 when an element is not present in any of the lists.
+ * Elements should only appear once and obey 0 <= element <= \p maxElement.
  */
-
-int* make_invblocka(const struct t_blocka* block, int nr);
-/* Inverse the block structure. nr is the maximum entry in the inversed
- * array, and therefore the dimension of the returned array
- */
+std::vector<int> make_invblock(const gmx::ListOfLists<int>& block, int maxElement);
 
 #endif

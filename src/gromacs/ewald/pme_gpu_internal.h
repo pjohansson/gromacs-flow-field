@@ -57,7 +57,6 @@ struct DeviceInformation;
 class DeviceStream;
 class GpuEventSynchronizer;
 struct gmx_hw_info_t;
-struct gmx_gpu_opt_t;
 struct gmx_pme_t; // only used in pme_gpu_reinit
 struct gmx_wallcycle;
 class PmeAtomComm;
@@ -107,9 +106,13 @@ enum class GridOrdering
  * size divisible by the returned number.
  *
  * \returns Number of atoms in a single GPU atom data chunk, which
- * determines a minimum divisior of the size of the memory allocated.
+ * determines a minimum divisor of the size of the memory allocated.
  */
 int pme_gpu_get_atom_data_block_size();
+
+/*!\brief Return the number of atoms per warp */
+GPU_FUNC_QUALIFIER int pme_gpu_get_atoms_per_warp(const PmeGpu* GPU_FUNC_ARGUMENT(pmeGpu))
+        GPU_FUNC_TERM_WITH_RETURN(0);
 
 /*! \libinternal \brief
  * Synchronizes the current computation, waiting for the GPU kernels/transfers to finish.
@@ -258,6 +261,20 @@ void pme_gpu_realloc_grids(PmeGpu* pmeGpu);
  * \param[in] pmeGpu            The PME GPU structure.
  */
 void pme_gpu_free_grids(const PmeGpu* pmeGpu);
+
+/*! \libinternal \brief
+ * Reinitialize PME halo exchange parameters and staging device buffers for MPI communication.
+ *
+ * \param[in] pmeGpu            The PME GPU structure.
+ */
+void pme_gpu_reinit_haloexchange(PmeGpu* pmeGpu);
+
+/*! \libinternal \brief
+ * Frees device staging buffers used for PME halo exchange.
+ *
+ * \param[in] pmeGpu            The PME GPU structure.
+ */
+void pme_gpu_free_haloexchange(const PmeGpu* pmeGpu);
 
 /*! \libinternal \brief
  * Clears the real space grid on the GPU.
@@ -503,18 +520,6 @@ GPU_FUNC_QUALIFIER PmeOutput pme_gpu_getOutput(const gmx_pme_t& GPU_FUNC_ARGUMEN
  */
 GPU_FUNC_QUALIFIER void pme_gpu_update_input_box(PmeGpu*      GPU_FUNC_ARGUMENT(pmeGpu),
                                                  const matrix GPU_FUNC_ARGUMENT(box)) GPU_FUNC_TERM;
-
-/*! \libinternal \brief
- * Finishes the PME GPU computation, waiting for the output forces and/or energy/virial to be copied to the host.
- * If forces were computed, they will have arrived at the external host buffer provided to gather.
- * If virial/energy were computed, they will have arrived into the internal staging buffer
- * (even though that should have already happened before even launching the gather).
- * Finally, cudaEvent_t based GPU timers get updated if enabled. They also need stream synchronization for correctness.
- * Additionally, device-side buffers are cleared asynchronously for the next computation.
- *
- * \param[in] pmeGpu         The PME GPU structure.
- */
-void pme_gpu_finish_computation(const PmeGpu* pmeGpu);
 
 /*! \libinternal \brief
  * Get the normal/padded grid dimensions of the real-space PME grid on GPU. Only used in tests.

@@ -62,6 +62,7 @@
 #         GROMACS     2020   5
 #         GROMACS     2021   6
 #         GROMACS     2022   7
+#         GROMACS     2023   8
 #   LIBRARY_SOVERSION_MINOR so minor version for the built libraries.
 #       Should be increased for each release that changes only the implementation.
 #       In GROMACS, the typical policy is to increase it for each patch version
@@ -76,7 +77,7 @@
 #       code, *if* this code is recent enough (i.e., contains all changes from
 #       the corresponding code branch that affects the regression test
 #       results). Even after a release branch is forked for the source
-#       repository, the correct regressiontests branch can still be master,
+#       repository, the correct regressiontests branch can still be main,
 #       because we do not fork it until behaviour needs to change.
 #   REGRESSIONTEST_MD5SUM
 #       The MD5 checksum of the regressiontest tarball. Only used when building
@@ -218,7 +219,7 @@ set(GMX_VERSION_SUFFIX "")
 # here. The important thing is to minimize the chance of third-party
 # code being able to dynamically link with a version of libgromacs
 # that might not work.
-set(LIBRARY_SOVERSION_MAJOR 7)
+set(LIBRARY_SOVERSION_MAJOR 8)
 set(LIBRARY_SOVERSION_MINOR 0)
 set(LIBRARY_VERSION ${LIBRARY_SOVERSION_MAJOR}.${LIBRARY_SOVERSION_MINOR}.0)
 
@@ -230,10 +231,14 @@ if (GMX_VERSION_PATCH)
 else()
     set(GMX_VERSION "${GMX_VERSION_MAJOR}")
 endif()
+# Set REGRESSIONTEST_VERSION before further modification to version info.
 set(REGRESSIONTEST_VERSION "${GMX_VERSION}${GMX_VERSION_SUFFIX}")
 
+# Initialize version string.
+# Note: Forks that use the suffixing feature later change GMX_VERSION_STRING
+# Ref: https://gitlab.com/gromacs/gromacs/-/merge_requests/2587
 set(GMX_VERSION_STRING "${REGRESSIONTEST_VERSION}")
-set(REGRESSIONTEST_BRANCH "release-2022")
+set(REGRESSIONTEST_BRANCH "main")
 # Follow the relevant part of the release checklist at
 # https://gitlab.com/gromacs/gromacs/-/wikis/Release-checklist#how-to-build-a-regressiontests-tarball
 # in order to have it build the regressiontests tarball with all the
@@ -284,8 +289,8 @@ if (GMX_VERSION_STRING_OF_FORK)
     set(GMX_MANUAL_DOI_INTERNAL "")
     set(GMX_SOURCE_DOI_INTERNAL "")
 else()
-    set(GMX_MANUAL_DOI_INTERNAL "10.5281/zenodo.6637572") # Set correct doi string here
-    set(GMX_SOURCE_DOI_INTERNAL "10.5281/zenodo.6637571") # Set correct doi string here
+    set(GMX_MANUAL_DOI_INTERNAL "") # Set correct doi string here
+    set(GMX_SOURCE_DOI_INTERNAL "") # Set correct doi string here
 endif()
 set(GMX_MANUAL_DOI ${GMX_MANUAL_DOI_INTERNAL} CACHE INTERNAL "reserved doi for GROMACS manual" FORCE)
 set(GMX_SOURCE_DOI ${GMX_SOURCE_DOI_INTERNAL} CACHE INTERNAL "reserved doi for GROMACS source code" FORCE)

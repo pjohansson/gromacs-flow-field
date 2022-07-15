@@ -42,7 +42,6 @@
 
 #include "gmxpre.h"
 
-#include "gromacs/utility/arrayref.h"
 #include "partition.h"
 
 #include "config.h"
@@ -84,11 +83,11 @@
 #include "gromacs/timing/wallcycle.h"
 #include "gromacs/topology/mtop_util.h"
 #include "gromacs/topology/topology.h"
+#include "gromacs/utility/arrayref.h"
 #include "gromacs/utility/cstringutil.h"
 #include "gromacs/utility/fatalerror.h"
 #include "gromacs/utility/logger.h"
 #include "gromacs/utility/real.h"
-#include "gromacs/utility/smalloc.h"
 #include "gromacs/utility/strconvert.h"
 #include "gromacs/utility/stringstream.h"
 #include "gromacs/utility/stringutil.h"
@@ -143,7 +142,7 @@ static void dd_move_cellx(gmx_domdec_t* dd, const gmx_ddbox_t* ddbox, rvec cell_
     gmx_ddzone_t       buf_s[c_ddZoneCommMaxNumZones];
     gmx_ddzone_t       buf_r[c_ddZoneCommMaxNumZones];
     gmx_ddzone_t       buf_e[c_ddZoneCommMaxNumZones];
-    gmx_domdec_comm_t* comm = dd->comm;
+    gmx_domdec_comm_t* comm = dd->comm.get();
 
     rvec extr_s[2];
     rvec extr_r[2];
@@ -717,7 +716,7 @@ static void comm_dd_ns_cell_sizes(gmx_domdec_t* dd, gmx_ddbox_t* ddbox, rvec cel
     gmx_domdec_comm_t* comm;
     int                dim_ind, dim;
 
-    comm = dd->comm;
+    comm = dd->comm.get();
 
     for (dim_ind = 0; dim_ind < dd->ndim; dim_ind++)
     {
@@ -725,7 +724,7 @@ static void comm_dd_ns_cell_sizes(gmx_domdec_t* dd, gmx_ddbox_t* ddbox, rvec cel
 
         /* Without PBC we don't have restrictions on the outer cells */
         if (!(dim >= ddbox->npbcdim && (dd->ci[dim] == 0 || dd->ci[dim] == dd->numCells[dim] - 1))
-            && isDlbOn(comm)
+            && isDlbOn(comm->dlbState)
             && (comm->cell_x1[dim] - comm->cell_x0[dim]) * ddbox->skew_fac[dim] < comm->cellsize_min[dim])
         {
             char buf[22];
@@ -744,11 +743,11 @@ static void comm_dd_ns_cell_sizes(gmx_domdec_t* dd, gmx_ddbox_t* ddbox, rvec cel
         }
     }
 
-    if ((isDlbOn(dd->comm) && dd->ndim > 1) || ddbox->nboundeddim < DIM)
+    if ((isDlbOn(dd->comm->dlbState) && dd->ndim > 1) || ddbox->nboundeddim < DIM)
     {
         /* Communicate the boundaries and update cell_ns_x0/1 */
         dd_move_cellx(dd, ddbox, cell_ns_x0, cell_ns_x1);
-        if (isDlbOn(dd->comm) && dd->ndim > 1)
+        if (isDlbOn(dd->comm->dlbState) && dd->ndim > 1)
         {
             gmx::check_grid_jump(step, dd, dd->comm->systemInfo.cutoff, ddbox, TRUE);
         }
@@ -770,7 +769,7 @@ static void get_load_distribution(gmx_domdec_t* dd, gmx_wallcycle* wcycle)
 
     wallcycle_start(wcycle, WallCycleCounter::DDCommLoad);
 
-    comm = dd->comm;
+    comm = dd->comm.get();
 
     bSepPME = (dd->pme_nodeid >= 0);
 
@@ -782,7 +781,8 @@ static void get_load_distribution(gmx_domdec_t* dd, gmx_wallcycle* wcycle)
     }
 
     // Either we have DLB off, or we have it on and the array is large enough
-    GMX_ASSERT(!isDlbOn(dd->comm) || static_cast<int>(dd->comm->cellsizesWithDlb.size()) == dd->ndim,
+    GMX_ASSERT(!isDlbOn(dd->comm->dlbState)
+                       || static_cast<int>(dd->comm->cellsizesWithDlb.size()) == dd->ndim,
                "DLB cell sizes data not set up properly ");
     for (int d = dd->ndim - 1; d >= 0; d--)
     {
@@ -791,7 +791,7 @@ static void get_load_distribution(gmx_domdec_t* dd, gmx_wallcycle* wcycle)
         if (d == dd->ndim - 1 || (dd->ci[dd->dim[d + 1]] == 0 && dd->ci[dd->dim[dd->ndim - 1]] == 0))
         {
             load = &comm->load[d];
-            if (isDlbOn(dd->comm))
+            if (isDlbOn(dd->comm->dlbState))
             {
                 cell_frac = comm->cellsizesWithDlb[d].fracUpper - comm->cellsizesWithDlb[d].fracLower;
             }
@@ -800,7 +800,7 @@ static void get_load_distribution(gmx_domdec_t* dd, gmx_wallcycle* wcycle)
             {
                 sbuf[pos++] = dd_force_load(comm);
                 sbuf[pos++] = sbuf[0];
-                if (isDlbOn(dd->comm))
+                if (isDlbOn(dd->comm->dlbState))
                 {
                     sbuf[pos++] = sbuf[0];
                     sbuf[pos++] = cell_frac;
@@ -820,7 +820,7 @@ static void get_load_distribution(gmx_domdec_t* dd, gmx_wallcycle* wcycle)
             {
                 sbuf[pos++] = comm->load[d + 1].sum;
                 sbuf[pos++] = comm->load[d + 1].max;
-                if (isDlbOn(dd->comm))
+                if (isDlbOn(dd->comm->dlbState))
                 {
                     sbuf[pos++] = comm->load[d + 1].sum_m;
                     sbuf[pos++] = comm->load[d + 1].cvol_min * cell_frac;
@@ -845,7 +845,7 @@ static void get_load_distribution(gmx_domdec_t* dd, gmx_wallcycle* wcycle)
             MPI_Gather(sbuf,
                        load->nload * sizeof(float),
                        MPI_BYTE,
-                       load->load,
+                       load->load.data(),
                        load->nload * sizeof(float),
                        MPI_BYTE,
                        0,
@@ -856,7 +856,7 @@ static void get_load_distribution(gmx_domdec_t* dd, gmx_wallcycle* wcycle)
                 /* We are the master along this row, process this row */
                 RowMaster* rowMaster = nullptr;
 
-                if (isDlbOn(comm))
+                if (isDlbOn(comm->dlbState))
                 {
                     rowMaster = comm->cellsizesWithDlb[d].rowMaster.get();
                 }
@@ -873,7 +873,7 @@ static void get_load_distribution(gmx_domdec_t* dd, gmx_wallcycle* wcycle)
                     load->sum += load->load[pos++];
                     load->max = std::max(load->max, load->load[pos]);
                     pos++;
-                    if (isDlbOn(dd->comm))
+                    if (isDlbOn(dd->comm->dlbState))
                     {
                         if (rowMaster->dlbIsLimited)
                         {
@@ -907,7 +907,7 @@ static void get_load_distribution(gmx_domdec_t* dd, gmx_wallcycle* wcycle)
                         pos++;
                     }
                 }
-                if (isDlbOn(comm) && rowMaster->dlbIsLimited)
+                if (isDlbOn(comm->dlbState) && rowMaster->dlbIsLimited)
                 {
                     load->sum_m *= dd->numCells[dim];
                     load->flags |= (1 << d);
@@ -922,7 +922,7 @@ static void get_load_distribution(gmx_domdec_t* dd, gmx_wallcycle* wcycle)
         comm->load_step += comm->cycl[ddCyclStep];
         comm->load_sum += comm->load[0].sum;
         comm->load_max += comm->load[0].max;
-        if (isDlbOn(comm))
+        if (isDlbOn(comm->dlbState))
         {
             for (int d = 0; d < dd->ndim; d++)
             {
@@ -978,7 +978,7 @@ static float dd_force_imb_perf_loss(gmx_domdec_t* dd)
 //! Print load-balance report e.g. at the end of a run.
 static void print_dd_load_av(FILE* fplog, gmx_domdec_t* dd)
 {
-    gmx_domdec_comm_t* comm = dd->comm;
+    gmx_domdec_comm_t* comm = dd->comm.get();
 
     /* Only the master rank prints loads and only if we measured loads */
     if (!DDMASTER(dd) || comm->nload == 0)
@@ -1044,7 +1044,7 @@ static void print_dd_load_av(FILE* fplog, gmx_domdec_t* dd)
 
     /* Print during what percentage of steps the  load balancing was limited */
     bool dlbWasLimited = false;
-    if (isDlbOn(comm))
+    if (isDlbOn(comm->dlbState))
     {
         sprintf(buf, " Steps where the load balancing was limited by -rdd, -rcon and/or -dds:");
         for (int d = 0; d < dd->ndim; d++)
@@ -1185,7 +1185,7 @@ static std::string dd_print_load(gmx_domdec_t* dd, int64_t step)
         log.ensureLineBreak();
     }
     log.writeString("DD  step " + gmx::toString(step));
-    if (isDlbOn(dd->comm))
+    if (isDlbOn(dd->comm->dlbState))
     {
         log.writeStringFormatted("  vol min/aver %5.3f%c", dd_vol_min(dd), flags ? '!' : ' ');
     }
@@ -1204,7 +1204,7 @@ static std::string dd_print_load(gmx_domdec_t* dd, int64_t step)
 //! Prints DD load balance report in mdrun verbose mode.
 static void dd_print_load_verbose(gmx_domdec_t* dd)
 {
-    if (isDlbOn(dd->comm))
+    if (isDlbOn(dd->comm->dlbState))
     {
         fprintf(stderr, "vol %4.2f%c ", dd_vol_min(dd), dd_load_flags(dd) ? '!' : ' ');
     }
@@ -1221,7 +1221,7 @@ static void dd_print_load_verbose(gmx_domdec_t* dd)
 //! Turns on dynamic load balancing if possible and needed.
 static void turn_on_dlb(const gmx::MDLogger& mdlog, gmx_domdec_t* dd, int64_t step)
 {
-    gmx_domdec_comm_t* comm = dd->comm;
+    gmx_domdec_comm_t* comm = dd->comm.get();
 
     real cellsize_min = comm->cellsize_min[dd->dim[0]];
     for (int d = 1; d < dd->ndim; d++)
@@ -1316,7 +1316,7 @@ void set_dd_dlb_max_cutoff(t_commrec* cr, real cutoff)
 {
     gmx_domdec_comm_t* comm;
 
-    comm = cr->dd->comm;
+    comm = cr->dd->comm.get();
 
     /* Turn on the DLB limiting (might have been on already) */
     comm->bPMELoadBalDLBLimits = TRUE;
@@ -1425,17 +1425,11 @@ static void make_cell2at_index(gmx_domdec_comm_dim_t* cd, int nzone, int atomGro
 }
 
 //! Returns whether a link is missing.
-static gmx_bool missing_link(const t_blocka& link, const int globalAtomIndex, const gmx_ga2la_t& ga2la)
+static bool missing_link(const gmx::ListOfLists<int>& link, const int globalAtomIndex, const gmx_ga2la_t& ga2la)
 {
-    for (int i = link.index[globalAtomIndex]; i < link.index[globalAtomIndex + 1]; i++)
-    {
-        if (!ga2la.findHome(link.a[i]))
-        {
-            return true;
-        }
-    }
-
-    return false;
+    return std::any_of(link[globalAtomIndex].begin(), link[globalAtomIndex].end(), [&](const int a) {
+        return ga2la.findHome(a) == nullptr;
+    });
 }
 
 //! Domain corners for communication, a maximum of 4 i-zones see a j domain
@@ -1459,7 +1453,7 @@ static void set_dd_corners(const gmx_domdec_t* dd, int dim0, int dim1, int dim2,
     const gmx_domdec_comm_t*  comm;
     const gmx_domdec_zones_t* zones;
 
-    comm = dd->comm;
+    comm = dd->comm.get();
 
     zones = &comm->zones;
 
@@ -1480,7 +1474,7 @@ static void set_dd_corners(const gmx_domdec_t* dd, int dim0, int dim1, int dim2,
         c->c[1][0] = comm->cell_x0[dim1];
         /* All rows can see this row */
         c->c[1][1] = comm->cell_x0[dim1];
-        if (isDlbOn(dd->comm))
+        if (isDlbOn(dd->comm->dlbState))
         {
             c->c[1][1] = std::max(comm->cell_x0[dim1], comm->zone_d1[1].mch0);
             if (bDistMB)
@@ -1499,7 +1493,7 @@ static void set_dd_corners(const gmx_domdec_t* dd, int dim0, int dim1, int dim2,
             {
                 c->c[2][j] = comm->cell_x0[dim2];
             }
-            if (isDlbOn(dd->comm))
+            if (isDlbOn(dd->comm->dlbState))
             {
                 /* Use the maximum of the i-cells that see a j-cell */
                 for (const auto& iZone : zones->iZones)
@@ -1536,7 +1530,7 @@ static void set_dd_corners(const gmx_domdec_t* dd, int dim0, int dim1, int dim2,
              */
             c->cr1[0] = comm->cell_x1[dim1];
             c->cr1[3] = comm->cell_x1[dim1];
-            if (isDlbOn(dd->comm))
+            if (isDlbOn(dd->comm->dlbState))
             {
                 c->cr1[0] = std::max(comm->cell_x1[dim1], comm->zone_d1[1].mch1);
                 if (bDistMB)
@@ -1592,7 +1586,7 @@ static void get_zone_pulse_groups(gmx_domdec_t*                  dd,
     int                dimd;
     int                nsend_z, nat;
 
-    comm = dd->comm;
+    comm = dd->comm.get();
 
     bScrew = (dd->unitCellInfo.haveScrewPBC && dim == XX);
 
@@ -1841,7 +1835,7 @@ static void setup_dd_communication(gmx_domdec_t* dd, matrix box, gmx_ddbox_t* dd
         fprintf(debug, "Setting up DD communication\n");
     }
 
-    comm = dd->comm;
+    comm = dd->comm.get();
 
     if (comm->dth.empty())
     {
@@ -1856,7 +1850,8 @@ static void setup_dd_communication(gmx_domdec_t* dd, matrix box, gmx_ddbox_t* dd
     bBondComm = comm->systemInfo.filterBondedCommunication;
 
     /* Do we need to determine extra distances for multi-body bondeds? */
-    bDistMB = (comm->systemInfo.haveInterDomainMultiBodyBondeds && isDlbOn(dd->comm) && dd->ndim > 1);
+    bDistMB = (comm->systemInfo.haveInterDomainMultiBodyBondeds && isDlbOn(dd->comm->dlbState)
+               && dd->ndim > 1);
 
     /* Do we need to determine extra distances for only two-body bondeds? */
     bDist2B = (bBondComm && !bDistMB);
@@ -2249,12 +2244,13 @@ static void set_zones_size(gmx_domdec_t*      dd,
     int                 i, j;
     real                vol;
 
-    comm = dd->comm;
+    comm = dd->comm.get();
 
     zones = &comm->zones;
 
     /* Do we need to determine extra distances for multi-body bondeds? */
-    bDistMB = (comm->systemInfo.haveInterDomainMultiBodyBondeds && isDlbOn(dd->comm) && dd->ndim > 1);
+    bDistMB = (comm->systemInfo.haveInterDomainMultiBodyBondeds && isDlbOn(dd->comm->dlbState)
+               && dd->ndim > 1);
 
     for (z = zone_start; z < zone_end; z++)
     {
@@ -2274,7 +2270,7 @@ static void set_zones_size(gmx_domdec_t*      dd,
             /* With a staggered grid we have different sizes
              * for non-shifted dimensions.
              */
-            if (isDlbOn(dd->comm) && zones->shift[z][dim] == 0)
+            if (isDlbOn(dd->comm->dlbState) && zones->shift[z][dim] == 0)
             {
                 if (d == 1)
                 {
@@ -2307,7 +2303,7 @@ static void set_zones_size(gmx_domdec_t*      dd,
             if (zones->shift[z][dim] > 0)
             {
                 dim = dd->dim[d];
-                if (!isDlbOn(dd->comm) || d == 0)
+                if (!isDlbOn(dd->comm->dlbState) || d == 0)
                 {
                     zones->size[z].x0[dim] = comm->cell_x1[dim];
                     zones->size[z].x1[dim] = comm->cell_x1[dim] + rcs;
@@ -2553,7 +2549,7 @@ static void dd_sort_order_nbnxn(const t_forcerec* fr, std::vector<gmx_cgsort_t>*
     {
         if (i >= 0)
         {
-            /* The values of nsc and ind_gl are not used in this case */
+            /* The value of ind_gl is not used in this case */
             buffer[numSorted++].ind = i;
         }
     }
@@ -2609,7 +2605,7 @@ static void dd_sort_state(gmx_domdec_t* dd, t_forcerec* fr, t_state* state)
 //! Accumulates load statistics.
 static void add_dd_statistics(gmx_domdec_t* dd)
 {
-    gmx_domdec_comm_t* comm = dd->comm;
+    gmx_domdec_comm_t* comm = dd->comm.get();
 
     for (int i = 0; i < static_cast<int>(DDAtomRanges::Type::Number); i++)
     {
@@ -2621,7 +2617,7 @@ static void add_dd_statistics(gmx_domdec_t* dd)
 
 void reset_dd_statistics_counters(gmx_domdec_t* dd)
 {
-    gmx_domdec_comm_t* comm = dd->comm;
+    gmx_domdec_comm_t* comm = dd->comm.get();
 
     /* Reset all the statistics and counters for total run counting */
     for (int i = 0; i < static_cast<int>(DDAtomRanges::Type::Number); i++)
@@ -2643,7 +2639,7 @@ namespace gmx
 
 bool check_grid_jump(int64_t step, const gmx_domdec_t* dd, real cutoff, const gmx_ddbox_t* ddbox, bool bFatal)
 {
-    gmx_domdec_comm_t* comm    = dd->comm;
+    gmx_domdec_comm_t* comm    = dd->comm.get();
     bool               invalid = false;
 
     for (int d = 1; d < dd->ndim; d++)
@@ -2686,7 +2682,7 @@ bool check_grid_jump(int64_t step, const gmx_domdec_t* dd, real cutoff, const gm
 
 void print_dd_statistics(const t_commrec* cr, const t_inputrec& inputrec, FILE* fplog)
 {
-    gmx_domdec_comm_t* comm = cr->dd->comm;
+    gmx_domdec_comm_t* comm = cr->dd->comm.get();
 
     const int numRanges = static_cast<int>(DDAtomRanges::Type::Number);
     gmx_sumd(numRanges, comm->sum_nat, cr);
@@ -2712,7 +2708,7 @@ void print_dd_statistics(const t_commrec* cr, const t_inputrec& inputrec, FILE* 
                 {
                     fprintf(fplog,
                             " av. #atoms communicated per step for vsites: %d x %.1f\n",
-                            (EEL_PME(inputrec.coulombtype)
+                            (usingPme(inputrec.coulombtype)
                              || inputrec.coulombtype == CoulombInteractionType::Ewald)
                                     ? 3
                                     : 2,
@@ -2769,12 +2765,12 @@ void dd_partition_system(FILE*                     fplog,
     wallcycle_start(wcycle, WallCycleCounter::Domdec);
 
     gmx_domdec_t*      dd   = cr->dd;
-    gmx_domdec_comm_t* comm = dd->comm;
+    gmx_domdec_comm_t* comm = dd->comm.get();
 
     // TODO if the update code becomes accessible here, use
     // upd->deform for this logic.
     bool bBoxChanged = (bMasterState || inputrecDeform(&inputrec));
-    if (inputrec.epc != PressureCoupling::No)
+    if (inputrec.pressureCouplingOptions.epc != PressureCoupling::No)
     {
         /* With nstpcouple > 1 pressure coupling happens.
          * one step after calculating the pressure.
@@ -2785,7 +2781,7 @@ void dd_partition_system(FILE*                     fplog,
          * We need to determine the last step in which p-coupling occurred.
          * MRS -- need to validate this for vv?
          */
-        int     n = inputrec.nstpcouple;
+        int     n = inputrec.pressureCouplingOptions.nstpcouple;
         int64_t step_pcoupl;
         if (n == 1)
         {
@@ -2803,7 +2799,7 @@ void dd_partition_system(FILE*                     fplog,
 
     bool bNStGlobalComm = (step % nstglobalcomm == 0);
     bool bDoDLB;
-    if (!isDlbOn(comm))
+    if (!isDlbOn(comm->dlbState))
     {
         bDoDLB = false;
     }
@@ -2813,7 +2809,7 @@ void dd_partition_system(FILE*                     fplog,
          * Since it requires (possibly expensive) global communication,
          * we might want to do DLB less frequently.
          */
-        if (bBoxChanged || inputrec.epc != PressureCoupling::No)
+        if (bBoxChanged || inputrec.pressureCouplingOptions.epc != PressureCoupling::No)
         {
             bDoDLB = bBoxChanged;
         }
@@ -2853,7 +2849,7 @@ void dd_partition_system(FILE*                     fplog,
             }
             comm->n_load_collect++;
 
-            if (isDlbOn(comm))
+            if (isDlbOn(comm->dlbState))
             {
                 if (DDMASTER(dd))
                 {
@@ -3013,7 +3009,7 @@ void dd_partition_system(FILE*                     fplog,
 
         set_ddbox(*dd, bMasterState, state_local->box, true, state_local->x, &ddbox);
 
-        bRedist = isDlbOn(comm);
+        bRedist = isDlbOn(comm->dlbState);
     }
     else
     {
@@ -3265,7 +3261,7 @@ void dd_partition_system(FILE*                     fplog,
     }
     else
     {
-        if (EEL_FULL(inputrec.coulombtype) && dd->haveExclusions)
+        if (usingFullElectrostatics(inputrec.coulombtype) && dd->haveExclusions)
         {
             nat_f_novirsum = comm->atomRanges.end(DDAtomRanges::Type::Zones);
         }
@@ -3293,25 +3289,18 @@ void dd_partition_system(FILE*                     fplog,
     if (!thisRankHasDuty(cr, DUTY_PME))
     {
         /* Send the charges and/or c6/sigmas to our PME only node */
-        gmx_pme_send_parameters(
-                cr,
-                *fr->ic,
-                mdatoms->nChargePerturbed != 0,
-                mdatoms->nTypePerturbed != 0,
-                mdatoms->chargeA ? gmx::arrayRefFromArray(mdatoms->chargeA, mdatoms->nr)
-                                 : gmx::ArrayRef<real>{},
-                mdatoms->chargeB ? gmx::arrayRefFromArray(mdatoms->chargeB, mdatoms->nr)
-                                 : gmx::ArrayRef<real>{},
-                mdatoms->sqrt_c6A ? gmx::arrayRefFromArray(mdatoms->sqrt_c6A, mdatoms->nr)
-                                  : gmx::ArrayRef<real>{},
-                mdatoms->sqrt_c6B ? gmx::arrayRefFromArray(mdatoms->sqrt_c6B, mdatoms->nr)
-                                  : gmx::ArrayRef<real>{},
-                mdatoms->sigmaA ? gmx::arrayRefFromArray(mdatoms->sigmaA, mdatoms->nr)
-                                : gmx::ArrayRef<real>{},
-                mdatoms->sigmaB ? gmx::arrayRefFromArray(mdatoms->sigmaB, mdatoms->nr)
-                                : gmx::ArrayRef<real>{},
-                dd_pme_maxshift_x(*dd),
-                dd_pme_maxshift_y(*dd));
+        gmx_pme_send_parameters(cr,
+                                *fr->ic,
+                                mdatoms->nChargePerturbed != 0,
+                                mdatoms->nTypePerturbed != 0,
+                                mdatoms->chargeA,
+                                mdatoms->chargeB,
+                                mdatoms->sqrt_c6A,
+                                mdatoms->sqrt_c6B,
+                                mdatoms->sigmaA,
+                                mdatoms->sigmaB,
+                                dd_pme_maxshift_x(*dd),
+                                dd_pme_maxshift_y(*dd));
     }
 
     if (dd->atomSets != nullptr)

@@ -36,6 +36,7 @@
 
 #include <memory>
 
+#include "gromacs/math/matrix.h"
 #include "gromacs/math/paddedvector.h"
 #include "gromacs/math/vectypes.h"
 #include "gromacs/mdtypes/md_enums.h"
@@ -118,7 +119,7 @@ public:
      * \param[in]  f                         Buffer with atomic forces for home particles.
      * \param[in]  fcdata                    Force calculation data to update distance and orientation restraints.
      * \param[in]  ekind                     Kinetic energy data (for temperature coupling, energy groups, etc.).
-     * \param[in]  M                         Parrinello-Rahman velocity scaling matrix.
+     * \param[in]  parrinelloRahmanM         Parrinello-Rahman velocity scaling matrix.
      * \param[in]  updatePart                What should be updated, coordinates or velocities. This enum only used in VV integrator.
      * \param[in]  cr                        Comunication record  (Old comment: these shouldn't be here -- need to think about it).
      * \param[in]  haveConstraints           If the system has constraints.
@@ -129,12 +130,12 @@ public:
                        bool                                             havePartiallyFrozenAtoms,
                        gmx::ArrayRef<const ParticleType>                ptype,
                        gmx::ArrayRef<const real>                        invMass,
-                       gmx::ArrayRef<const rvec>                        invMassPerDim,
+                       gmx::ArrayRef<const gmx::RVec>                   invMassPerDim,
                        t_state*                                         state,
                        const gmx::ArrayRefWithPadding<const gmx::RVec>& f,
                        t_fcdata*                                        fcdata,
                        const gmx_ekindata_t*                            ekind,
-                       const matrix                                     M,
+                       const Matrix3x3&                                 parrinelloRahmanM,
                        int                                              updatePart,
                        const t_commrec*                                 cr,
                        bool                                             haveConstraints,
@@ -195,12 +196,12 @@ public:
     /*! \brief Performs a leap-frog update without updating \p state so the constrain virial
      * can be computed.
      */
-    void update_for_constraint_virial(const t_inputrec&         inputRecord,
-                                      int                       homenr,
-                                      bool                      havePartiallyFrozenAtoms,
-                                      gmx::ArrayRef<const real> invmass,
-                                      gmx::ArrayRef<const rvec> invMassPerDim,
-                                      const t_state&            state,
+    void update_for_constraint_virial(const t_inputrec&              inputRecord,
+                                      int                            homenr,
+                                      bool                           havePartiallyFrozenAtoms,
+                                      gmx::ArrayRef<const real>      invmass,
+                                      gmx::ArrayRef<const gmx::RVec> invMassPerDim,
+                                      const t_state&                 state,
                                       const gmx::ArrayRefWithPadding<const gmx::RVec>& f,
                                       const gmx_ekindata_t&                            ekind);
 

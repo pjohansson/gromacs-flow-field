@@ -41,16 +41,17 @@
 #ifndef GMX_FFT_GPU_3DFFT_HEFFTE_H
 #define GMX_FFT_GPU_3DFFT_HEFFTE_H
 
+#include <heffte.h>
+
 #include <memory>
 
 #include "gromacs/fft/fft.h"
 #include "gromacs/gpu_utils/devicebuffer_datatype.h"
-#include "gromacs/gpu_utils/hostallocator.h"
 #include "gromacs/gpu_utils/gputraits.h"
+#include "gromacs/gpu_utils/hostallocator.h"
 #include "gromacs/utility/gmxmpi.h"
-#include "gpu_3dfft_impl.h"
 
-#include <heffte.h>
+#include "gpu_3dfft_impl.h"
 
 class DeviceContext;
 class DeviceStream;
@@ -59,14 +60,14 @@ namespace gmx
 {
 
 /*! \internal \brief
- * A 3D FFT wrapper class for performing R2C/C2R transforms using clFFT
+ * A 3D FFT wrapper class for performing R2C/C2R transforms using heffte
  */
 template<typename backend_tag>
 class Gpu3dFft::ImplHeFfte : public Gpu3dFft::Impl
 {
 public:
     //! \copydoc Gpu3dFft::Impl::Impl
-    ImplHeFfte(bool                 allocateGrids,
+    ImplHeFfte(bool                 allocateRealGrid,
                MPI_Comm             comm,
                ArrayRef<const int>  gridSizesInXForEachRank,
                ArrayRef<const int>  gridSizesInYForEachRank,

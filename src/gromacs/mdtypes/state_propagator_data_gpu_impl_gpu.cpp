@@ -117,8 +117,6 @@ StatePropagatorDataGpu::Impl::Impl(const DeviceStream*  pmeStream,
     nonLocalStream_ = nullptr;
     updateStream_   = nullptr;
 
-    isPmeOnly_ = true;
-
     // Only local/all coordinates are allowed to be copied in PME-only rank/ PME tests.
     // This it temporary measure to make it safe to use this class in those cases.
     xCopyStreams_[AtomLocality::Local]    = pmeStream_;
@@ -408,6 +406,12 @@ void StatePropagatorDataGpu::Impl::setXUpdatedOnDeviceEvent(GpuEventSynchronizer
 void StatePropagatorDataGpu::Impl::setXUpdatedOnDeviceEventExpectedConsumptionCount(int expectedConsumptionCount)
 {
     xUpdatedOnDeviceEvent_->setConsumptionLimits(expectedConsumptionCount, expectedConsumptionCount);
+}
+
+void StatePropagatorDataGpu::Impl::setFReadyOnDeviceEventExpectedConsumptionCount(AtomLocality atomLocality,
+                                                                                  int expectedConsumptionCount)
+{
+    fReadyOnDevice_[atomLocality].setConsumptionLimits(expectedConsumptionCount, expectedConsumptionCount);
 }
 
 void StatePropagatorDataGpu::Impl::copyCoordinatesFromGpu(gmx::ArrayRef<gmx::RVec> h_x,
@@ -701,6 +705,12 @@ void StatePropagatorDataGpu::setXUpdatedOnDeviceEvent(GpuEventSynchronizer* xUpd
 void StatePropagatorDataGpu::setXUpdatedOnDeviceEventExpectedConsumptionCount(int expectedConsumptionCount)
 {
     impl_->setXUpdatedOnDeviceEventExpectedConsumptionCount(expectedConsumptionCount);
+}
+
+void StatePropagatorDataGpu::setFReadyOnDeviceEventExpectedConsumptionCount(AtomLocality atomLocality,
+                                                                            int expectedConsumptionCount)
+{
+    impl_->setFReadyOnDeviceEventExpectedConsumptionCount(atomLocality, expectedConsumptionCount);
 }
 
 void StatePropagatorDataGpu::copyCoordinatesFromGpu(gmx::ArrayRef<RVec>   h_x,

@@ -35,7 +35,6 @@
 
 #include <cctype>
 #include <cmath>
-#include <cstring>
 
 #include "gromacs/commandline/pargs.h"
 #include "gromacs/commandline/viewit.h"
@@ -45,7 +44,6 @@
 #include "gromacs/gmxana/princ.h"
 #include "gromacs/math/functions.h"
 #include "gromacs/math/units.h"
-#include "gromacs/math/utilities.h"
 #include "gromacs/math/vec.h"
 #include "gromacs/pbcutil/pbc.h"
 #include "gromacs/pbcutil/rmpbc.h"
@@ -54,7 +52,6 @@
 #include "gromacs/utility/arraysize.h"
 #include "gromacs/utility/cstringutil.h"
 #include "gromacs/utility/fatalerror.h"
-#include "gromacs/utility/futil.h"
 #include "gromacs/utility/smalloc.h"
 
 #define EPS0 8.85419E-12
@@ -164,7 +161,6 @@ static void calc_potential(const char*             fn,
     int          natoms; /* nr. atoms in trj */
     t_trxstatus* status;
     int          i, n;
-    int          teller    = 0;
     int          nr_frames = 0;
     int          slice;
     double       qsum, nn;
@@ -206,7 +202,6 @@ static void calc_potential(const char*             fn,
     /*********** Start processing trajectory ***********/
     do
     {
-        teller++;
         gmx_rmpbc(gpbc, natoms, box, x0);
 
         // Translate atoms so the com of the center-group is in the

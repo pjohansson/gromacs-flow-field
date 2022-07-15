@@ -48,6 +48,7 @@
 #include <algorithm>
 
 #include "gromacs/domdec/domdec.h"
+#include "gromacs/ewald/pme_coordinate_receiver_gpu.h"
 #include "gromacs/ewald/pme_gather.h"
 #include "gromacs/ewald/pme_gpu_calculate_splines.h"
 #include "gromacs/ewald/pme_gpu_constants.h"
@@ -60,7 +61,6 @@
 #include "gromacs/ewald/pme_spread.h"
 #include "gromacs/fft/parallel_3dfft.h"
 #include "gromacs/gpu_utils/gpu_utils.h"
-#include "gromacs/hardware/device_management.h"
 #include "gromacs/math/invertmatrix.h"
 #include "gromacs/mdtypes/commrec.h"
 #include "gromacs/pbcutil/pbc.h"
@@ -69,7 +69,6 @@
 #include "gromacs/utility/gmxassert.h"
 #include "gromacs/utility/logger.h"
 #include "gromacs/utility/stringutil.h"
-#include "gromacs/ewald/pme_coordinate_receiver_gpu.h"
 
 #include "testutils/test_hardware_environment.h"
 #include "testutils/testasserts.h"
@@ -587,15 +586,6 @@ static int getSplineParamFullIndex(int order, int splineIndex, int dimIndex, int
     return result;
 }
 
-/*!\brief Return the number of atoms per warp */
-static int pme_gpu_get_atoms_per_warp(const PmeGpu* pmeGpu)
-{
-    const int order = pmeGpu->common->pme_order;
-    const int threadsPerAtom =
-            (pmeGpu->settings.threadsPerAtom == ThreadsPerAtom::Order ? order : order * order);
-    return pmeGpu->programHandle_->warpSize() / threadsPerAtom;
-}
-
 /*! \brief Rearranges the atom spline data between the GPU and host layouts.
  * Only used for test purposes so far, likely to be horribly slow.
  *
@@ -620,7 +610,8 @@ static void pme_gpu_transform_spline_atom_data(const PmeGpu*      pmeGpu,
     const uintmax_t threadIndex  = 0;
     const auto      atomCount    = atc->numAtoms();
     const auto      atomsPerWarp = pme_gpu_get_atoms_per_warp(pmeGpu);
-    const auto      pmeOrder     = pmeGpu->common->pme_order;
+    GMX_RELEASE_ASSERT(atomsPerWarp > 0, "Can not get GPU warp size");
+    const auto pmeOrder = pmeGpu->common->pme_order;
     GMX_ASSERT(pmeOrder == c_pmeGpuOrder, "Only PME order 4 is implemented");
 
     real*  cpuSplineBuffer;
@@ -990,7 +981,7 @@ PmeTestHardwareContext::PmeTestHardwareContext() : codePath_(CodePath::CPU) {}
 PmeTestHardwareContext::PmeTestHardwareContext(TestDevice* testDevice) :
     codePath_(CodePath::GPU), testDevice_(testDevice)
 {
-    setActiveDevice(testDevice_->deviceInfo());
+    testDevice_->activate();
     pmeGpuProgram_ = buildPmeGpuProgram(testDevice_->deviceContext());
 }
 
@@ -1019,7 +1010,7 @@ void PmeTestHardwareContext::activate() const
 {
     if (codePath_ == CodePath::GPU)
     {
-        setActiveDevice(testDevice_->deviceInfo());
+        testDevice_->activate();
     }
 }
 

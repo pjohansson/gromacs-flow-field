@@ -58,6 +58,7 @@
 #include "gromacs/mdtypes/state.h"
 #include "gromacs/random/threefry.h"
 #include "gromacs/random/uniformintdistribution.h"
+#include "gromacs/topology/mtop_atomloops.h"
 #include "gromacs/topology/mtop_util.h"
 #include "gromacs/topology/topology.h"
 #include "gromacs/utility/arraysize.h"
@@ -874,7 +875,7 @@ static void read_tpr_file(const char*     fn_sim_tpr,
     }
 
     /* Check if PME was chosen */
-    if (EEL_PME(ir->coulombtype) == FALSE)
+    if (!usingPme(ir->coulombtype))
     {
         gmx_fatal(FARGS, "Can only do optimizations for simulations with PME");
     }

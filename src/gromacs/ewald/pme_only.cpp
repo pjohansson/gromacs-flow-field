@@ -579,7 +579,7 @@ static void gmx_pme_send_force_vir_ener(const gmx_pme_t& pme, gmx_pme_pp* pme_pp
             }
             else
             {
-                void* sendbuf = const_cast<void*>(static_cast<const void*>(output.forces_[ind_start]));
+                void* sendbuf = &output.forces_[ind_start];
                 // Send using MPI
                 MPI_Isend(sendbuf,
                           receiver.numAtoms * sizeof(rvec),
@@ -745,7 +745,7 @@ int gmx_pmeonly(struct gmx_pme_t*               pme,
         stepWork.computeVirial = computeEnergyAndVirial;
         stepWork.computeEnergy = computeEnergyAndVirial;
         stepWork.computeForces = true;
-        PmeOutput output       = { {}, false, 0, { { 0 } }, 0, 0, { { 0 } }, 0 };
+        PmeOutput output       = { {}, false, 0, { { 0 } }, 0, 0, 0, { { 0 } } };
         if (useGpuForPme)
         {
             stepWork.haveDynamicBox      = false;
