@@ -2,7 +2,9 @@
 #include <string>
 #include <vector>
 
+#include "gromacs/commandline/filenm.h"
 #include "gromacs/mdtypes/state.h"
+#include "gromacs/topology/topology.h"
 #include "gromacs/utility/logger.h"
 
 #ifndef MD_FLOW_FIELD
@@ -171,4 +173,4 @@ flow_collect_or_output(FlowData               &flowcr,
 
 } // namespace flow
 
-#endif
+#endif // MD_FLOW_FIELD
