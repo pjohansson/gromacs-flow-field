@@ -1,3 +1,4 @@
+#include <cmath>
 #include <cstdio>
 
 #include "grid.h"
@@ -64,6 +65,54 @@ T& flow::Grid3d<T>::at_pos(const rvec r)
     const auto ix = get_pos_in_grid_saturated(XX, r, shape, origin, spacing);
     const auto iy = get_pos_in_grid_saturated(YY, r, shape, origin, spacing);
     const auto iz = get_pos_in_grid_saturated(ZZ, r, shape, origin, spacing);
+
+    return at(ix, iy, iz);
+}
+
+template<typename T>
+T& flow::Grid3d<T>::at_pos_pbc(const rvec r0, const matrix box)
+{
+    rvec r_pbc = {
+        std::fmod(r0[XX], box[XX][XX]),
+        std::fmod(r0[YY], box[YY][YY]),
+        std::fmod(r0[ZZ], box[ZZ][ZZ])
+    };
+
+    for (size_t i = 0; i < DIM; ++i)
+    {
+        while (r_pbc[i] < 0.0)
+        {
+            r_pbc[i] += box[i][i];
+        }
+    }
+
+    const auto ix = get_pos_in_grid_saturated(XX, r_pbc, shape, origin, spacing);
+    const auto iy = get_pos_in_grid_saturated(YY, r_pbc, shape, origin, spacing);
+    const auto iz = get_pos_in_grid_saturated(ZZ, r_pbc, shape, origin, spacing);
+
+    return at(ix, iy, iz);
+}
+
+template<typename T>
+const T& flow::Grid3d<T>::at_pos_pbc(const rvec r0, const matrix box) const
+{
+    rvec r_pbc = {
+        std::fmod(r0[XX], box[XX][XX]),
+        std::fmod(r0[YY], box[YY][YY]),
+        std::fmod(r0[ZZ], box[ZZ][ZZ])
+    };
+
+    for (size_t i = 0; i < DIM; ++i)
+    {
+        while (r_pbc[i] < 0.0)
+        {
+            r_pbc[i] += box[i][i];
+        }
+    }
+
+    const auto ix = get_pos_in_grid_saturated(XX, r_pbc, shape, origin, spacing);
+    const auto iy = get_pos_in_grid_saturated(YY, r_pbc, shape, origin, spacing);
+    const auto iz = get_pos_in_grid_saturated(ZZ, r_pbc, shape, origin, spacing);
 
     return at(ix, iy, iz);
 }

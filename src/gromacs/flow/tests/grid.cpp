@@ -2,6 +2,7 @@
 #include <gtest/gtest.h>
 
 #include "gromacs/math/vec.h"
+#include "gromacs/math/vectypes.h"
 
 #include "gromacs/flow/grid.h"
 
@@ -256,8 +257,6 @@ TEST(FlowGridTest, ContainsWithRawPointer)
 
     const auto grid = Grid3d({nx, ny, nz}, {dx, dy, dz}, origin);
 
-    fprintf(stderr, "box_x = %f\nbox_y = %f\nbox_z = %f\n", grid.box[XX], grid.box[YY], grid.box[ZZ]);
-
     constexpr real d = 1e-3;
     const rvec r_in1 = {x0 + d, y0 + d, z0 + d},
                r_in2 = {x0 + box_x - d, y0 + box_y - d, z0 + box_z - d},
@@ -441,6 +440,131 @@ TEST(FlowGridTest, AtPositionWorksWithConst)
     const auto grid2 = grid1;
 
     EXPECT_FLOAT_EQ(grid2.at(3, 0, 0), grid2.at_pos(RVec{1.75, 0.5, 1.0}));
+}
+
+TEST(FlowGridTest, AtPositionPBCPutsPosInBox)
+{
+    const int nx = 7,
+              ny = 11,
+              nz = 13;
+
+    const real dx = 0.5,
+               dy = 1.0,
+               dz = 2.0;
+
+    const real x0 = 10.0,
+               y0 = 20.0,
+               z0 = 30.0;
+
+    const real box_x = 40.0,
+               box_y = 50.0,
+               box_z = 60.0;
+
+    const matrix box = {
+        {box_x,   0.0,   0.0},
+        {  0.0, box_y,   0.0},
+        {  0.0,   0.0, box_z}
+    };
+
+    auto grid = Grid3d({nx, ny, nz}, {dx, dy, dz}, RVec{x0, y0, z0});
+
+    double val = 0.0;
+    for (auto& v : grid.values)
+    {
+        v = val;
+        val += 1.0;
+    }
+
+    const real x = x0 + 1.0 * dx,
+               y = y0 + 2.0 * dy,
+               z = z0 + 1.0 * dz;
+
+    // Along x
+    EXPECT_FLOAT_EQ(
+        grid.at_pos(RVec{x, y, z}),
+        grid.at_pos_pbc(RVec{x + box_x, y, z}, box)
+    );
+    EXPECT_FLOAT_EQ(
+        grid.at_pos(RVec{x, y, z}),
+        grid.at_pos_pbc(RVec{x - box_x, y, z}, box)
+    );
+
+    // Along y
+    EXPECT_FLOAT_EQ(
+        grid.at_pos(RVec{x, y, z}),
+        grid.at_pos_pbc(RVec{x, y + box_y, z}, box)
+    );
+    EXPECT_FLOAT_EQ(
+        grid.at_pos(RVec{x, y, z}),
+        grid.at_pos_pbc(RVec{x, y - box_y, z}, box)
+    );
+
+    // Along z
+    EXPECT_FLOAT_EQ(
+        grid.at_pos(RVec{x, y, z}),
+        grid.at_pos_pbc(RVec{x, y, z + box_z}, box)
+    );
+    EXPECT_FLOAT_EQ(
+        grid.at_pos(RVec{x, y, z}),
+        grid.at_pos_pbc(RVec{x, y, z - box_z}, box)
+    );
+
+    // Along all dimensions
+    EXPECT_FLOAT_EQ(
+        grid.at_pos(RVec{x, y, z}),
+        grid.at_pos_pbc(RVec{x + box_x, y + box_y, z + box_z}, box)
+    );
+    EXPECT_FLOAT_EQ(
+        grid.at_pos(RVec{x, y, z}),
+        grid.at_pos_pbc(RVec{x - box_x, y - box_y, z - box_z}, box)
+    );
+
+    // Along all dimensions, multiple shifts
+    EXPECT_FLOAT_EQ(
+        grid.at_pos(RVec{x, y, z}),
+        grid.at_pos_pbc(RVec{x + 3.0 * box_x, y + 5.0 * box_y, z + 7.0 * box_z}, box)
+    );
+    EXPECT_FLOAT_EQ(
+        grid.at_pos(RVec{x, y, z}),
+        grid.at_pos_pbc(RVec{x - 7.0 * box_x, y - 3.0 * box_y, z - 5.0 * box_z}, box)
+    );
+}
+
+TEST(FlowGridTest, AtPositionWithPBCWorksWithConst)
+{
+    const int nx = 4,
+              ny = 4,
+              nz = 4;
+
+    const real dx = 0.5,
+               dy = 1.0,
+               dz = 2.0;
+
+    const real box_x = 40.0,
+               box_y = 50.0,
+               box_z = 60.0;
+
+    const matrix box = {
+        {box_x,   0.0,   0.0},
+        {  0.0, box_y,   0.0},
+        {  0.0,   0.0, box_z}
+    };
+
+    auto grid1 = Grid3d({nx, ny, nz}, {dx, dy, dz}, {});
+
+    double val = 0.0;
+    for (auto& v : grid1.values)
+    {
+        v = val;
+        val += 1.0;
+    }
+
+    const auto grid2 = grid1;
+
+    EXPECT_FLOAT_EQ(
+        grid2.at(2, 1, 1),
+        grid2.at_pos_pbc(RVec{1.25 + 3.0 * box_x, 1.5 - 2.0 * box_y, 3.0 - box_z}, box)
+    );
 }
 
 } // namespace

@@ -74,6 +74,13 @@ public:
     const T& at_pos(const rvec r) const;
     T& at_pos(const rvec r);
 
+    //! Grid cell reference accessors from particle positions, pbc correction
+    //!
+    //! Cell access saturates at the grid edges: positions outside
+    //! access the cell at the closest edge.
+    const T& at_pos_pbc(const rvec r, const matrix box) const;
+    T& at_pos_pbc(const rvec r, const matrix box);
+
     //! Check whether a position is contained within the grid
     bool contains(const rvec r) const
     {
