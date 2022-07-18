@@ -84,8 +84,8 @@ public:
     uint64_t step_collect;
     //! Average and output flow field data at step multiples of this
     uint64_t step_output;
-    //! # of samples per output (i.e. step_output / step_collect)
-    uint64_t step_ratio;
+    //! Number of samples since last output of flow field
+    uint64_t num_samples;
 
     //! Volume of bins in grid
     double bin_volume;
@@ -106,7 +106,7 @@ public:
     :bDoFlowCollection { true },
      step_collect { step_collect },
      step_output { step_output },
-     step_ratio { static_cast<uint64_t>(step_output / step_collect) },
+     num_samples { 0 },
      bin_volume { dx * dy * dz },
      num_bins { nx, nz },
      bin_size { dx, dz },
@@ -141,7 +141,7 @@ public:
     float get_x(const size_t ix) const { return get_position(ix, dx()); }
     float get_z(const size_t iz) const { return get_position(iz, dz()); }
 
-    //! Zero all data for all collected flow fields
+    //! Zero all data for all collected flow fields and reset sample counter
     void reset_data() {
         data.data.assign(data.data.size(), 0.0);
 
@@ -149,6 +149,8 @@ public:
         {
             group.data.assign(group.data.size(), 0.0);
         }
+
+        num_samples = 0;
     }
 
 private:

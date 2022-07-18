@@ -302,6 +302,8 @@ collect_flow_data(flow::FlowData         &flowcr,
             }
         }
     }
+
+    ++flowcr.num_samples;
 }
 
 
@@ -365,7 +367,7 @@ struct FlowFieldOutput {
 static FlowBinData
 calc_values_in_bin(const std::vector<double> &data,
                    const size_t               bin,
-                   const uint64_t             samples_per_output)
+                   const uint64_t             num_samples_int)
 {
     const auto num_atoms = data[bin + static_cast<size_t>(FlowVariable::NumAtoms)];
     const auto mass      = data[bin + static_cast<size_t>(FlowVariable::Mass)    ];
@@ -391,7 +393,7 @@ calc_values_in_bin(const std::vector<double> &data,
 
     /* In contrast to above, the mass and number of atoms has to be divided by
        the number of samples taken to get their average. */
-    const auto num_samples = static_cast<float>(samples_per_output);
+    const auto num_samples = static_cast<double>(num_samples_int);
     const auto avg_num_atoms = num_atoms / num_samples;
     const auto avg_mass = mass / num_samples;
 
@@ -535,7 +537,7 @@ get_average_flow_data(FlowData &flowcr)
         {
             const auto bin = flowcr.get_1d_index(ix, iz);
 
-            const auto bin_data = calc_values_in_bin(flowcr.data.data, bin, flowcr.step_ratio);
+            const auto bin_data = calc_values_in_bin(flowcr.data.data, bin, flowcr.num_samples);
             add_bin_if_non_empty(output.all_groups, ix, iz, flowcr.bin_volume, bin_data);
 
             auto group_output = output.individual_groups.begin();
@@ -545,7 +547,7 @@ get_average_flow_data(FlowData &flowcr)
                     && (group_data != flowcr.group_data.cend()))
             {
                 const auto group_bin_data = calc_values_in_bin(
-                    (*group_data).data, bin, flowcr.step_ratio);
+                    (*group_data).data, bin, flowcr.num_samples);
                 add_bin_if_non_empty(*group_output, ix, iz, flowcr.bin_volume, group_bin_data);
 
                 ++group_output;
