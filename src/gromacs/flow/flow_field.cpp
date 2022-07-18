@@ -191,7 +191,7 @@ print_flow_collection_information(const FlowData       &flowcr,
         .appendTextFormatted(
             "Writing full flow data to files "
             "with base '%s_00001.dat' (...).",
-            flowcr.fnbase.c_str()
+            flowcr.data.fnbase.c_str()
         );
 
     if (!flowcr.group_data.empty())
@@ -247,11 +247,11 @@ add_flow_to_bin(std::vector<double> &data,
 
 
 static void
-collect_flow_data(flow::FlowData           &flowcr,
-                  const t_commrec    *cr,
-                  const t_inputrec   *ir,
-                  const t_mdatoms    *mdatoms,
-                  const t_state      *state,
+collect_flow_data(flow::FlowData         &flowcr,
+                  const t_commrec        *cr,
+                  const t_inputrec       *ir,
+                  const t_mdatoms        *mdatoms,
+                  const t_state          *state,
                   const SimulationGroups *groups)
 {
     const int num_groups = flowcr.group_data.empty() ? 1 : flowcr.group_data.size();
@@ -288,7 +288,7 @@ collect_flow_data(flow::FlowData           &flowcr,
             const auto bin = flowcr.get_1d_index(ix, iz);
             const auto mass = mdatoms->massT[i];
 
-            add_flow_to_bin(flowcr.data, i, bin, mass, state);
+            add_flow_to_bin(flowcr.data.data, i, bin, mass, state);
 
             /* This checks for whether the current atom belongs to a specific
                group, if multiple groups are selected. But, I no longer understand
@@ -342,7 +342,7 @@ struct FlowFieldOutput {
      nz { flowcr.nz() },
      dx { flowcr.dx() },
      dz { flowcr.dz() },
-     all_groups { nx * nz, flowcr.fnbase }
+     all_groups { nx * nz, flowcr.data.fnbase }
     {
         const auto num_bins = nx * nz;
 
@@ -506,9 +506,9 @@ mpi_collect_flow_data_on_master(FlowData        &flowcr,
 {
     if (PAR(cr))
     {
-        MPI_Reduce(MASTER(cr) ? MPI_IN_PLACE : flowcr.data.data(),
-                MASTER(cr) ? flowcr.data.data() : NULL,
-                flowcr.data.size(),
+        MPI_Reduce(MASTER(cr) ? MPI_IN_PLACE : flowcr.data.data.data(),
+                MASTER(cr) ? flowcr.data.data.data() : NULL,
+                flowcr.data.data.size(),
                 MPI_DOUBLE, MPI_SUM, MASTERRANK(cr),
                 cr->mpi_comm_mygroup);
 
@@ -535,7 +535,7 @@ get_average_flow_data(FlowData &flowcr)
         {
             const auto bin = flowcr.get_1d_index(ix, iz);
 
-            const auto bin_data = calc_values_in_bin(flowcr.data, bin, flowcr.step_ratio);
+            const auto bin_data = calc_values_in_bin(flowcr.data.data, bin, flowcr.step_ratio);
             add_bin_if_non_empty(output.all_groups, ix, iz, flowcr.bin_volume, bin_data);
 
             auto group_output = output.individual_groups.begin();
