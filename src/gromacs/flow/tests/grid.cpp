@@ -4,7 +4,6 @@
 #include "gromacs/math/vec.h"
 
 #include "gromacs/flow/grid.h"
-#include "grid.h"
 
 namespace gmx
 {
