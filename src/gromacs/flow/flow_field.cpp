@@ -227,11 +227,11 @@ add_flow_to_bin(flow::Bin     &bin,
                 const rvec     v,
                 const real     mass)
 {
-    bin[static_cast<size_t>(FlowVariable::NumAtoms)] += 1.0;
-    bin[static_cast<size_t>(FlowVariable::Temp)    ] += mass * norm2(v);
-    bin[static_cast<size_t>(FlowVariable::Mass)    ] += mass;
-    bin[static_cast<size_t>(FlowVariable::U)       ] += mass * v[XX];
-    bin[static_cast<size_t>(FlowVariable::V)       ] += mass * v[ZZ];
+    bin[FlowVar::NumAtoms] += 1.0;
+    bin[FlowVar::Temp    ] += mass * norm2(v);
+    bin[FlowVar::Mass    ] += mass;
+    bin[FlowVar::U       ] += mass * v[XX];
+    bin[FlowVar::V       ] += mass * v[ZZ];
 }
 
 
@@ -365,8 +365,8 @@ static FlowBinData
 calc_values_in_bin(const flow::Bin &bin,
                    const uint64_t   num_samples_int)
 {
-    const auto num_atoms = bin[static_cast<size_t>(FlowVariable::NumAtoms)];
-    const auto mass      = bin[static_cast<size_t>(FlowVariable::Mass)    ];
+    const auto num_atoms = bin[FlowVar::NumAtoms];
+    const auto mass      = bin[FlowVar::Mass    ];
 
     /* The temperature and flow is averaged by the sampled number
        of atoms and mass in each bin. To not divide by zero in empty
@@ -377,14 +377,13 @@ calc_values_in_bin(const flow::Bin &bin,
 
     if (num_atoms > 0.0)
     {
-        temperature = bin[static_cast<size_t>(FlowVariable::Temp)]
-            / (2.0 * gmx::c_boltz * num_atoms);
+        temperature = bin[FlowVar::Temp] / (2.0 * gmx::c_boltz * num_atoms);
     }
 
     if (mass > 0.0)
     {
-        flow_x = bin[static_cast<size_t>(FlowVariable::U)] / mass;
-        flow_z = bin[static_cast<size_t>(FlowVariable::V)] / mass;
+        flow_x = bin[FlowVar::U] / mass;
+        flow_z = bin[FlowVar::V] / mass;
     }
 
     /* In contrast to above, the mass and number of atoms has to be divided by

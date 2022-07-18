@@ -16,18 +16,37 @@
 namespace flow
 {
 
+//! Unique identifier for flow field data files
 constexpr char FLOW_FILE_HEADER_NAME[] = "GMX_FLOW_2";
 
-// Indices for different data in array
-enum class FlowVariable : size_t {
-    NumAtoms,
-    Temp,
-    Mass,   // Mass in bin (amu)
-    U,      // Mass flow along X
-    V,      //             and Z
-    NumVariables
-};
-using Bin = std::array<double, static_cast<size_t>(FlowVariable::NumVariables)>;
+
+//! Scoped space for an enum of variables to collect in bins
+//!
+//! Used to index inside each `Bin` array. The namespace is used
+//! to scope each enum variable (good!) but avoid having to always
+//! static_cast to integer when using it (bad!).
+namespace FlowVar
+{
+    enum FlowVariable : size_t {
+        //! Number of atoms
+        NumAtoms,
+        //! Temperature
+        Temp,
+        //! Mass (in atomic mass units)
+        Mass,
+        //! Mass flow along x
+        U,
+        //! Mass flow along z
+        V,
+        //! Total number of variables
+        NumVars
+    };
+} // namespace FlowVar
+
+
+//! Data stored in a single bin of the flow field grid
+using Bin = std::array<double, FlowVar::NumVars>;
+
 
 //! Flow field data and associated metadata
 //!
@@ -36,16 +55,16 @@ using Bin = std::array<double, static_cast<size_t>(FlowVariable::NumVariables)>;
 //! class we do this rather than creating a `Grid3d` member variable,
 //! which makes working with this class more painful and harder to
 //! understand.
-class GroupFlowData : public Grid3d<Bin> {
+class FlowField : public Grid3d<Bin> {
 public:
     //! Empty constructor
-    GroupFlowData() {}
+    FlowField() {}
 
     //! Constructor for full flow field data
-    GroupFlowData(const std::string& fnbase,
-                  const int          nx,
-                  const int          nz,
-                  const matrix       box)
+    FlowField(const std::string& fnbase,
+              const int          nx,
+              const int          nz,
+              const matrix       box)
     :fnbase { fnbase },
      name { "_FULL_" }
     {
@@ -53,11 +72,11 @@ public:
     }
 
     //! Constructor which adds `group_name` to `fnbase`
-    GroupFlowData(const std::string& fnbase_original,
-                  const std::string& group_name,
-                  const int          nx,
-                  const int          nz,
-                  const matrix       box)
+    FlowField(const std::string& fnbase_original,
+              const std::string& group_name,
+              const int          nx,
+              const int          nz,
+              const matrix       box)
     :name { group_name }
     {
         fnbase.append(fnbase_original);
@@ -99,13 +118,14 @@ private:
     }
 };
 
+
 struct FlowData {
     //! Whether or not to collect flow field data
     bool bDoFlowCollection = false;
 
     //! 2D grid data
-    GroupFlowData flow_field;
-    std::vector<GroupFlowData> group_data; // Similar data for all separate atom groups
+    FlowField flow_field;
+    std::vector<FlowField> group_data; // Similar data for all separate atom groups
 
     //! Collect flow field data at step multiples of this
     uint64_t step_collect;
@@ -133,10 +153,10 @@ struct FlowData {
      step_output { step_output },
      num_samples { 0 }
      {
-        flow_field = GroupFlowData(fnbase, nx, nz, box);
+        flow_field = FlowField(fnbase, nx, nz, box);
         for (const auto& name : group_names)
         {
-            group_data.push_back(GroupFlowData(fnbase, name, nx, nz, box));
+            group_data.push_back(FlowField(fnbase, name, nx, nz, box));
         }
 
         const auto& spacing = flow_field.spacing;
@@ -162,6 +182,7 @@ struct FlowData {
     }
 };
 
+
 //! Prepare and return a container for flow field data
 FlowData
 init_flow_container(const int               nfile,
@@ -170,11 +191,13 @@ init_flow_container(const int               nfile,
                     const SimulationGroups *groups,
                     const t_state          *state);
 
+
 //! Write information about the flow field collection
 void
 print_flow_collection_information(const FlowData       &flowcr,
                                   const double          dt,
                                   const gmx::MDLogger  &mdlog);
+
 
 //! If at a collection or output step, perform actions
 void
