@@ -24,32 +24,12 @@ public:
     :shape{shape},
      spacing{spacing}
     {
-        if ((shape[XX] < 1) || (shape[YY] < 1) || (shape[ZZ] < 1))
-        {
-            char buf[STRLEN];
-            snprintf(
-                buf,
-                STRLEN,
-                "Grid3d::Grid3d: shape (%d, %d, %d) "
-                "must be positive along all directions",
-                shape[XX], shape[YY], shape[ZZ]
-            );
-
-            throw std::invalid_argument(buf);
-        }
-
         if (opt_origin)
         {
             origin = opt_origin.value();
         }
 
-        for (size_t i = 0; i < DIM; ++i)
-        {
-            box[i] = static_cast<real>(shape[i]) * spacing[i];
-        }
-
-        const auto num_elements = shape[XX] * shape[YY] * shape[ZZ];
-        values.resize(num_elements);
+        _finalize();
     }
 
     //! Assign `value` to all cells in grid
@@ -110,6 +90,35 @@ public:
     //!
     //! Stored in Z-Y-X order.
     std::vector<T> values;
+
+protected:
+    //! Set-up the data after initializing primary variables
+    //!
+    //! To be called by a constructor which sets `shape` and `spacing`.
+    void _finalize()
+    {
+        if ((shape[XX] < 1) || (shape[YY] < 1) || (shape[ZZ] < 1))
+        {
+            char buf[STRLEN];
+            snprintf(
+                buf,
+                STRLEN,
+                "Grid3d::Grid3d: shape (%d, %d, %d) "
+                "must be positive along all directions",
+                shape[XX], shape[YY], shape[ZZ]
+            );
+
+            throw std::invalid_argument(buf);
+        }
+
+        for (size_t i = 0; i < DIM; ++i)
+        {
+            box[i] = static_cast<real>(shape[i]) * spacing[i];
+        }
+
+        const auto num_elements = shape[XX] * shape[YY] * shape[ZZ];
+        values.resize(num_elements);
+    }
 
 private:
     //! Get the 1D index in the `values` array for a 3D grid position

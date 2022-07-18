@@ -1,6 +1,7 @@
 #include <cmath>
 #include <cstdio>
 
+#include "flow_field.h"
 #include "grid.h"
 
 template<typename T>
@@ -137,3 +138,4 @@ const T& flow::Grid3d<T>::at_pos_pbc(const rvec r0, const matrix box) const
 // the borrow checker.
 template struct flow::Grid3d<float>;
 template struct flow::Grid3d<double>;
+template struct flow::Grid3d<flow::Bin>;

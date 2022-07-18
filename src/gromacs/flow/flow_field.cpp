@@ -65,18 +65,14 @@ init_flow_container(const int               nfile,
     const auto step_collect = static_cast<uint64_t>(ir->userint1);
     auto step_output = static_cast<uint64_t>(ir->userint2);
 
-    const auto nx = static_cast<size_t>(ir->userint3);
-    const auto nz = static_cast<size_t>(ir->userint4);
-
-    const auto dx = static_cast<double>(state->box[XX][XX]) / static_cast<double>(nx);
-    const auto dy = static_cast<double>(state->box[YY][YY]);
-    const auto dz = static_cast<double>(state->box[ZZ][ZZ]) / static_cast<double>(nz);
+    const auto nx = ir->userint3;
+    const auto nz = ir->userint4;
 
     // Control userargs, although this should be done during pre-processing
     if (nx <= 0 || nz <= 0)
     {
         gmx_fatal(FARGS,
-                  "Number of bins along x (userint3 = %lu) and z (userint4 = %lu) "
+                  "Number of bins along x (userint3 = %d) and z (userint4 = %d) "
                   "for flow data calculation and output must be larger than 0.",
                   nx, nz);
     }
@@ -137,14 +133,13 @@ init_flow_container(const int               nfile,
                 = groups->groups[SimulationAtomGroupType::User1].at(i);
 
             const char *name = *groups->groupNames[global_group_index];
-            // const size_t index_name = groups->grps[egcUser1].nm_ind[i];
-            // const char *name = *groups->grpname[index_name];
-
             group_names.push_back(std::string(name));
         }
     }
 
-    return FlowData(fnbase, group_names, nx, nz, dx, dy, dz, step_collect, step_output);
+    return FlowData(
+        fnbase, group_names, nx, nz, state->box, step_collect, step_output
+    );
 }
 
 
@@ -179,11 +174,11 @@ print_flow_collection_information(const FlowData       &flowcr,
         .appendText("Flow field grid information:\n")
         .appendTextFormatted(
             "  Shape:   %lu x %lu (along x and z)\n",
-            flowcr.nx(), flowcr.nz()
+            flowcr.flow_field.nx(), flowcr.flow_field.nz()
         )
         .appendTextFormatted(
             "  Spacing: %g x %g nm^2",
-            flowcr.dx(), flowcr.dz()
+            flowcr.flow_field.dx(), flowcr.flow_field.dz()
         );
 
     GMX_LOG(mdlog.warning)
@@ -191,7 +186,7 @@ print_flow_collection_information(const FlowData       &flowcr,
         .appendTextFormatted(
             "Writing full flow data to files "
             "with base '%s_00001.dat' (...).",
-            flowcr.data.fnbase.c_str()
+            flowcr.flow_field.fnbase.c_str()
         );
 
     if (!flowcr.group_data.empty())
@@ -228,21 +223,15 @@ print_flow_collection_information(const FlowData       &flowcr,
 
 
 static void
-add_flow_to_bin(std::vector<double> &data,
-                const size_t         atom,
-                const size_t         bin,
-                const real           mass,
-                const t_state       *state)
+add_flow_to_bin(flow::Bin     &bin,
+                const rvec     v,
+                const real     mass)
 {
-    const auto vx = state->v[atom][XX];
-    const auto vz = state->v[atom][ZZ];
-    const auto vsquared = norm2(state->v[atom]);
-
-    data[bin + static_cast<size_t>(FlowVariable::NumAtoms)] += 1.0;
-    data[bin + static_cast<size_t>(FlowVariable::Temp)    ] += mass * vsquared;
-    data[bin + static_cast<size_t>(FlowVariable::Mass)    ] += mass;
-    data[bin + static_cast<size_t>(FlowVariable::U)       ] += mass * vx;
-    data[bin + static_cast<size_t>(FlowVariable::V)       ] += mass * vz;
+    bin[static_cast<size_t>(FlowVariable::NumAtoms)] += 1.0;
+    bin[static_cast<size_t>(FlowVariable::Temp)    ] += mass * norm2(v);
+    bin[static_cast<size_t>(FlowVariable::Mass)    ] += mass;
+    bin[static_cast<size_t>(FlowVariable::U)       ] += mass * v[XX];
+    bin[static_cast<size_t>(FlowVariable::V)       ] += mass * v[ZZ];
 }
 
 
@@ -254,8 +243,17 @@ collect_flow_data(flow::FlowData         &flowcr,
                   const t_state          *state,
                   const SimulationGroups *groups)
 {
-    const int num_groups = flowcr.group_data.empty() ? 1 : flowcr.group_data.size();
+    // Atom position buffer
+    rvec r;
+
+    // Velocity buffer and length of a half-time-step, to be used
+    // if we need to project positions backwards when using the
+    // leap-frog integrator
+    rvec v_buf;
     const auto dt_half = static_cast<real>(0.5 * ir->delta_t);
+    const bool integratorIsLeapFrog = (ir->eI == IntegrationAlgorithm::MD);
+
+    const int num_groups = flowcr.group_data.empty() ? 1 : flowcr.group_data.size();
 
     for (size_t i = 0; i < static_cast<size_t>(mdatoms->homenr); ++i)
     {
@@ -269,36 +267,35 @@ collect_flow_data(flow::FlowData         &flowcr,
 
         if (index_group < num_groups)
         {
-            auto x = state->x[i][XX];
-            auto z = state->x[i][ZZ];
+            copy_rvec(state->x[i], r);
+            const auto v = state->v[i];
+            const auto mass = mdatoms->massT[i];
 
             /* Fix by Michele Pellegrino */
             /* If we are using the leap-frog integrator, project the positions
                back in time one-half step so that both positions and velocities
                are at the same time. */
-            if (ir->eI == IntegrationAlgorithm::MD)
+            if (integratorIsLeapFrog)
             {
-                x -= dt_half * state->v[i][XX];
-                z -= dt_half * state->v[i][ZZ];
+                svmul(dt_half, v, v_buf);
+                rvec_dec(r, v_buf);
             }
 
-            const auto ix = flowcr.get_xbin(x);
-            const auto iz = flowcr.get_zbin(z);
-
-            const auto bin = flowcr.get_1d_index(ix, iz);
-            const auto mass = mdatoms->massT[i];
-
-            add_flow_to_bin(flowcr.data.data, i, bin, mass, state);
+            auto& bin = flowcr.flow_field.at_pos_pbc(r, state->box);
+            add_flow_to_bin(bin, v, mass);
 
             /* This checks for whether the current atom belongs to a specific
                group, if multiple groups are selected. But, I no longer understand
                exactly what the check does.
 
                TODO: Figure this out. // Petter */
-            if (!flowcr.group_data.empty()
-                    && (index_group < static_cast<int>(flowcr.group_data.size())))
+            if (
+                !flowcr.group_data.empty()
+                && (index_group < static_cast<int>(flowcr.group_data.size()))
+            )
             {
-                add_flow_to_bin(flowcr.group_data.at(index_group).data, i, bin, mass, state);
+                auto& bin = flowcr.group_data.at(index_group).at_pos_pbc(r, state->box);
+                add_flow_to_bin(bin, v, mass);
             }
         }
     }
@@ -340,11 +337,11 @@ struct GroupOutput {
 
 struct FlowFieldOutput {
     FlowFieldOutput(const FlowData &flowcr)
-    :nx { flowcr.nx() },
-     nz { flowcr.nz() },
-     dx { flowcr.dx() },
-     dz { flowcr.dz() },
-     all_groups { nx * nz, flowcr.data.fnbase }
+    :nx { flowcr.flow_field.nx() },
+     nz { flowcr.flow_field.nz() },
+     dx { flowcr.flow_field.dx() },
+     dz { flowcr.flow_field.dz() },
+     all_groups { nx * nz, flowcr.flow_field.fnbase }
     {
         const auto num_bins = nx * nz;
 
@@ -365,12 +362,11 @@ struct FlowFieldOutput {
 
 
 static FlowBinData
-calc_values_in_bin(const std::vector<double> &data,
-                   const size_t               bin,
-                   const uint64_t             num_samples_int)
+calc_values_in_bin(const flow::Bin &bin,
+                   const uint64_t   num_samples_int)
 {
-    const auto num_atoms = data[bin + static_cast<size_t>(FlowVariable::NumAtoms)];
-    const auto mass      = data[bin + static_cast<size_t>(FlowVariable::Mass)    ];
+    const auto num_atoms = bin[static_cast<size_t>(FlowVariable::NumAtoms)];
+    const auto mass      = bin[static_cast<size_t>(FlowVariable::Mass)    ];
 
     /* The temperature and flow is averaged by the sampled number
        of atoms and mass in each bin. To not divide by zero in empty
@@ -381,14 +377,14 @@ calc_values_in_bin(const std::vector<double> &data,
 
     if (num_atoms > 0.0)
     {
-        temperature = data[bin + static_cast<size_t>(FlowVariable::Temp)]
+        temperature = bin[static_cast<size_t>(FlowVariable::Temp)]
             / (2.0 * gmx::c_boltz * num_atoms);
     }
 
     if (mass > 0.0)
     {
-        flow_x = data[bin + static_cast<size_t>(FlowVariable::U)] / mass;
-        flow_z = data[bin + static_cast<size_t>(FlowVariable::V)] / mass;
+        flow_x = bin[static_cast<size_t>(FlowVariable::U)] / mass;
+        flow_z = bin[static_cast<size_t>(FlowVariable::V)] / mass;
     }
 
     /* In contrast to above, the mass and number of atoms has to be divided by
@@ -508,17 +504,17 @@ mpi_collect_flow_data_on_master(FlowData        &flowcr,
 {
     if (PAR(cr))
     {
-        MPI_Reduce(MASTER(cr) ? MPI_IN_PLACE : flowcr.data.data.data(),
-                MASTER(cr) ? flowcr.data.data.data() : NULL,
-                flowcr.data.data.size(),
+        MPI_Reduce(MASTER(cr) ? MPI_IN_PLACE : flowcr.flow_field.values.data(),
+                MASTER(cr) ? flowcr.flow_field.values.data() : NULL,
+                flowcr.flow_field.values.size(),
                 MPI_DOUBLE, MPI_SUM, MASTERRANK(cr),
                 cr->mpi_comm_mygroup);
 
         for (auto& group_data : flowcr.group_data)
         {
-            MPI_Reduce(MASTER(cr) ? MPI_IN_PLACE : group_data.data.data(),
-                    MASTER(cr) ? group_data.data.data() : NULL,
-                    group_data.data.size(),
+            MPI_Reduce(MASTER(cr) ? MPI_IN_PLACE : group_data.values.data(),
+                    MASTER(cr) ? group_data.values.data() : NULL,
+                    group_data.values.size(),
                     MPI_DOUBLE, MPI_SUM, MASTERRANK(cr),
                     cr->mpi_comm_mygroup);
         }
@@ -531,24 +527,33 @@ get_average_flow_data(FlowData &flowcr)
 {
     FlowFieldOutput output(flowcr);
 
-    for (size_t ix = 0; ix < flowcr.nx(); ++ix)
+    for (size_t ix = 0; ix < flowcr.flow_field.nx(); ++ix)
     {
-        for (size_t iz = 0; iz < flowcr.nz(); ++iz)
+        for (size_t iz = 0; iz < flowcr.flow_field.nz(); ++iz)
         {
-            const auto bin = flowcr.get_1d_index(ix, iz);
+            const auto bin = flowcr.flow_field.at(ix, 0, iz);
+            const auto bin_data = calc_values_in_bin(bin, flowcr.num_samples);
 
-            const auto bin_data = calc_values_in_bin(flowcr.data.data, bin, flowcr.num_samples);
-            add_bin_if_non_empty(output.all_groups, ix, iz, flowcr.bin_volume, bin_data);
+            add_bin_if_non_empty(
+                output.all_groups, ix, iz, flowcr.bin_volume, bin_data
+            );
 
             auto group_output = output.individual_groups.begin();
             auto group_data = flowcr.group_data.cbegin();
 
-            while ((group_output != output.individual_groups.end())
-                    && (group_data != flowcr.group_data.cend()))
+            while (
+                (group_output != output.individual_groups.end())
+                && (group_data != flowcr.group_data.cend())
+            )
             {
+                const auto bin = (*group_data).at(ix, 0, iz);
                 const auto group_bin_data = calc_values_in_bin(
-                    (*group_data).data, bin, flowcr.num_samples);
-                add_bin_if_non_empty(*group_output, ix, iz, flowcr.bin_volume, group_bin_data);
+                    bin, flowcr.num_samples
+                );
+
+                add_bin_if_non_empty(
+                    *group_output, ix, iz, flowcr.bin_volume, group_bin_data
+                );
 
                 ++group_output;
                 ++group_data;
@@ -558,6 +563,8 @@ get_average_flow_data(FlowData &flowcr)
 
     return output;
 }
+
+
 static void
 output_flow_data(const FlowFieldOutput &output,
                  const uint64_t         current_step,
