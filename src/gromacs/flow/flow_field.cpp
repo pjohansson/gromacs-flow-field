@@ -118,174 +118,13 @@ collect_flow_data(flow::FlowData         &flowcr,
  * OUTPUT *
  **********/
 
-struct FlowBinData {
-    float mass,
-          temp,
-          num_atoms,
-          u,
-          v;
-};
-
-
-struct GroupOutput {
-    GroupOutput() = default;
-
-    GroupOutput(const size_t num_elements, const std::string fnbase)
-    :fnbase { fnbase }
-    {
-        ix.reserve(num_elements);
-        iy.reserve(num_elements);
-        mass_density.reserve(num_elements);
-        num_density.reserve(num_elements);
-        temp.reserve(num_elements);
-        us.reserve(num_elements);
-        vs.reserve(num_elements);
-    }
-
-    std::vector<uint64_t> ix, iy;
-    std::vector<float> mass_density, num_density, temp, us, vs;
-
-    std::string fnbase;
-};
-
-
-struct FlowFieldOutput {
-    FlowFieldOutput(const FlowData &flowcr)
-    :nx { flowcr.flow_field.nx() },
-     nz { flowcr.flow_field.nz() },
-     dx { flowcr.flow_field.dx() },
-     dz { flowcr.flow_field.dz() },
-     all_groups { nx * nz, flowcr.flow_field.fnbase }
-    {
-        const auto num_bins = nx * nz;
-
-        for (const auto& group_data : flowcr.group_data)
-        {
-            individual_groups.push_back(
-                GroupOutput(num_bins, group_data.fnbase)
-            );
-        }
-    }
-
-    size_t nx, nz;
-    double dx, dz;
-
-    GroupOutput all_groups;
-    std::vector<GroupOutput> individual_groups;
-};
-
-
-static FlowBinData
-calc_values_in_bin(const flow::Bin &bin,
-                   const uint64_t   num_samples_int)
-{
-    const auto num_atoms = bin[FlowVar::NumAtoms];
-    const auto mass      = bin[FlowVar::Mass    ];
-
-    /* The temperature and flow is averaged by the sampled number
-       of atoms and mass in each bin. To not divide by zero in empty
-       bins we take care to check. */
-    double flow_x = 0.0,
-           flow_z = 0.0,
-           temperature = 0.0;
-
-    if (num_atoms > 0.0)
-    {
-        temperature = bin[FlowVar::Temp] / (2.0 * gmx::c_boltz * num_atoms);
-    }
-
-    if (mass > 0.0)
-    {
-        flow_x = bin[FlowVar::U] / mass;
-        flow_z = bin[FlowVar::V] / mass;
-    }
-
-    /* In contrast to above, the mass and number of atoms has to be divided by
-       the number of samples taken to get their average. */
-    const auto num_samples = static_cast<double>(num_samples_int);
-    const auto avg_num_atoms = num_atoms / num_samples;
-    const auto avg_mass = mass / num_samples;
-
-    FlowBinData bin_data;
-
-    bin_data.num_atoms = static_cast<float>(avg_num_atoms);
-    bin_data.mass = static_cast<float>(avg_mass);
-    bin_data.temp = static_cast<float>(temperature);
-    bin_data.u    = static_cast<float>(flow_x);
-    bin_data.v    = static_cast<float>(flow_z);
-
-    return bin_data;
-}
-
-
-static void
-add_bin_if_non_empty(GroupOutput       &data,
-                     const size_t       ix,
-                     const size_t       iy,
-                     const double       bin_volume,
-                     const FlowBinData &bin_data)
-{
-    if (bin_data.mass > 0.0)
-    {
-        data.ix.push_back(static_cast<uint64_t>(ix));
-        data.iy.push_back(static_cast<uint64_t>(iy));
-
-        data.mass_density.push_back(bin_data.mass / bin_volume);
-        data.num_density.push_back(bin_data.num_atoms / bin_volume);
-        data.temp.push_back(bin_data.temp);
-        data.us.push_back(bin_data.u);
-        data.vs.push_back(bin_data.v);
-    }
-}
-
-
-static FlowFieldOutput
-get_average_flow_data(FlowData &flowcr)
-{
-    FlowFieldOutput output(flowcr);
-
-    for (size_t ix = 0; ix < flowcr.flow_field.nx(); ++ix)
-    {
-        for (size_t iz = 0; iz < flowcr.flow_field.nz(); ++iz)
-        {
-            const auto bin = flowcr.flow_field.at(ix, 0, iz);
-            const auto bin_data = calc_values_in_bin(bin, flowcr.num_samples);
-
-            add_bin_if_non_empty(
-                output.all_groups, ix, iz, flowcr.bin_volume, bin_data
-            );
-
-            auto group_output = output.individual_groups.begin();
-            auto group_data = flowcr.group_data.cbegin();
-
-            while (
-                (group_output != output.individual_groups.end())
-                && (group_data != flowcr.group_data.cend())
-            )
-            {
-                const auto bin = (*group_data).at(ix, 0, iz);
-                const auto group_bin_data = calc_values_in_bin(
-                    bin, flowcr.num_samples
-                );
-
-                add_bin_if_non_empty(
-                    *group_output, ix, iz, flowcr.bin_volume, group_bin_data
-                );
-
-                ++group_output;
-                ++group_data;
-            }
-        }
-    }
-
-    return output;
-}
-
-
 static void
 average_flow_field(FlowField &flow_field, const size_t num_samples_int)
 {
     const auto num_samples = static_cast<double>(num_samples_int);
+    const auto bin_volume = static_cast<double>(
+        flow_field.spacing[XX] * flow_field.spacing[YY] * flow_field.spacing[ZZ]
+    );
 
     for (auto& bin : flow_field.values)
     {
@@ -306,10 +145,12 @@ average_flow_field(FlowField &flow_field, const size_t num_samples_int)
             bin[FlowVar::V] /= mass;
         }
 
-        /* In contrast to above, the mass and number of atoms has to be divided by
-        the number of samples taken to get their average. */
-        bin[FlowVar::NumAtoms] /= num_samples;
-        bin[FlowVar::Mass]     /= num_samples;
+        // In contrast to above, the mass and number of atoms has to 
+        // be divided by the number of samples taken to get their average. 
+        // Additionally, since we want the mass and atom number densities,
+        // divide by the bin volume.
+        bin[FlowVar::NumAtoms] /= (num_samples * bin_volume);
+        bin[FlowVar::Mass]     /= (num_samples * bin_volume);
     }
 }
 
@@ -348,10 +189,51 @@ struct Output {
     std::vector<IndexedBin> bins;
 };
 
-static void
+//! Data for all collected flow fields, prepared for output
+struct OutputFields {
+    //! Main flow field
+    Output full;
+    //! Sub group flow fields
+    std::vector<Output> groups;
+};
+
+static Output
+get_single_output_flow_field(const FlowField &flow_field)
+{
+    auto output = Output{flow_field};
+
+    for (size_t ix = 0; ix < flow_field.nx(); ++ix)
+    {
+        for (size_t iz = 0; iz < flow_field.nz(); ++iz)
+        {
+            const auto& bin = flow_field.at(ix, 0, iz);
+
+            if (bin[FlowVar::Mass] > 0.0)
+            {
+                output.bins.push_back(IndexedBin{
+                    ix, iz, bin
+                });
+            }
+        }
+    }
+
+    return output;
+}
+
+static OutputFields
 get_averaged_flow_bins(FlowData &flowcr)
 {
+    average_flow_field(flowcr.flow_field, flowcr.num_samples);
+    const auto full_field = get_single_output_flow_field(flowcr.flow_field);
 
+    std::vector<Output> group_fields;
+    for (auto& group_field : flowcr.group_data)
+    {
+        average_flow_field(group_field, flowcr.num_samples);
+        group_fields.push_back(get_single_output_flow_field(group_field));
+    }
+
+    return OutputFields{full_field, group_fields};
 }
 
 
@@ -395,56 +277,82 @@ write_header(FILE         *fp,
 }
 
 
-static void
-write_flow_data(const GroupOutput &output,
-                const size_t       num_file,
-                const size_t       nx,
-                const size_t       ny,
-                const double       dx,
-                const double       dy)
+static void 
+write_flow_field_to_disk(const Output &flow_field, const size_t file_index)
 {
     char fn[STRLEN];
 
-    snprintf(fn,
-             STRLEN,
-             "%s_%05lu.%s",
-             output.fnbase.c_str(), num_file, ftp2ext(efDAT));
+    snprintf(
+        fn, STRLEN,
+        "%s_%05lu.%s",
+        flow_field.fnbase.c_str(), 
+        file_index, 
+        ftp2ext(efDAT)
+    );
 
     FILE *fp = gmx_ffopen(fn, "wb");
 
-    const size_t num_to_write = output.ix.size();
-    write_header(fp, nx, ny, dx, dy, num_to_write);
+    write_header(
+        fp, 
+        flow_field.shape[XX], 
+        flow_field.shape[ZZ], 
+        flow_field.spacing[XX],
+        flow_field.spacing[ZZ],
+        flow_field.bins.size()
+    );
 
-    fwrite(output.ix.data(),           sizeof(uint64_t), num_to_write, fp);
-    fwrite(output.iy.data(),           sizeof(uint64_t), num_to_write, fp);
-    fwrite(output.num_density.data(),  sizeof(float),    num_to_write, fp);
-    fwrite(output.temp.data(),         sizeof(float),    num_to_write, fp);
-    fwrite(output.mass_density.data(), sizeof(float),    num_to_write, fp);
-    fwrite(output.us.data(),           sizeof(float),    num_to_write, fp);
-    fwrite(output.vs.data(),           sizeof(float),    num_to_write, fp);
+    std::vector<uint64_t> buf_ix,
+                          buf_iz;
+    std::vector<float> buf_num_density,
+                       buf_mass,
+                       buf_temp,
+                       buf_vx,
+                       buf_vz;
+
+    const auto num_bins = flow_field.bins.size();
+    buf_ix.reserve(num_bins);
+    buf_iz.reserve(num_bins);
+    buf_num_density.reserve(num_bins);
+    buf_mass.reserve(num_bins);
+    buf_temp.reserve(num_bins);
+    buf_vx.reserve(num_bins);
+    buf_vz.reserve(num_bins);
+
+    for (const auto& bin : flow_field.bins)
+    {
+        buf_ix.push_back(bin.ix);
+        buf_iz.push_back(bin.iz);
+        buf_num_density.push_back(bin.values[FlowVar::NumAtoms]);
+        buf_mass.push_back(bin.values[FlowVar::Mass]);
+        buf_temp.push_back(bin.values[FlowVar::Temp]);
+        buf_vx.push_back(bin.values[FlowVar::U]);
+        buf_vz.push_back(bin.values[FlowVar::V]);
+    }
+
+    fwrite(buf_ix.data(),           sizeof(uint64_t), num_bins, fp);
+    fwrite(buf_iz.data(),           sizeof(uint64_t), num_bins, fp);
+    fwrite(buf_num_density.data(),  sizeof(float),    num_bins, fp);
+    fwrite(buf_temp.data(),         sizeof(float),    num_bins, fp);
+    fwrite(buf_mass.data(),         sizeof(float),    num_bins, fp);
+    fwrite(buf_vx.data(),           sizeof(float),    num_bins, fp);
+    fwrite(buf_vz.data(),           sizeof(float),    num_bins, fp);
 
     gmx_ffclose(fp);
 }
 
 
 static void
-output_flow_data(const FlowFieldOutput &output,
-                 const uint64_t         current_step,
-                 const uint64_t         step_output)
+write_all_flow_fields_to_disk(const OutputFields &output_fields,
+                              const uint64_t      step,
+                              const uint64_t      step_output)
 {
-    const auto file_index = static_cast<size_t>(current_step / step_output);
+    const auto file_index = static_cast<size_t>(step / step_output);
 
-    write_flow_data(
-        output.all_groups, file_index,
-        output.nx, output.nz, output.dx, output.dz
-    );
+    write_flow_field_to_disk(output_fields.full, file_index);
 
-    for (const auto& group_data : output.individual_groups)
+    for (const auto& group_field : output_fields.groups)
     {
-        write_flow_data(
-            group_data, file_index,
-            output.nx, output.nz, output.dx, output.dz
-        );
+        write_flow_field_to_disk(group_field, file_index);
     }
 }
 
@@ -664,8 +572,10 @@ flow_collect_or_output(FlowData               &flowcr,
 
         if (MASTER(cr))
         {
-            const auto output_data = get_average_flow_data(flowcr);
-            output_flow_data(output_data, current_step, flowcr.step_output);
+            const auto output_data = get_averaged_flow_bins(flowcr);
+            write_all_flow_fields_to_disk(
+                output_data, current_step, flowcr.step_output
+            );
         }
 
         flowcr.reset_data();
