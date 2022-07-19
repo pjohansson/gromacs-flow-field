@@ -24,9 +24,9 @@ TEST(FlowGridTest, InitializesWithInput)
     EXPECT_EQ(2, grid.shape[YY]);
     EXPECT_EQ(3, grid.shape[ZZ]);
 
-    EXPECT_DOUBLE_EQ(4.0, grid.spacing[XX]);
-    EXPECT_DOUBLE_EQ(5.0, grid.spacing[YY]);
-    EXPECT_DOUBLE_EQ(6.0, grid.spacing[ZZ]);
+    EXPECT_FLOAT_EQ(4.0, grid.spacing[XX]);
+    EXPECT_FLOAT_EQ(5.0, grid.spacing[YY]);
+    EXPECT_FLOAT_EQ(6.0, grid.spacing[ZZ]);
 }
 
 TEST(FlowGridTest, InitializesWithInverseBinSpacing)
@@ -111,7 +111,7 @@ TEST(FlowGridTest, AssignSetsAllCellsToValue)
 
     for (const auto& v : grid.values)
     {
-        EXPECT_DOUBLE_EQ(v, value);
+        EXPECT_FLOAT_EQ(v, value);
     }
 }
 
@@ -131,15 +131,15 @@ TEST(FlowGridTest, DataInArrayUsesOrderingZYX)
     }
 
     // Z increases first
-    EXPECT_DOUBLE_EQ(0.0, grid.at(0, 0, 0));
-    EXPECT_DOUBLE_EQ(1.0, grid.at(0, 0, 1));
-    EXPECT_DOUBLE_EQ(2.0, grid.at(0, 0, 2));
+    EXPECT_FLOAT_EQ(0.0, grid.at(0, 0, 0));
+    EXPECT_FLOAT_EQ(1.0, grid.at(0, 0, 1));
+    EXPECT_FLOAT_EQ(2.0, grid.at(0, 0, 2));
 
     // ... then Y (starting at =nz)
-    EXPECT_DOUBLE_EQ(static_cast<double>(nz), grid.at(0, 1, 0));
+    EXPECT_FLOAT_EQ(static_cast<double>(nz), grid.at(0, 1, 0));
 
     // ... finally x (starting at =ny*nz)
-    EXPECT_DOUBLE_EQ(static_cast<double>(ny * nz), grid.at(1, 0, 0));
+    EXPECT_FLOAT_EQ(static_cast<double>(ny * nz), grid.at(1, 0, 0));
 }
 
 TEST(FlowGridTest, AtMethodCanGetValue)
@@ -152,10 +152,10 @@ TEST(FlowGridTest, AtMethodCanGetValue)
     grid.assign(0.0);
 
     grid.values.front() = 3.0;
-    EXPECT_DOUBLE_EQ(3.0, grid.at(0, 0, 0));
+    EXPECT_FLOAT_EQ(3.0, grid.at(0, 0, 0));
 
     grid.values.back() = 5.0;
-    EXPECT_DOUBLE_EQ(5.0, grid.at(nx - 1, ny - 1, nz - 1));
+    EXPECT_FLOAT_EQ(5.0, grid.at(nx - 1, ny - 1, nz - 1));
 }
 
 TEST(FlowGridTest, AtMethodCanSetValue)
@@ -173,7 +173,7 @@ TEST(FlowGridTest, AtMethodCanSetValue)
                  iz = 3;
 
     grid.at(ix, iy, iz) = value;
-    EXPECT_DOUBLE_EQ(value, grid.at(ix, iy, iz));
+    EXPECT_FLOAT_EQ(value, grid.at(ix, iy, iz));
 }
 
 TEST(FlowGridTest, AtMethodCanGetReference)
@@ -193,7 +193,7 @@ TEST(FlowGridTest, AtMethodCanGetReference)
     const double& ref = grid.at(ix, iy, iz);
     grid.at(ix, iy, iz) = value;
 
-    EXPECT_DOUBLE_EQ(value, static_cast<double>(ref));
+    EXPECT_FLOAT_EQ(value, static_cast<double>(ref));
 }
 
 TEST(FlowGridTest, AtMethodCanSetValueToReference)
@@ -212,7 +212,7 @@ TEST(FlowGridTest, AtMethodCanSetValueToReference)
     auto& ref = grid.at(ix, iy, iz);
     ref = value;
 
-    EXPECT_DOUBLE_EQ(value, grid.at(ix, iy, iz));
+    EXPECT_FLOAT_EQ(value, grid.at(ix, iy, iz));
 }
 
 TEST(FlowGridTest, AtMethodWithAutoReturnsValueNotReference)
@@ -239,8 +239,8 @@ TEST(FlowGridTest, AtMethodWithAutoReturnsValueNotReference)
 
     grid.at(ix, iy, iz) = value3;
 
-    EXPECT_DOUBLE_EQ(value1, non_ref);
-    EXPECT_DOUBLE_EQ(value3, ref);
+    EXPECT_FLOAT_EQ(value1, non_ref);
+    EXPECT_FLOAT_EQ(value3, ref);
 }
 
 TEST(FlowGridTest, OutOfBoundsAccessThrows)
