@@ -29,6 +29,15 @@ TEST(FlowGridTest, InitializesWithInput)
     EXPECT_DOUBLE_EQ(6.0, grid.spacing[ZZ]);
 }
 
+TEST(FlowGridTest, InitializesWithInverseBinSpacing)
+{
+    const auto grid = Grid3d({1, 2, 3}, {4.0, 5.0, 6.0}, {});
+
+    EXPECT_FLOAT_EQ(1.0 / 4.0, grid.inv_spacing[XX]);
+    EXPECT_FLOAT_EQ(1.0 / 5.0, grid.inv_spacing[YY]);
+    EXPECT_FLOAT_EQ(1.0 / 6.0, grid.inv_spacing[ZZ]);
+}
+
 TEST(FlowGridTest, InitializesWithCorrectGridSize)
 {
     const int nx = 3,
@@ -76,6 +85,17 @@ TEST(FlowGridTest, GridOriginFromOptionalArgument)
     EXPECT_FLOAT_EQ(grid.origin[XX], x0);
     EXPECT_FLOAT_EQ(grid.origin[YY], y0);
     EXPECT_FLOAT_EQ(grid.origin[ZZ], z0);
+}
+
+TEST(FlowGridTest, BinVolumeCalc)
+{
+    const IVec shape = {3, 5, 7};
+    const RVec spacing = {11.0, 13.0, 17.0};
+
+    const auto grid = Grid3d(shape, spacing, {});
+
+    const auto bin_volume = spacing[XX] * spacing[YY] * spacing[ZZ];
+    EXPECT_FLOAT_EQ(bin_volume, grid.bin_volume());
 }
 
 TEST(FlowGridTest, AssignSetsAllCellsToValue)
