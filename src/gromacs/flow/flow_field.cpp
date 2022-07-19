@@ -56,10 +56,8 @@ collect_flow_data(flow::FlowData         &flowcr,
     // Atom position buffer
     rvec r;
 
-    // Velocity buffer and length of a half-time-step, to be used
-    // if we need to project positions backwards when using the
-    // leap-frog integrator
-    rvec v_buf;
+    // Length of a half-time-step, to be used if we need to project 
+    // positions backwards when using the leap-frog integrator
     const auto dt_half = static_cast<real>(0.5 * ir->delta_t);
     const bool integratorIsLeapFrog = (ir->eI == IntegrationAlgorithm::MD);
 
@@ -77,7 +75,9 @@ collect_flow_data(flow::FlowData         &flowcr,
 
         if (index_group < num_groups)
         {
-            copy_rvec(state->x[i], r);
+            r[XX] = state->x[i][XX];
+            r[ZZ] = state->x[i][ZZ];
+
             const auto v = state->v[i];
             const auto mass = mdatoms->massT[i];
 
@@ -87,11 +87,13 @@ collect_flow_data(flow::FlowData         &flowcr,
                are at the same time. */
             if (integratorIsLeapFrog)
             {
-                svmul(dt_half, v, v_buf);
-                rvec_dec(r, v_buf);
+                r[XX] -= dt_half * v[XX];
+                r[ZZ] -= dt_half * v[ZZ];
             }
 
-            auto& bin = flowcr.flow_field.at_pos_pbc(r, state->box);
+            const size_t bin_index = flowcr.flow_field.index_from_pos_2d(r[XX], r[ZZ]);
+
+            auto& bin = flowcr.flow_field.values.at(bin_index);
             add_flow_to_bin(bin, v, mass);
 
             /* This checks for whether the current atom belongs to a specific
@@ -99,12 +101,9 @@ collect_flow_data(flow::FlowData         &flowcr,
                exactly what the check does.
 
                TODO: Figure this out. // Petter */
-            if (
-                !flowcr.group_data.empty()
-                && (index_group < static_cast<int>(flowcr.group_data.size()))
-            )
+            if (index_group < static_cast<int>(flowcr.group_data.size()))
             {
-                auto& bin = flowcr.group_data.at(index_group).at_pos_pbc(r, state->box);
+                auto& bin = flowcr.group_data.at(index_group).values.at(bin_index);
                 add_flow_to_bin(bin, v, mass);
             }
         }
@@ -122,9 +121,7 @@ static void
 average_flow_field(FlowField &flow_field, const size_t num_samples_int)
 {
     const auto num_samples = static_cast<double>(num_samples_int);
-    const auto bin_volume = static_cast<double>(
-        flow_field.spacing[XX] * flow_field.spacing[YY] * flow_field.spacing[ZZ]
-    );
+    const auto bin_volume = static_cast<double>(flow_field.bin_volume());
 
     for (auto& bin : flow_field.values)
     {
