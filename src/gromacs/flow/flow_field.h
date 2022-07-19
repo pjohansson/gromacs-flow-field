@@ -120,7 +120,7 @@ public:
             iz += shape[ZZ]; 
         }
 
-        // Grid is ZYX ordered and ix = 0, ny = 1, so:
+        // Grid is ZYX ordered and iy = 0, ny = 1, so:
         // iz + iy * nz + ix * (ny * nz) = iz + ix * nz
         return static_cast<size_t>(iz + ix * shape[ZZ]);
     }
@@ -162,24 +162,25 @@ struct FlowData {
     //! Whether or not to collect flow field data
     bool bDoFlowCollection = false;
 
-    //! 2D grid data
+    //! 2d flow field grid data for all groups (combined field)
     FlowField flow_field;
-    std::vector<FlowField> group_data; // Similar data for all separate atom groups
+
+    //! 2d flow field data for individual groups, if multiple are selected
+    std::vector<FlowField> group_data;
 
     //! Collect flow field data at step multiples of this
     uint64_t step_collect;
+
     //! Average and output flow field data at step multiples of this
     uint64_t step_output;
+
     //! Number of samples since last output of flow field
     uint64_t num_samples;
-
-    //! Volume of bins in grid
-    double bin_volume;
 
     //! Empty constructor, turns off flow field collection
     FlowData() {}
 
-    //! Constructor for full flow field
+    //! Constructor for full flow field, turns on collection
     FlowData(const std::string              &fnbase,
              const std::vector<std::string> &group_names,
              const size_t                    nx,
@@ -197,9 +198,6 @@ struct FlowData {
         {
             group_data.push_back(FlowField(fnbase, name, nx, nz, box));
         }
-
-        const auto& spacing = flow_field.spacing;
-        bin_volume = spacing[XX] * spacing[YY] * spacing[ZZ];
      }
 
     //! Zero all data for all collected flow fields and reset sample counter
@@ -223,30 +221,27 @@ struct FlowData {
 
 
 //! Prepare and return a container for flow field data
-FlowData
-init_flow_container(const int               nfile,
-                    const t_filenm          fnm[],
-                    const t_inputrec       *ir,
-                    const SimulationGroups *groups,
-                    const t_state          *state);
+FlowData init_flow_container(const int               nfile,
+                             const t_filenm          fnm[],
+                             const t_inputrec       *ir,
+                             const SimulationGroups *groups,
+                             const t_state          *state);
 
 
 //! Write information about the flow field collection
-void
-print_flow_collection_information(const FlowData       &flowcr,
-                                  const double          dt,
-                                  const gmx::MDLogger  &mdlog);
+void print_flow_collection_information(const FlowData       &flowcr,
+                                       const double          dt,
+                                       const gmx::MDLogger  &mdlog);
 
 
 //! If at a collection or output step, perform actions
-void
-flow_collect_or_output(FlowData               &flowcr,
-                       const uint64_t          step,
-                       const t_commrec        *cr,
-                       const t_inputrec       *ir,
-                       const t_mdatoms        *mdatoms,
-                       const t_state          *state,
-                       const SimulationGroups *groups);
+void flow_collect_or_output(FlowData               &flowcr,
+                            const int64_t           step,
+                            const t_commrec        *cr,
+                            const t_inputrec       *ir,
+                            const t_mdatoms        *mdatoms,
+                            const t_state          *state,
+                            const SimulationGroups *groups);
 
 } // namespace flow
 

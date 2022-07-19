@@ -15,6 +15,7 @@
 #include "gromacs/math/vec.h"
 #include "gromacs/math/units.h"
 #include "gromacs/topology/topology.h"
+#include "gromacs/utility/gmxassert.h"
 #include "gromacs/utility/basedefinitions.h"
 #include "gromacs/utility/cstringutil.h"
 #include "gromacs/utility/fatalerror.h"
@@ -32,10 +33,14 @@ namespace flow
  * DATA COLLECTION *
  *******************/
 
+//! Add flow contribution from a single atom to a bin
+//!
+//! Note: Flow along x and z is multiplied by the atom mass here. When
+//! averaging the flow inside each bin before writing to disk, we divide
+//! by the total mass in the bin. Thus, the flow that we are measuring 
+//! here is *mass-averaged*.
 static void
-add_flow_to_bin(flow::Bin     &bin,
-                const rvec     v,
-                const real     mass)
+add_flow_to_bin(flow::Bin &bin, const rvec v, const real mass)
 {
     bin[FlowVar::NumAtoms] += 1.0;
     bin[FlowVar::Temp    ] += mass * norm2(v);
@@ -45,6 +50,15 @@ add_flow_to_bin(flow::Bin     &bin,
 }
 
 
+//! Collect flow field data from all selected atoms in the system
+//!
+//! The collected variables here are:
+//!
+//! * Number of atoms in each bin (to be divided by bin volume)
+//! * Total atom mass in each bin (to be divided by bin volume)
+//! * Temperature in each bin (but here we only add upp the kinetic energy)
+//! * Mass flow along x in each bin (to be divided by total mass in bins)
+//! * Mass flow along z in each bin (to be divided by total mass in bins)
 static void
 collect_flow_data(flow::FlowData         &flowcr,
                   const t_commrec        *cr,
@@ -56,7 +70,7 @@ collect_flow_data(flow::FlowData         &flowcr,
     // Atom position buffer
     rvec r;
 
-    // Length of a half-time-step, to be used if we need to project 
+    // Length of a half-time-step, to be used if we need to project
     // positions backwards when using the leap-frog integrator
     const auto dt_half = static_cast<real>(0.5 * ir->delta_t);
     const bool integratorIsLeapFrog = (ir->eI == IntegrationAlgorithm::MD);
@@ -96,11 +110,9 @@ collect_flow_data(flow::FlowData         &flowcr,
             auto& bin = flowcr.flow_field.values.at(bin_index);
             add_flow_to_bin(bin, v, mass);
 
-            /* This checks for whether the current atom belongs to a specific
-               group, if multiple groups are selected. But, I no longer understand
-               exactly what the check does.
-
-               TODO: Figure this out. // Petter */
+            // If we are collecting flow field data for multiple groups, we add
+            // that here. The `index_group` corresponds to the indexing in our
+            // collection of flow fields.
             if (index_group < static_cast<int>(flowcr.group_data.size()))
             {
                 auto& bin = flowcr.group_data.at(index_group).values.at(bin_index);
@@ -113,10 +125,14 @@ collect_flow_data(flow::FlowData         &flowcr,
 }
 
 
-/**********
- * OUTPUT *
- **********/
+/*************
+ * AVERAGING *
+ *************/
 
+//! Average the flow field data inside all bins, in-place
+//!
+//! Note: This also divides the mass and number of atom fields by the
+//! bin volume, making them the mass-and-number densities.
 static void
 average_flow_field(FlowField &flow_field, const size_t num_samples_int)
 {
@@ -142,8 +158,8 @@ average_flow_field(FlowField &flow_field, const size_t num_samples_int)
             bin[FlowVar::V] /= mass;
         }
 
-        // In contrast to above, the mass and number of atoms has to 
-        // be divided by the number of samples taken to get their average. 
+        // In contrast to above, the mass and number of atoms has to
+        // be divided by the number of samples taken to get their average.
         // Additionally, since we want the mass and atom number densities,
         // divide by the bin volume.
         bin[FlowVar::NumAtoms] /= (num_samples * bin_volume);
@@ -151,16 +167,10 @@ average_flow_field(FlowField &flow_field, const size_t num_samples_int)
     }
 }
 
-//! A `Bin` dressed with bin indices along x and z in the flow field grid
-struct IndexedBin
-{
-    //! Index along the x axis
-    size_t ix;
-    //! Index along the z axis
-    size_t iz;
-    //! Flow field data in bin
-    Bin values;
-};
+
+/**********************
+ * OUTPUT PREPARATION *
+ **********************/
 
 //! Data from a flow field which has been prepared for output
 struct Output {
@@ -168,7 +178,30 @@ struct Output {
     Output(const FlowField &flow_field)
     :fnbase { flow_field.fnbase },
      shape { flow_field.shape },
-     spacing { flow_field.spacing } {}
+     spacing { flow_field.spacing }
+    {
+        const auto num_bins = shape[XX] * shape[YY] * shape[ZZ];
+
+        ix.reserve(num_bins);
+        iz.reserve(num_bins);
+        num_density.reserve(num_bins);
+        mass_density.reserve(num_bins);
+        temperature.reserve(num_bins);
+        ux.reserve(num_bins);
+        uz.reserve(num_bins);
+    }
+
+    //! Add indices and values for a grid bin to the output collections
+    void add_bin(const size_t ix_index, const size_t iz_index, const Bin &bin)
+    {
+        ix.push_back(ix_index);
+        iz.push_back(iz_index);
+        num_density.push_back(bin[FlowVar::NumAtoms]);
+        mass_density.push_back(bin[FlowVar::Mass]);
+        temperature.push_back(bin[FlowVar::Temp]);
+        ux.push_back(bin[FlowVar::U]);
+        uz.push_back(bin[FlowVar::V]);
+    }
 
     //! Base filename for output (`[fnbase]_00001.dat`, ...)
     std::string fnbase;
@@ -182,9 +215,28 @@ struct Output {
     //! Grid origin in system coordinates
     gmx::RVec origin = { 0.0, 0.0, 0.0 };
 
-    //! Non-empty bins with positional indices
-    std::vector<IndexedBin> bins;
+
+    // Flow field data, separated by type for writing full arrays to
+    // output files. All these data vectors must have an identical
+    // number of values, and correspond 1-to-1 to individual bins
+    // in the grid.
+
+    //! Bin indices along x
+    std::vector<size_t> ix;
+    //! Bin indices along z
+    std::vector<size_t> iz;
+    //! Atom number densities
+    std::vector<float> num_density;
+    //! Mass densities
+    std::vector<float> mass_density;
+    //! Temperatures
+    std::vector<float> temperature;
+    //! Mass-averaged velocities along x
+    std::vector<float> ux;
+    //! Mass-averaged velocities along z
+    std::vector<float> uz;
 };
+
 
 //! Data for all collected flow fields, prepared for output
 struct OutputFields {
@@ -194,6 +246,8 @@ struct OutputFields {
     std::vector<Output> groups;
 };
 
+
+//! Collect non-empty bins from a flow field and prepare for output
 static Output
 get_single_output_flow_field(const FlowField &flow_field)
 {
@@ -207,9 +261,7 @@ get_single_output_flow_field(const FlowField &flow_field)
 
             if (bin[FlowVar::Mass] > 0.0)
             {
-                output.bins.push_back(IndexedBin{
-                    ix, iz, bin
-                });
+                output.add_bin(ix, iz, bin);
             }
         }
     }
@@ -217,8 +269,10 @@ get_single_output_flow_field(const FlowField &flow_field)
     return output;
 }
 
+
+//! Average all flow fields, trim empty bins and return formatted for output
 static OutputFields
-get_averaged_flow_bins(FlowData &flowcr)
+get_averaged_flow_fields_for_output(FlowData &flowcr)
 {
     average_flow_field(flowcr.flow_field, flowcr.num_samples);
     const auto full_field = get_single_output_flow_field(flowcr.flow_field);
@@ -234,6 +288,17 @@ get_averaged_flow_bins(FlowData &flowcr)
 }
 
 
+/**********
+ * OUTPUT *
+ **********/
+
+//! Write a header with metadata and information into an opened binary file
+//!
+//! The information is writted as plaintext into the binary file using
+//! a buffer. Good text editors can inspect this header, which has some 
+//! (albeit poor) documentation of how to read the full file.
+//!
+//! The header ends with a written NULL (`\0`) value.
 static void
 write_header(FILE         *fp,
              const size_t  nx,
@@ -274,7 +339,8 @@ write_header(FILE         *fp,
 }
 
 
-static void 
+//! Opens a file with a given index and writes the flow field data into it
+static void
 write_flow_field_to_disk(const Output &flow_field, const size_t file_index)
 {
     char fn[STRLEN];
@@ -282,62 +348,64 @@ write_flow_field_to_disk(const Output &flow_field, const size_t file_index)
     snprintf(
         fn, STRLEN,
         "%s_%05lu.%s",
-        flow_field.fnbase.c_str(), 
-        file_index, 
+        flow_field.fnbase.c_str(),
+        file_index,
         ftp2ext(efDAT)
     );
+
+    const size_t num_bins = flow_field.ix.size();
+
+    const bool allArraySizesAreEqual = (
+        (num_bins == flow_field.iz.size())
+        && (num_bins == flow_field.num_density.size())
+        && (num_bins == flow_field.mass_density.size())
+        && (num_bins == flow_field.temperature.size())
+        && (num_bins == flow_field.ux.size())
+        && (num_bins == flow_field.uz.size())
+    );
+
+    GMX_RELEASE_ASSERT(
+        allArraySizesAreEqual,
+        "[FLOW_FIELD] Not all flow field containers had the same number "
+        "of non-empty bins\n"
+    );
+
 
     FILE *fp = gmx_ffopen(fn, "wb");
 
     write_header(
-        fp, 
-        flow_field.shape[XX], 
-        flow_field.shape[ZZ], 
+        fp,
+        flow_field.shape[XX],
+        flow_field.shape[ZZ],
         flow_field.spacing[XX],
         flow_field.spacing[ZZ],
-        flow_field.bins.size()
+        num_bins
     );
 
-    std::vector<uint64_t> buf_ix,
-                          buf_iz;
-    std::vector<float> buf_num_density,
-                       buf_mass,
-                       buf_temp,
-                       buf_vx,
-                       buf_vz;
-
-    const auto num_bins = flow_field.bins.size();
-    buf_ix.reserve(num_bins);
-    buf_iz.reserve(num_bins);
-    buf_num_density.reserve(num_bins);
-    buf_mass.reserve(num_bins);
-    buf_temp.reserve(num_bins);
-    buf_vx.reserve(num_bins);
-    buf_vz.reserve(num_bins);
-
-    for (const auto& bin : flow_field.bins)
-    {
-        buf_ix.push_back(bin.ix);
-        buf_iz.push_back(bin.iz);
-        buf_num_density.push_back(bin.values[FlowVar::NumAtoms]);
-        buf_mass.push_back(bin.values[FlowVar::Mass]);
-        buf_temp.push_back(bin.values[FlowVar::Temp]);
-        buf_vx.push_back(bin.values[FlowVar::U]);
-        buf_vz.push_back(bin.values[FlowVar::V]);
-    }
-
-    fwrite(buf_ix.data(),           sizeof(uint64_t), num_bins, fp);
-    fwrite(buf_iz.data(),           sizeof(uint64_t), num_bins, fp);
-    fwrite(buf_num_density.data(),  sizeof(float),    num_bins, fp);
-    fwrite(buf_temp.data(),         sizeof(float),    num_bins, fp);
-    fwrite(buf_mass.data(),         sizeof(float),    num_bins, fp);
-    fwrite(buf_vx.data(),           sizeof(float),    num_bins, fp);
-    fwrite(buf_vz.data(),           sizeof(float),    num_bins, fp);
+    // The order of writing these fields is *fixed*!
+    //  -> IX, IY, NUM_DENSITY, TEMP, MASS_DENSITY, UX, UZ
+    // 
+    // This corresponds to what is written in the header, although
+    // one has to take care of keeping that information up-to-date
+    // if anything changes in this code.
+    fwrite(flow_field.ix.data(),           sizeof(uint64_t), num_bins, fp);
+    fwrite(flow_field.iz.data(),           sizeof(uint64_t), num_bins, fp);
+    fwrite(flow_field.num_density.data(),  sizeof(float),    num_bins, fp);
+    fwrite(flow_field.temperature.data(),  sizeof(float),    num_bins, fp);
+    fwrite(flow_field.mass_density.data(), sizeof(float),    num_bins, fp);
+    fwrite(flow_field.ux.data(),           sizeof(float),    num_bins, fp);
+    fwrite(flow_field.uz.data(),           sizeof(float),    num_bins, fp);
 
     gmx_ffclose(fp);
 }
 
 
+//! Write all flow fields (full system + groups) to disk for the current step
+//!
+//! The current step changes which file index will be used for the filename. 
+//! We divide it by the output frequency to get the index. This accounts for
+//! restarts from checkpoints, which retains the step counter from the previous
+//! simulation. 
 static void
 write_all_flow_fields_to_disk(const OutputFields &output_fields,
                               const uint64_t      step,
@@ -346,7 +414,6 @@ write_all_flow_fields_to_disk(const OutputFields &output_fields,
     const auto file_index = static_cast<size_t>(step / step_output);
 
     write_flow_field_to_disk(output_fields.full, file_index);
-
     for (const auto& group_field : output_fields.groups)
     {
         write_flow_field_to_disk(group_field, file_index);
@@ -358,6 +425,7 @@ write_all_flow_fields_to_disk(const OutputFields &output_fields,
  * MPI COMMUNICATION *
  *********************/
 
+//! If we are using MPI, collect all flow field data to the main rank
 static void
 mpi_collect_flow_data_on_master(FlowData        &flowcr,
                                 const t_commrec *cr)
@@ -553,7 +621,7 @@ print_flow_collection_information(const FlowData       &flowcr,
 
 void
 flow_collect_or_output(FlowData               &flowcr,
-                       const uint64_t          current_step,
+                       const int64_t           current_step,
                        const t_commrec        *cr,
                        const t_inputrec       *ir,
                        const t_mdatoms        *mdatoms,
@@ -563,15 +631,17 @@ flow_collect_or_output(FlowData               &flowcr,
     collect_flow_data(flowcr, cr, ir, mdatoms, state, groups);
 
     if (do_per_step(current_step, flowcr.step_output)
-        && (static_cast<int64_t>(current_step) != ir->init_step))
+        && (current_step != ir->init_step))
     {
         mpi_collect_flow_data_on_master(flowcr, cr);
 
         if (MASTER(cr))
         {
-            const auto output_data = get_averaged_flow_bins(flowcr);
+            const auto output_data = get_averaged_flow_fields_for_output(flowcr);
             write_all_flow_fields_to_disk(
-                output_data, current_step, flowcr.step_output
+                output_data, 
+                static_cast<uint64_t>(current_step), 
+                flowcr.step_output
             );
         }
 
