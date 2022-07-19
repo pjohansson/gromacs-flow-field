@@ -283,6 +283,79 @@ get_average_flow_data(FlowData &flowcr)
 
 
 static void
+average_flow_field(FlowField &flow_field, const size_t num_samples_int)
+{
+    const auto num_samples = static_cast<double>(num_samples_int);
+
+    for (auto& bin : flow_field.values)
+    {
+        const auto num_atoms = bin[FlowVar::NumAtoms];
+        const auto mass      = bin[FlowVar::Mass    ];
+
+        /* The temperature and flow is averaged by the sampled number
+        of atoms and mass in each bin. To not divide by zero in empty
+        bins we take care to check. */
+        if (num_atoms > 0.0)
+        {
+            bin[FlowVar::Temp] /= (2.0 * gmx::c_boltz * num_atoms);
+        }
+
+        if (mass > 0.0)
+        {
+            bin[FlowVar::U] /= mass;
+            bin[FlowVar::V] /= mass;
+        }
+
+        /* In contrast to above, the mass and number of atoms has to be divided by
+        the number of samples taken to get their average. */
+        bin[FlowVar::NumAtoms] /= num_samples;
+        bin[FlowVar::Mass]     /= num_samples;
+    }
+}
+
+//! A `Bin` dressed with bin indices along x and z in the flow field grid
+struct IndexedBin
+{
+    //! Index along the x axis
+    size_t ix;
+    //! Index along the z axis
+    size_t iz;
+    //! Flow field data in bin
+    Bin values;
+};
+
+//! Data from a flow field which has been prepared for output
+struct Output {
+    //! Constructor which copies metadata from given `flow_field`
+    Output(const FlowField &flow_field)
+    :fnbase { flow_field.fnbase },
+     shape { flow_field.shape },
+     spacing { flow_field.spacing } {}
+
+    //! Base filename for output (`[fnbase]_00001.dat`, ...)
+    std::string fnbase;
+
+    //! Grid shape
+    gmx::IVec shape;
+
+    //! Grid bin spacing
+    gmx::RVec spacing;
+
+    //! Grid origin in system coordinates
+    gmx::RVec origin = { 0.0, 0.0, 0.0 };
+
+    //! Non-empty bins with positional indices
+    std::vector<IndexedBin> bins;
+};
+
+static void
+get_averaged_flow_bins(FlowData &flowcr)
+{
+
+}
+
+
+static void
 write_header(FILE         *fp,
              const size_t  nx,
              const size_t  ny,
