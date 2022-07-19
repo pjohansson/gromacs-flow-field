@@ -74,6 +74,12 @@ public:
         );
     }
 
+    //! Return the bin volume
+    real bin_volume() const noexcept
+    {
+        return spacing[XX] * spacing[YY] * spacing[ZZ];
+    }
+
     //! Number of cells along each axis
     gmx::IVec shape;
 
@@ -85,6 +91,9 @@ public:
 
     //! Physical size of grid
     gmx::RVec box;
+
+    //! 1.0 / spacing along each axis, used to compute indexing from position
+    gmx::RVec inv_spacing;
 
     //! Values inside the 3D grid
     //!
@@ -114,6 +123,7 @@ protected:
         for (size_t i = 0; i < DIM; ++i)
         {
             box[i] = static_cast<real>(shape[i]) * spacing[i];
+            inv_spacing[i] = 1.0 / spacing[i];
         }
 
         const auto num_elements = shape[XX] * shape[YY] * shape[ZZ];
