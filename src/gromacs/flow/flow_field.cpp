@@ -432,25 +432,30 @@ static void write_all_flow_fields_to_disk(const OutputFields &output_fields,
  * MPI COMMUNICATION *
  *********************/
 
+//! Reduce the data from a single flow field from all ranks to main
+static void mpi_collect_single_flow_field(FlowField       &flow_field,
+                                          const t_commrec *cr)
+{
+    MPI_Reduce(
+        MASTER(cr) ? MPI_IN_PLACE : flow_field.values.data(),
+        MASTER(cr) ? flow_field.values.data() : NULL,
+        flow_field.values.size(),
+        MPI_DOUBLE, MPI_SUM, MASTERRANK(cr),
+        cr->mpi_comm_mygroup
+    );
+}
+
 //! If we are using MPI, collect all flow field data to the main rank
 static void mpi_collect_flow_data_on_master(FlowData        &flowcr,
                                             const t_commrec *cr)
 {
     if (PAR(cr))
     {
-        MPI_Reduce(MASTER(cr) ? MPI_IN_PLACE : flowcr.flow_field.values.data(),
-                MASTER(cr) ? flowcr.flow_field.values.data() : NULL,
-                flowcr.flow_field.values.size(),
-                MPI_DOUBLE, MPI_SUM, MASTERRANK(cr),
-                cr->mpi_comm_mygroup);
+        mpi_collect_single_flow_field(flowcr.flow_field, cr);
 
         for (auto& group_data : flowcr.group_data)
         {
-            MPI_Reduce(MASTER(cr) ? MPI_IN_PLACE : group_data.values.data(),
-                    MASTER(cr) ? group_data.values.data() : NULL,
-                    group_data.values.size(),
-                    MPI_DOUBLE, MPI_SUM, MASTERRANK(cr),
-                    cr->mpi_comm_mygroup);
+            mpi_collect_single_flow_field(group_data, cr);
         }
     }
 }
