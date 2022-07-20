@@ -39,8 +39,7 @@ namespace flow
 //! averaging the flow inside each bin before writing to disk, we divide
 //! by the total mass in the bin. Thus, the flow that we are measuring 
 //! here is *mass-averaged*.
-static void
-add_flow_to_bin(flow::Bin &bin, const rvec v, const real mass)
+static void add_flow_to_bin(flow::Bin &bin, const rvec v, const real mass)
 {
     bin[FlowVar::NumAtoms] += 1.0;
     bin[FlowVar::Temp    ] += mass * norm2(v);
@@ -59,13 +58,12 @@ add_flow_to_bin(flow::Bin &bin, const rvec v, const real mass)
 //! * Temperature in each bin (but here we only add upp the kinetic energy)
 //! * Mass flow along x in each bin (to be divided by total mass in bins)
 //! * Mass flow along z in each bin (to be divided by total mass in bins)
-static void
-collect_flow_data(flow::FlowData         &flowcr,
-                  const t_commrec        *cr,
-                  const t_inputrec       *ir,
-                  const t_mdatoms        *mdatoms,
-                  const t_state          *state,
-                  const SimulationGroups *groups)
+static void collect_flow_data(flow::FlowData         &flowcr,
+                              const t_commrec        *cr,
+                              const t_inputrec       *ir,
+                              const t_mdatoms        *mdatoms,
+                              const t_state          *state,
+                              const SimulationGroups *groups)
 {
     // Atom position buffer
     rvec r;
@@ -133,8 +131,8 @@ collect_flow_data(flow::FlowData         &flowcr,
 //!
 //! Note: This also divides the mass and number of atom fields by the
 //! bin volume, making them the mass-and-number densities.
-static void
-average_flow_field(FlowField &flow_field, const size_t num_samples_int)
+static void average_flow_field(FlowField &flow_field, 
+                               const size_t num_samples_int)
 {
     const auto num_samples = static_cast<double>(num_samples_int);
     const auto bin_volume = static_cast<double>(flow_field.bin_volume());
@@ -248,8 +246,7 @@ struct OutputFields {
 
 
 //! Collect non-empty bins from a flow field and prepare for output
-static Output
-get_single_output_flow_field(const FlowField &flow_field)
+static Output get_single_output_flow_field(const FlowField &flow_field)
 {
     auto output = Output{flow_field};
 
@@ -271,8 +268,7 @@ get_single_output_flow_field(const FlowField &flow_field)
 
 
 //! Average all flow fields, trim empty bins and return formatted for output
-static OutputFields
-get_averaged_flow_fields_for_output(FlowData &flowcr)
+static OutputFields get_averaged_flow_fields_for_output(FlowData &flowcr)
 {
     average_flow_field(flowcr.flow_field, flowcr.num_samples);
     const auto full_field = get_single_output_flow_field(flowcr.flow_field);
@@ -299,13 +295,12 @@ get_averaged_flow_fields_for_output(FlowData &flowcr)
 //! (albeit poor) documentation of how to read the full file.
 //!
 //! The header ends with a written NULL (`\0`) value.
-static void
-write_header(FILE         *fp,
-             const size_t  nx,
-             const size_t  ny,
-             const double  dx,
-             const double  dy,
-             const size_t  num_values)
+static void write_header(FILE         *fp,
+                         const size_t  nx,
+                         const size_t  ny,
+                         const double  dx,
+                         const double  dy,
+                         const size_t  num_values)
 {
     std::ostringstream buf;
 
@@ -340,8 +335,8 @@ write_header(FILE         *fp,
 
 
 //! Opens a file with a given index and writes the flow field data into it
-static void
-write_flow_field_to_disk(const Output &flow_field, const size_t file_index)
+static void write_flow_field_to_disk(const Output &flow_field, 
+                                     const size_t file_index)
 {
     char fn[STRLEN];
 
@@ -355,6 +350,8 @@ write_flow_field_to_disk(const Output &flow_field, const size_t file_index)
 
     const size_t num_bins = flow_field.ix.size();
 
+    // Why not ensure that we are not writing garbage? I'm pretty sure we 
+    // are not, but checking costs nothing
     const bool allArraySizesAreEqual = (
         (num_bins == flow_field.iz.size())
         && (num_bins == flow_field.num_density.size())
@@ -406,10 +403,9 @@ write_flow_field_to_disk(const Output &flow_field, const size_t file_index)
 //! We divide it by the output frequency to get the index. This accounts for
 //! restarts from checkpoints, which retains the step counter from the previous
 //! simulation. 
-static void
-write_all_flow_fields_to_disk(const OutputFields &output_fields,
-                              const uint64_t      step,
-                              const uint64_t      step_output)
+static void write_all_flow_fields_to_disk(const OutputFields &output_fields,
+                                          const uint64_t      step,
+                                          const uint64_t      step_output)
 {
     const auto file_index = static_cast<size_t>(step / step_output);
 
@@ -426,9 +422,8 @@ write_all_flow_fields_to_disk(const OutputFields &output_fields,
  *********************/
 
 //! If we are using MPI, collect all flow field data to the main rank
-static void
-mpi_collect_flow_data_on_master(FlowData        &flowcr,
-                                const t_commrec *cr)
+static void mpi_collect_flow_data_on_master(FlowData        &flowcr,
+                                            const t_commrec *cr)
 {
     if (PAR(cr))
     {
@@ -454,12 +449,11 @@ mpi_collect_flow_data_on_master(FlowData        &flowcr,
  * PUBLIC FUNCTIONS *
  ********************/
 
-FlowData
-init_flow_container(const int               nfile,
-                    const t_filenm          fnm[],
-                    const t_inputrec       *ir,
-                    const SimulationGroups *groups,
-                    const t_state          *state)
+FlowData init_flow_container(const int               nfile,
+                             const t_filenm          fnm[],
+                             const t_inputrec       *ir,
+                             const SimulationGroups *groups,
+                             const t_state          *state)
 {
     const auto step_collect = static_cast<uint64_t>(ir->userint1);
     auto step_output = static_cast<uint64_t>(ir->userint2);
@@ -540,10 +534,9 @@ init_flow_container(const int               nfile,
 }
 
 
-void
-print_flow_collection_information(const FlowData       &flowcr,
-                                  const double          dt,
-                                  const gmx::MDLogger  &mdlog)
+void print_flow_collection_information(const FlowData       &flowcr,
+                                       const double          dt,
+                                       const gmx::MDLogger  &mdlog)
 {
     // Log to warning level, which prints both to md.log and stdout
     // (info level only writes to md.log)
@@ -619,14 +612,13 @@ print_flow_collection_information(const FlowData       &flowcr,
 }
 
 
-void
-flow_collect_or_output(FlowData               &flowcr,
-                       const int64_t           current_step,
-                       const t_commrec        *cr,
-                       const t_inputrec       *ir,
-                       const t_mdatoms        *mdatoms,
-                       const t_state          *state,
-                       const SimulationGroups *groups)
+void flow_collect_or_output(FlowData               &flowcr,
+                            const int64_t           current_step,
+                            const t_commrec        *cr,
+                            const t_inputrec       *ir,
+                            const t_mdatoms        *mdatoms,
+                            const t_state          *state,
+                            const SimulationGroups *groups)
 {
     collect_flow_data(flowcr, cr, ir, mdatoms, state, groups);
 

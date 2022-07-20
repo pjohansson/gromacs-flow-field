@@ -28,12 +28,11 @@ T& flow::Grid3d<T>::at(const int ix,
     ));
 }
 
-static int
-get_pos_in_grid_saturated(const size_t dim,
-                          const rvec   r,
-                          const ivec   shape,
-                          const rvec   origin,
-                          const rvec   spacing)
+static int get_pos_in_grid_saturated(const size_t dim,
+                                     const rvec   r,
+                                     const ivec   shape,
+                                     const rvec   origin,
+                                     const rvec   spacing)
 {
     auto i = static_cast<int>((r[dim] - origin[dim]) / spacing[dim]);
 
