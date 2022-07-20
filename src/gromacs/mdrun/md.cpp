@@ -800,17 +800,17 @@ void gmx::LegacySimulator::do_md()
     bNeedRepartition = FALSE;
 
     // [FLOW_FIELD]
-    // Prepare for (optional) flow field output by setting up the container
-    // and reading all parameter values.
-    flow::FlowData flowcr;
+    flow::FlowData flowcr; // flow field = disabled by default
 
-    if (opt2bSet("-flow", nfile, fnm))
+    if (ir->flowFieldOptions.doFlowFieldCollection)
     {
         flowcr = flow::init_flow_container(nfile, fnm, ir, groups, state);
 
         if (MASTER(cr))
         {
-            flow::print_flow_collection_information(flowcr, ir->delta_t, mdlog);
+            flow::print_flow_collection_information(
+                flowcr, ir->delta_t, mdlog
+            );
         }
     }
 
