@@ -2231,6 +2231,13 @@ void get_ir(const char*     mdparin,
     // since creating new group types in Gromacs seems to be a pain. 
     // This leaves `user2-grps` for further development.
     replace_inp_entry(inp, "user1-grps", "flow-field-grps");
+    // Also, temporarily add "deprecation warnings" for now-unused 
+    // userint1, etc.
+    replace_inp_entry(inp, "userint1", "flow-nstsample");
+    replace_inp_entry(inp, "userint2", "flow-nstoutput");
+    replace_inp_entry(inp, "userint3", "flow-nx");
+    replace_inp_entry(inp, "userint4", "flow-nz");
+
 
     printStringNewline(&inp, "VARIOUS PREPROCESSING OPTIONS");
     printStringNoNewline(&inp, "Preprocessor information: use cpp syntax.");
