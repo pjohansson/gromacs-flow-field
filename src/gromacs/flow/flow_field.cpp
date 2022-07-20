@@ -436,10 +436,36 @@ static void write_all_flow_fields_to_disk(const OutputFields &output_fields,
 static void mpi_collect_single_flow_field(FlowField       &flow_field,
                                           const t_commrec *cr)
 {
+    // We want to transmit all `flow::Bin`s in a single MPI communication.
+    // The bins are stored in a std::vector, which guarantuees that adjacent
+    // members are contiguous in memory.
+    //
+    // Thus, if we know the exact size of each `Bin` (an array of doubles),
+    // and how many of them there are in each vector (identical for every rank),
+    // we can easily calculate how many doubles to transmit as:
+    //
+    // # of doubles = bin.size() * vector.size()
+    //
+    // However, to transmit them all in one go we must assume that each `Bin`
+    // contains only the values themselves, no additional data: it must be
+    // exactly sizeof(double) * bin.size() large in memory. std::array does
+    // not seem to guarantuee this but tends to be a light wrapper around
+    // raw memory, in which case the assumption holds.
+    //
+    // Thus, we should indeed be able to directly transmit the desired number
+    // of doubles from each vector's data storage to the main rank.
+    //
+    // To be completely sure, we here make a quick check that this assumption
+    // is valid for the current compiled program.
+    GMX_RELEASE_ASSERT(
+        sizeof(double) * FlowVar::NumVars == sizeof(Bin),
+        "std::vector<flow::Bin> is not contiguous, MPI_Reduce will fail"
+    );
+
     MPI_Reduce(
         MASTER(cr) ? MPI_IN_PLACE : flow_field.values.data(),
         MASTER(cr) ? flow_field.values.data() : NULL,
-        flow_field.values.size(),
+        FlowVar::NumVars * flow_field.values.size(), // total number of doubles stored in vector
         MPI_DOUBLE, MPI_SUM, MASTERRANK(cr),
         cr->mpi_comm_mygroup
     );
