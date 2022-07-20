@@ -6,8 +6,8 @@
 namespace flow
 {
 
-void read_flow_field_opts(std::vector<t_inpfile> &inp, 
-                          FlowFieldOptions       &opts, 
+void read_flow_field_opts(std::vector<t_inpfile> &inp,
+                          FlowFieldOptions       &opts,
                           char                   *groups,
                           WarningHandler         *wi)
 {
@@ -35,6 +35,54 @@ void read_flow_field_opts(std::vector<t_inpfile> &inp,
     opts.nz = get_eint(&inp, "flow-nz", 0, wi);
 }
 
+
+void check_flow_field_opts(const t_inputrec *ir,
+                           WarningHandler   *wi)
+{
+    const auto& opts = ir->flowFieldOptions;
+
+    if (opts.nx < 1)
+    {
+        wi->addError("flow-nx should be >= 1");
+    }
+    if (opts.nz < 1)
+    {
+        wi->addError("flow-nz should be >= 1");
+    }
+    if (opts.nstsample < 1)
+    {
+        wi->addError("flow-nstsample should be >= 1");
+    }
+    if (opts.nstoutput < 1)
+    {
+        wi->addError("flow-nstoutput should be >= 1");
+    }
+
+    if (opts.nstoutput % opts.nstsample != 0)
+    {
+        const std::string message =
+            gmx::formatString(
+                "flow-nstoutput (%d) should be "
+                "a multiple of flow-nstsample (%d)",
+                opts.nstoutput, opts.nstsample
+            );
+
+        wi->addError(message);
+    }
+
+    if (ir->pressureCouplingOptions.epc != PressureCoupling::No)
+    {
+        const std::string message =
+            gmx::formatString(
+                "Pressure scaling and flow field collection were both turned "
+                "on, but flow field collection requires a fixed system box!"
+            );
+
+        wi->addError(message);
+    }
+}
+
+
 void do_tpx_flow_field(gmx::ISerializer *serializer,
                        FlowFieldOptions &opts)
 {
@@ -49,8 +97,8 @@ void do_tpx_flow_field(gmx::ISerializer *serializer,
 void pr_flow_field(FILE* fp, int indent, const flow::FlowFieldOptions &opts)
 {
     pr_str(
-        fp, indent, 
-        "flow-field", 
+        fp, indent,
+        "flow-field",
         booleanValueToString(opts.doFlowFieldCollection)
     );
     pr_int(fp, indent, "flow-nstsample", opts.nstsample);

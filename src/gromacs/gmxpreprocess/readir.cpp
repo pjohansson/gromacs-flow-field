@@ -1745,6 +1745,12 @@ void check_ir(const char*                    mdparin,
     {
         wi->addError("cos-acceleration is only supported by integrator = md");
     }
+
+    // [FLOW_FIELD]
+    if (ir->flowFieldOptions.doFlowFieldCollection)
+    {
+        flow::check_flow_field_opts(ir, wi);
+    }
 }
 
 /* interpret a number of doubles from a string and put them in an array,

@@ -4,6 +4,7 @@
 
 #include "gromacs/fileio/readinp.h"
 #include "gromacs/fileio/warninp.h"
+#include "gromacs/mdtypes/inputrec.h"
 #include "gromacs/utility/iserializer.h"
 
 #include "inputrec_types.h"
@@ -19,6 +20,10 @@ void read_flow_field_opts(std::vector<t_inpfile> &inp,
                           FlowFieldOptions       &opts, 
                           char                   *groups,
                           WarningHandler         *wi);
+
+//! Verify that flow field options are correctly set
+void check_flow_field_opts(const t_inputrec *ir,
+                           WarningHandler   *wi);
 
 //! Do .tpx input/output for flow field options
 void do_tpx_flow_field(gmx::ISerializer *serializer,
