@@ -813,6 +813,17 @@ void gmx::LegacySimulator::do_md()
             );
         }
     }
+    else if (opt2bSet("-flow", nfile, fnm))
+    {
+        const auto message = gmx::formatString(
+            "mdrun received the `-flow` flag, but flow field collection "
+            "is not enabled. To enable, set `flow-field = yes` in the "
+            ".mdp file. We cannot enable it here, because the preprocessor "
+            "must verify that the flow collection parameters are valid."
+        );
+
+        gmx_fatal(FARGS, message.c_str());
+    }
 
     step     = ir->init_step;
     step_rel = 0;
