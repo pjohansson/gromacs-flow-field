@@ -44,6 +44,9 @@
 #include "gromacs/utility/enumerationhelpers.h"
 #include "gromacs/utility/real.h"
 
+// [FLOW_FIELD]
+#include "gromacs/flow/inputrec_types.h"
+
 #define EGP_EXCL (1 << 0)
 #define EGP_TABLE (1 << 1)
 
@@ -581,6 +584,10 @@ struct t_inputrec // NOLINT (clang-analyzer-optin.performance.Padding)
 
     //! KVT for storing simulation parameters that are not part of the mdp file.
     std::unique_ptr<gmx::KeyValueTreeObject> internalParameters;
+
+    // [FLOW_FIELD]
+    //! Flow field collection options
+    flow::FlowFieldOptions flowFieldOptions;
 };
 
 int ir_optimal_nstcalcenergy(const t_inputrec* ir);

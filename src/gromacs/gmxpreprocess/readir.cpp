@@ -92,6 +92,9 @@
 #include "gromacs/utility/stringutil.h"
 #include "gromacs/utility/textwriter.h"
 
+// [FLOW_FIELD]
+#include "gromacs/flow/gmx_io.h"
+
 #define NOGID 255
 
 using gmx::BasicVector;
@@ -2733,6 +2736,9 @@ void get_ir(const char*     mdparin,
     /* AdResS is no longer supported, but we need grompp to be able to
        refuse to process old .mdp files that used it. */
     ir->bAdress = (get_eeenum(&inp, "adress", no_names, wi) != 0);
+
+    /* [FLOW_FIELD] Flow field collection */
+    flow::read_flow_field_opts(&inp, ir->flowFieldOptions, wi);
 
     /* User defined thingies */
     printStringNewline(&inp, "User defined thingies");
