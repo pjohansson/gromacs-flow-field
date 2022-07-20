@@ -15,8 +15,9 @@ namespace flow
 {
 
 //! Read flow field options from the parameter file
-void read_flow_field_opts(std::vector<t_inpfile> *inp, 
+void read_flow_field_opts(std::vector<t_inpfile> &inp, 
                           FlowFieldOptions       &opts, 
+                          char                   *groups,
                           WarningHandler         *wi);
 
 //! Do .tpx input/output for flow field options

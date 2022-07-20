@@ -6,24 +6,33 @@
 namespace flow
 {
 
-void read_flow_field_opts(std::vector<t_inpfile> *inp, 
+void read_flow_field_opts(std::vector<t_inpfile> &inp, 
                           FlowFieldOptions       &opts, 
+                          char                   *groups,
                           WarningHandler         *wi)
 {
-    printStringNewline(inp, "FLOW FIELD COLLECTION");
+    printStringNewline(&inp, "FLOW FIELD COLLECTION");
 
-    printStringNoNewline(inp, "Do flow field collection: No or Yes");
-    opts.doFlowFieldCollection = (getEnum<Boolean>(inp, "flow-field", wi) != Boolean::No);
+    printStringNoNewline(&inp, "Do flow field collection: No or Yes");
+    opts.doFlowFieldCollection = (getEnum<Boolean>(&inp, "flow-field", wi) != Boolean::No);
 
-    printStringNoNewline(inp, "Interval in steps between sampling flow field data");
-    opts.nstsample = get_eint(inp, "flow-nstsample", 0, wi);
-    printStringNoNewline(inp, "Interval in steps between averaging and outputting flow field data");
-    opts.nstoutput = get_eint(inp, "flow-nstoutput", 0, wi);
+    printStringNoNewline(&inp, "This selects the subset of atoms for the flow field");
+    printStringNoNewline(&inp, "collection. You can select multiple groups, in which");
+    printStringNoNewline(&inp, "case the fields for all groups combined and the fields");
+    printStringNoNewline(&inp, "for all individual groups are all collected and written");
+    printStringNoNewline(&inp, "to disk. If no groups are selected, all atoms in the");
+    printStringNoNewline(&inp, "system will be used.");
+    setStringEntry(&inp, "flow-field-grps", groups, nullptr);
 
-    printStringNoNewline(inp, "Number of flow field grid bins along x");
-    opts.nx = get_eint(inp, "flow-nx", 0, wi);
-    printStringNoNewline(inp, "Number of flow field grid bins along z");
-    opts.nz = get_eint(inp, "flow-nz", 0, wi);
+    printStringNoNewline(&inp, "Interval in steps between sampling flow field data");
+    opts.nstsample = get_eint(&inp, "flow-nstsample", 0, wi);
+    printStringNoNewline(&inp, "Interval in steps between averaging and outputting flow field data");
+    opts.nstoutput = get_eint(&inp, "flow-nstoutput", 0, wi);
+
+    printStringNoNewline(&inp, "Number of flow field grid bins along x");
+    opts.nx = get_eint(&inp, "flow-nx", 0, wi);
+    printStringNoNewline(&inp, "Number of flow field grid bins along z");
+    opts.nz = get_eint(&inp, "flow-nz", 0, wi);
 }
 
 void do_tpx_flow_field(gmx::ISerializer *serializer,
@@ -35,6 +44,7 @@ void do_tpx_flow_field(gmx::ISerializer *serializer,
     serializer->doInt(&opts.nx);
     serializer->doInt(&opts.nz);
 }
+
 
 void pr_flow_field(FILE* fp, int indent, const flow::FlowFieldOptions &opts)
 {

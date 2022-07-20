@@ -2220,6 +2220,12 @@ void get_ir(const char*     mdparin,
     replace_inp_entry(inp, "xtc-precision", "compressed-x-precision");
     replace_inp_entry(inp, "pull-print-com1", "pull-print-com");
 
+    // [FLOW_FIELD]
+    // We take control over `user1-grps` for our flow field collection,
+    // since creating new group types in Gromacs seems to be a pain. 
+    // This leaves `user2-grps` for further development.
+    replace_inp_entry(inp, "user1-grps", "flow-field-grps");
+
     printStringNewline(&inp, "VARIOUS PREPROCESSING OPTIONS");
     printStringNoNewline(&inp, "Preprocessor information: use cpp syntax.");
     printStringNoNewline(&inp, "e.g.: -I/home/joe/doe -I/home/mary/roe");
@@ -2738,11 +2744,12 @@ void get_ir(const char*     mdparin,
     ir->bAdress = (get_eeenum(&inp, "adress", no_names, wi) != 0);
 
     /* [FLOW_FIELD] Flow field collection */
-    flow::read_flow_field_opts(&inp, ir->flowFieldOptions, wi);
+    flow::read_flow_field_opts(
+        inp, ir->flowFieldOptions, inputrecStrings->user1, wi
+    );
 
     /* User defined thingies */
     printStringNewline(&inp, "User defined thingies");
-    setStringEntry(&inp, "user1-grps", inputrecStrings->user1, nullptr);
     setStringEntry(&inp, "user2-grps", inputrecStrings->user2, nullptr);
     ir->userint1  = get_eint(&inp, "userint1", 0, wi);
     ir->userint2  = get_eint(&inp, "userint2", 0, wi);
