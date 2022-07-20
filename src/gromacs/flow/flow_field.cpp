@@ -73,7 +73,8 @@ static void collect_flow_data(flow::FlowData         &flowcr,
     const auto dt_half = static_cast<real>(0.5 * ir->delta_t);
     const bool integratorIsLeapFrog = (ir->eI == IntegrationAlgorithm::MD);
 
-    const int num_groups = flowcr.group_data.empty() ? 1 : flowcr.group_data.size();
+    const int num_groups =
+        flowcr.group_data.empty() ? 1 : flowcr.group_data.size();
 
     for (size_t i = 0; i < static_cast<size_t>(mdatoms->homenr); ++i)
     {
@@ -83,7 +84,9 @@ static void collect_flow_data(flow::FlowData         &flowcr,
             ? cr->dd->globalAtomIndices[i]
             : static_cast<int>(i);
 
-        const auto index_group = getGroupType(*groups, SimulationAtomGroupType::User1, index_global);
+        const auto index_group = getGroupType(
+            *groups, SimulationAtomGroupType::User1, index_global
+        );
 
         if (index_group < num_groups)
         {
@@ -164,8 +167,8 @@ static void average_flow_field_bin(Bin          &bin,
 //!
 //! Note: This also divides the mass and number of atom fields by the
 //! bin volume, making them the mass-and-number densities.
-static void average_flow_field(FlowField &flow_field,
-                               const size_t num_samples_int)
+static void average_flow_field(FlowField    &flow_field,
+                               const size_t  num_samples_int)
 {
     const auto num_samples = static_cast<double>(num_samples_int);
     const auto bin_volume = static_cast<double>(flow_field.bin_volume());
@@ -634,7 +637,9 @@ void flow_collect_or_output(FlowData               &flowcr,
 
         if (MASTER(cr))
         {
-            const auto output_data = get_averaged_flow_fields_for_output(flowcr);
+            const auto output_data =
+                get_averaged_flow_fields_for_output(flowcr);
+
             write_all_flow_fields_to_disk(
                 output_data,
                 static_cast<uint64_t>(current_step),

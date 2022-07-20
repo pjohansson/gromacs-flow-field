@@ -13,8 +13,7 @@ namespace flow
     to the array of names if the other groups do not add up to all
     atoms in the system. Thus, we detect if the final group is called
     exactly "rest" and if so do not count it as one of the groups. */
-static size_t
-get_num_groups(const SimulationGroups *groups)
+static size_t get_num_groups(const SimulationGroups *groups)
 {
     size_t num_groups = 0;
 

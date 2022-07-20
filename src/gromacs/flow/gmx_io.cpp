@@ -94,7 +94,7 @@ void do_tpx_flow_field(gmx::ISerializer *serializer,
 }
 
 
-void pr_flow_field(FILE* fp, int indent, const flow::FlowFieldOptions &opts)
+void pr_flow_field(FILE* fp, int indent, const FlowFieldOptions &opts)
 {
     pr_str(
         fp, indent,

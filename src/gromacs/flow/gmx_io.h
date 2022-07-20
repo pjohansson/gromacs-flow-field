@@ -12,12 +12,12 @@
 #ifndef MD_FLOW_FIELD_GMX_IO
 #define MD_FLOW_FIELD_GMX_IO
 
-namespace flow 
+namespace flow
 {
 
 //! Read flow field options from the parameter file
-void read_flow_field_opts(std::vector<t_inpfile> &inp, 
-                          FlowFieldOptions       &opts, 
+void read_flow_field_opts(std::vector<t_inpfile> &inp,
+                          FlowFieldOptions       &opts,
                           char                   *groups,
                           WarningHandler         *wi);
 
@@ -30,7 +30,7 @@ void do_tpx_flow_field(gmx::ISerializer *serializer,
                        FlowFieldOptions &opts);
 
 //! Print flow field options to log
-void pr_flow_field(FILE* fp, int indent, const flow::FlowFieldOptions &opts);
+void pr_flow_field(FILE* fp, int indent, const FlowFieldOptions &opts);
 
 } // namespace flow
 
