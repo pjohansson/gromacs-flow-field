@@ -37,7 +37,7 @@ namespace flow
 //!
 //! Note: Flow along x and z is multiplied by the atom mass here. When
 //! averaging the flow inside each bin before writing to disk, we divide
-//! by the total mass in the bin. Thus, the flow that we are measuring 
+//! by the total mass in the bin. Thus, the flow that we are measuring
 //! here is *mass-averaged*.
 static void add_flow_to_bin(flow::Bin &bin, const rvec v, const real mass)
 {
@@ -131,7 +131,7 @@ static void collect_flow_data(flow::FlowData         &flowcr,
 //!
 //! Note: This also divides the mass and number of atom fields by the
 //! bin volume, making them the mass-and-number densities.
-static void average_flow_field(FlowField &flow_field, 
+static void average_flow_field(FlowField &flow_field,
                                const size_t num_samples_int)
 {
     const auto num_samples = static_cast<double>(num_samples_int);
@@ -291,7 +291,7 @@ static OutputFields get_averaged_flow_fields_for_output(FlowData &flowcr)
 //! Write a header with metadata and information into an opened binary file
 //!
 //! The information is writted as plaintext into the binary file using
-//! a buffer. Good text editors can inspect this header, which has some 
+//! a buffer. Good text editors can inspect this header, which has some
 //! (albeit poor) documentation of how to read the full file.
 //!
 //! The header ends with a written NULL (`\0`) value.
@@ -335,7 +335,7 @@ static void write_header(FILE         *fp,
 
 
 //! Opens a file with a given index and writes the flow field data into it
-static void write_flow_field_to_disk(const Output &flow_field, 
+static void write_flow_field_to_disk(const Output &flow_field,
                                      const size_t file_index)
 {
     char fn[STRLEN];
@@ -350,7 +350,7 @@ static void write_flow_field_to_disk(const Output &flow_field,
 
     const size_t num_bins = flow_field.ix.size();
 
-    // Why not ensure that we are not writing garbage? I'm pretty sure we 
+    // Why not ensure that we are not writing garbage? I'm pretty sure we
     // are not, but checking costs nothing
     const bool allArraySizesAreEqual = (
         (num_bins == flow_field.iz.size())
@@ -381,7 +381,7 @@ static void write_flow_field_to_disk(const Output &flow_field,
 
     // The order of writing these fields is *fixed*!
     //  -> IX, IY, NUM_DENSITY, TEMP, MASS_DENSITY, UX, UZ
-    // 
+    //
     // This corresponds to what is written in the header, although
     // one has to take care of keeping that information up-to-date
     // if anything changes in this code.
@@ -399,10 +399,10 @@ static void write_flow_field_to_disk(const Output &flow_field,
 
 //! Write all flow fields (full system + groups) to disk for the current step
 //!
-//! The current step changes which file index will be used for the filename. 
+//! The current step changes which file index will be used for the filename.
 //! We divide it by the output frequency to get the index. This accounts for
 //! restarts from checkpoints, which retains the step counter from the previous
-//! simulation. 
+//! simulation.
 static void write_all_flow_fields_to_disk(const OutputFields &output_fields,
                                           const uint64_t      step,
                                           const uint64_t      step_output)
@@ -455,49 +455,6 @@ FlowData init_flow_container(const int               nfile,
                              const SimulationGroups *groups,
                              const t_state          *state)
 {
-    const auto step_collect = static_cast<uint64_t>(ir->userint1);
-    auto step_output = static_cast<uint64_t>(ir->userint2);
-
-    const auto nx = ir->userint3;
-    const auto nz = ir->userint4;
-
-    // Control userargs, although this should be done during pre-processing
-    if (nx <= 0 || nz <= 0)
-    {
-        gmx_fatal(FARGS,
-                  "Number of bins along x (userint3 = %d) and z (userint4 = %d) "
-                  "for flow data calculation and output must be larger than 0.",
-                  nx, nz);
-    }
-
-    if (step_collect <= 0 || step_output <= 0)
-    {
-        gmx_fatal(FARGS,
-                  "Number of steps that elapse between collection (userint1 = %lu) "
-                  "and output (userint2 = %lu) of flow data must be larger than 0.",
-                  step_collect, step_output);
-    }
-    else if (step_collect > step_output)
-    {
-        gmx_fatal(FARGS,
-                  "Number of steps elapsing between output (userint2 = %lu) "
-                  "must be larger than steps between collection (userint1 = %lu).",
-                  step_output, step_collect);
-    }
-    else if (step_output % step_collect != 0)
-    {
-        const auto new_step_output = static_cast<uint64_t>(
-            round(step_output / step_collect) * step_collect
-        );
-
-        gmx_warning("Steps for outputting flow data (userint2 = %lu) not "
-                    "multiple of steps for collecting (userint1 = %lu). "
-                    "Setting number of steps that elapse between output to %lu.",
-                    step_output, step_collect, new_step_output);
-
-        step_output = new_step_output;
-    }
-
     // Get name base of output datamaps by stripping the extension and dot (.)
     std::string fnbase = opt2fn("-flow", nfile, fnm);
 
@@ -529,7 +486,13 @@ FlowData init_flow_container(const int               nfile,
     }
 
     return FlowData(
-        fnbase, group_names, nx, nz, state->box, step_collect, step_output
+        fnbase,
+        group_names,
+        static_cast<size_t>(ir->flowFieldOptions.nx),
+        static_cast<size_t>(ir->flowFieldOptions.nz),
+        state->box,
+        static_cast<uint64_t>(ir->flowFieldOptions.nstsample),
+        static_cast<uint64_t>(ir->flowFieldOptions.nstoutput)
     );
 }
 
@@ -631,8 +594,8 @@ void flow_collect_or_output(FlowData               &flowcr,
         {
             const auto output_data = get_averaged_flow_fields_for_output(flowcr);
             write_all_flow_fields_to_disk(
-                output_data, 
-                static_cast<uint64_t>(current_step), 
+                output_data,
+                static_cast<uint64_t>(current_step),
                 flowcr.step_output
             );
         }
