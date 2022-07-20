@@ -127,6 +127,39 @@ static void collect_flow_data(flow::FlowData         &flowcr,
  * AVERAGING *
  *************/
 
+//! Average a single flow field bin, in-place
+//!
+//! Note: This also divides the mass and number of atom fields by the
+//! bin volume, making them the mass-and-number densities.
+static void average_flow_field_bin(Bin          &bin,
+                                   const double  num_samples,
+                                   const double  bin_volume)
+{
+    const auto num_atoms = bin[FlowVar::NumAtoms];
+    const auto mass      = bin[FlowVar::Mass    ];
+
+    /* The temperature and flow is averaged by the sampled number
+    of atoms and mass in each bin. To not divide by zero in empty
+    bins we take care to check. */
+    if (num_atoms > 0.0)
+    {
+        bin[FlowVar::Temp] /= (2.0 * gmx::c_boltz * num_atoms);
+    }
+
+    if (mass > 0.0)
+    {
+        bin[FlowVar::U] /= mass;
+        bin[FlowVar::V] /= mass;
+    }
+
+    // In contrast to above, the mass and number of atoms has to
+    // be divided by the number of samples taken to get their average.
+    // Additionally, since we want the mass and atom number densities,
+    // divide by the bin volume.
+    bin[FlowVar::NumAtoms] /= (num_samples * bin_volume);
+    bin[FlowVar::Mass]     /= (num_samples * bin_volume);
+}
+
 //! Average the flow field data inside all bins, in-place
 //!
 //! Note: This also divides the mass and number of atom fields by the
@@ -139,29 +172,7 @@ static void average_flow_field(FlowField &flow_field,
 
     for (auto& bin : flow_field.values)
     {
-        const auto num_atoms = bin[FlowVar::NumAtoms];
-        const auto mass      = bin[FlowVar::Mass    ];
-
-        /* The temperature and flow is averaged by the sampled number
-        of atoms and mass in each bin. To not divide by zero in empty
-        bins we take care to check. */
-        if (num_atoms > 0.0)
-        {
-            bin[FlowVar::Temp] /= (2.0 * gmx::c_boltz * num_atoms);
-        }
-
-        if (mass > 0.0)
-        {
-            bin[FlowVar::U] /= mass;
-            bin[FlowVar::V] /= mass;
-        }
-
-        // In contrast to above, the mass and number of atoms has to
-        // be divided by the number of samples taken to get their average.
-        // Additionally, since we want the mass and atom number densities,
-        // divide by the bin volume.
-        bin[FlowVar::NumAtoms] /= (num_samples * bin_volume);
-        bin[FlowVar::Mass]     /= (num_samples * bin_volume);
+        average_flow_field_bin(bin, num_samples, bin_volume);
     }
 }
 
