@@ -88,10 +88,10 @@ public:
 
     //! Fast method for getting the bin index for a 2D position
     //!
-    //! Implemented specifically here since I have not figured out how 
+    //! Implemented specifically here since I have not figured out how
     //! this interface could look like in `Grid3d`. We want as fast access
     //! to the storage as possible and thus make some optimizations:
-    //! 
+    //!
     //! 1) We know that the grid covers the entire system and not just
     //!    a subset of it. This means we can more easily calculate
     //!    the indexing and won't need to check for saturation at the
@@ -100,24 +100,24 @@ public:
     //! 2) After calculating the indices along each axis we use them
     //!    directly to access the bin, which skips a check for each
     //!    dimension inside the index accessor.
-    //! 
+    //!
     //! The risk is that we make a mistake in the indexing or PBC removal
-    //! which results in out-of-memory access, but this calculation is 
+    //! which results in out-of-memory access, but this calculation is
     //! relatively easy to check.
     //!
     //! TODO: Write tests.
     size_t index_from_pos_2d(const real x, const real z) const
     {
         auto ix = static_cast<int>(floor(x * inv_spacing[XX])) % shape[XX];
-        while (ix < 0) 
-        { 
-            ix += shape[XX]; 
+        while (ix < 0)
+        {
+            ix += shape[XX];
         }
 
         auto iz = static_cast<int>(floor(z * inv_spacing[ZZ])) % shape[ZZ];
-        while (iz < 0) 
-        { 
-            iz += shape[ZZ]; 
+        while (iz < 0)
+        {
+            iz += shape[ZZ];
         }
 
         // Grid is ZYX ordered and iy = 0, ny = 1, so:
