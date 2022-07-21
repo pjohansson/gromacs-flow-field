@@ -92,8 +92,9 @@
 #include "gromacs/utility/stringutil.h"
 #include "gromacs/utility/textwriter.h"
 
-// [FLOW]
+// [FLOW_FIELD]
 #include "gromacs/flow/accelerate.h"
+#include "gromacs/flow/gmx_io.h"
 
 #define NOGID 255
 
@@ -1747,6 +1748,12 @@ void check_ir(const char*                    mdparin,
     {
         wi->addError("cos-acceleration is only supported by integrator = md");
     }
+
+    // [FLOW_FIELD]
+    if (ir->flowFieldOptions.doFlowFieldCollection)
+    {
+        flow::check_flow_field_opts(ir, wi);
+    }
 }
 
 /* interpret a number of doubles from a string and put them in an array,
@@ -2245,6 +2252,19 @@ void get_ir(const char*     mdparin,
     replace_inp_entry(inp, "xtc-grps", "compressed-x-grps");
     replace_inp_entry(inp, "xtc-precision", "compressed-x-precision");
     replace_inp_entry(inp, "pull-print-com1", "pull-print-com");
+
+    // [FLOW_FIELD]
+    // We take control over `user1-grps` for our flow field collection,
+    // since creating new group types in Gromacs seems to be a pain.
+    // This leaves `user2-grps` for further development.
+    replace_inp_entry(inp, "user1-grps", "flow-field-grps");
+    // Also, temporarily add "deprecation warnings" for now-unused
+    // userint1, etc.
+    replace_inp_entry(inp, "userint1", "flow-nstsample");
+    replace_inp_entry(inp, "userint2", "flow-nstoutput");
+    replace_inp_entry(inp, "userint3", "flow-nx");
+    replace_inp_entry(inp, "userint4", "flow-nz");
+
 
     printStringNewline(&inp, "VARIOUS PREPROCESSING OPTIONS");
     printStringNoNewline(&inp, "Preprocessor information: use cpp syntax.");
@@ -2777,9 +2797,13 @@ void get_ir(const char*     mdparin,
        refuse to process old .mdp files that used it. */
     ir->bAdress = (get_eeenum(&inp, "adress", no_names, wi) != 0);
 
+    /* [FLOW_FIELD] Flow field collection */
+    flow::read_flow_field_opts(
+        inp, ir->flowFieldOptions, inputrecStrings->user1, wi
+    );
+
     /* User defined thingies */
     printStringNewline(&inp, "User defined thingies");
-    setStringEntry(&inp, "user1-grps", inputrecStrings->user1, nullptr);
     setStringEntry(&inp, "user2-grps", inputrecStrings->user2, nullptr);
     ir->userint1  = get_eint(&inp, "userint1", 0, wi);
     ir->userint2  = get_eint(&inp, "userint2", 0, wi);

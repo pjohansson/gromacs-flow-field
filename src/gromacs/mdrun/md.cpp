@@ -803,17 +803,32 @@ void gmx::LegacySimulator::do_md()
     // [FLOW_FIELD]
     // Prepare for (optional) flow field output by setting up the container
     // and reading all parameter values.
-    flow::FlowData flowcr;
+    flow::FlowData flowcr; // flow field = disabled by default
+
+    // Acceleration stuff
     const auto acceleration_flowopts = AccelerationFlowOpts(ir);
 
-    if (opt2bSet("-flow", nfile, fnm))
+    if (ir->flowFieldOptions.doFlowFieldCollection)
     {
         flowcr = flow::init_flow_container(nfile, fnm, ir, groups, state);
 
         if (MASTER(cr))
         {
-            flow::print_flow_collection_information(flowcr, ir->delta_t, mdlog);
+            flow::print_flow_collection_information(
+                flowcr, ir->delta_t, mdlog
+            );
         }
+    }
+    else if (opt2bSet("-flow", nfile, fnm))
+    {
+        const auto message = gmx::formatString(
+            "mdrun received the `-flow` flag, but flow field collection "
+            "is not enabled. To enable, set `flow-field = yes` in the "
+            ".mdp file. We cannot enable it here, because the preprocessor "
+            "must verify that the flow collection parameters are valid."
+        );
+
+        gmx_fatal(FARGS, message.c_str());
     }
 
     if (MASTER(cr))

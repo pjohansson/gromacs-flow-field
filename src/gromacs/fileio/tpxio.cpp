@@ -79,6 +79,9 @@
 #include "gromacs/utility/snprintf.h"
 #include "gromacs/utility/txtdump.h"
 
+// [FLOW_FIELD]
+#include "gromacs/flow/gmx_io.h"
+
 #define TPX_TAG_RELEASE "release"
 
 /*! \brief Tag string for the file format written to run input files
@@ -1423,6 +1426,9 @@ static void do_inputrec(gmx::ISerializer* serializer, t_inputrec* ir, int file_v
         serializer->doRvec(&ir->deform[i]);
     }
     serializer->doReal(&ir->cos_accel);
+
+    // [FLOW_FIELD]
+    flow::do_tpx_flow_field(serializer, ir->flowFieldOptions);
 
     serializer->doInt(&ir->userint1);
     serializer->doInt(&ir->userint2);

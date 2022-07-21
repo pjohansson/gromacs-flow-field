@@ -64,6 +64,9 @@
 #include "gromacs/utility/textwriter.h"
 #include "gromacs/utility/txtdump.h"
 
+// [FLOW_FIELD]
+#include "gromacs/flow/gmx_io.h"
+
 //! Macro to select a bool name
 #define EBOOL(e) gmx::boolToString(e)
 
@@ -1048,6 +1051,9 @@ void pr_inputrec(FILE* fp, int indent, const char* title, const t_inputrec* ir, 
         {
             pr_swap(fp, indent, ir->swap);
         }
+
+        /* [FLOW_FIELD] */
+        flow::pr_flow_field(fp, indent, ir->flowFieldOptions);
 
         /* USER-DEFINED THINGIES */
         PI("userint1", ir->userint1);

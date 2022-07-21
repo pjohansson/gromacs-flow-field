@@ -2,8 +2,13 @@
 #include <string>
 #include <vector>
 
+#include "gromacs/commandline/filenm.h"
+#include "gromacs/math/vectypes.h"
 #include "gromacs/mdtypes/state.h"
+#include "gromacs/topology/topology.h"
 #include "gromacs/utility/logger.h"
+
+#include "grid.h"
 
 #ifndef MD_FLOW_FIELD
 #define MD_FLOW_FIELD
@@ -11,164 +16,233 @@
 namespace flow
 {
 
+//! Unique identifier for flow field data files
 constexpr char FLOW_FILE_HEADER_NAME[] = "GMX_FLOW_2";
 
-// We are using a grid along X and Z so we use a separate enum
-// to not confuse our indexing with regular XX, YY and ZZ
-enum class GridAxes {
-    X,
-    Z,
-    NumAxes
-};
-constexpr size_t NUM_FLOW_AXES = static_cast<size_t>(GridAxes::NumAxes);
 
-// Indices for different data in array
-enum class FlowVariable {
-    NumAtoms,
-    Temp,
-    Mass,   // Mass in bin (amu)
-    U,      // Mass flow along X
-    V,      //             and Z
-    NumVariables
-};
-constexpr size_t NUM_FLOW_VARIABLES = static_cast<size_t>(FlowVariable::NumVariables);
+//! Scoped space for an enum of variables to collect in bins
+//!
+//! Used to index inside each `Bin` array. The namespace is used
+//! to scope each enum variable (good!) but avoid having to always
+//! static_cast to integer when using it (bad!).
+namespace FlowVar
+{
+    enum FlowVariable : size_t {
+        //! Number of atoms
+        NumAtoms,
+        //! Temperature
+        Temp,
+        //! Mass (in atomic mass units)
+        Mass,
+        //! Mass flow along x
+        U,
+        //! Mass flow along z
+        V,
+        //! Total number of variables
+        NumVars
+    };
+} // namespace FlowVar
 
-struct GroupFlowData {
-    std::string fnbase,
-                name;
-    std::vector<double> data;
 
-    GroupFlowData(const std::string& fnbase_original,
-                  const std::string& group_name,
-                  const size_t num_data)
-    :name { group_name },
-     data(num_data, 0.0)
+//! Data stored in a single bin of the flow field grid
+using Bin = std::array<double, FlowVar::NumVars>;
+
+
+//! Flow field data and associated metadata
+//!
+//! We subclass `Grid3d` in order to deal with the grid bookkeeping.
+//! Since the flow field data is more or less an extension of that
+//! class we do this rather than creating a `Grid3d` member variable,
+//! which makes working with this class more painful and harder to
+//! understand.
+class FlowField : public Grid3d<Bin> {
+public:
+    //! Empty constructor
+    FlowField() {}
+
+    //! Constructor for full flow field data
+    FlowField(const std::string& fnbase,
+              const int          nx,
+              const int          nz,
+              const matrix       box)
+    :fnbase { fnbase },
+     name { "_FULL_" }
+    {
+        _setup_grid_and_finalize(nx, nz, box);
+    }
+
+    //! Constructor which adds `group_name` to `fnbase`
+    FlowField(const std::string& fnbase_original,
+              const std::string& group_name,
+              const int          nx,
+              const int          nz,
+              const matrix       box)
+    :name { group_name }
     {
         fnbase.append(fnbase_original);
         fnbase.append("_");
         fnbase.append(group_name);
+
+        _setup_grid_and_finalize(nx, nz, box);
+    }
+
+    //! Fast method for getting the bin index for a 2D position
+    //!
+    //! Implemented specifically here since I have not figured out how
+    //! this interface could look like in `Grid3d`. We want as fast access
+    //! to the storage as possible and thus make some optimizations:
+    //!
+    //! 1) We know that the grid covers the entire system and not just
+    //!    a subset of it. This means we can more easily calculate
+    //!    the indexing and won't need to check for saturation at the
+    //!    edges as the built in methods currently do.
+    //!
+    //! 2) After calculating the indices along each axis we use them
+    //!    directly to access the bin, which skips a check for each
+    //!    dimension inside the index accessor.
+    //!
+    //! The risk is that we make a mistake in the indexing or PBC removal
+    //! which results in out-of-memory access, but this calculation is
+    //! relatively easy to check.
+    //!
+    //! TODO: Write tests.
+    size_t index_from_pos_2d(const real x, const real z) const
+    {
+        auto ix = static_cast<int>(floor(x * inv_spacing[XX])) % shape[XX];
+        while (ix < 0)
+        {
+            ix += shape[XX];
+        }
+
+        auto iz = static_cast<int>(floor(z * inv_spacing[ZZ])) % shape[ZZ];
+        while (iz < 0)
+        {
+            iz += shape[ZZ];
+        }
+
+        // Grid is ZYX ordered and iy = 0, ny = 1, so:
+        // iz + iy * nz + ix * (ny * nz) = iz + ix * nz
+        return static_cast<size_t>(iz + ix * shape[ZZ]);
+    }
+
+    //! Get the number of grid bins along x
+    size_t nx() const { return shape[XX]; }
+    //! Get the number of grid bins along z
+    size_t nz() const { return shape[ZZ]; }
+
+    //! Get the grid bin spacing along x
+    real dx() const { return spacing[XX]; }
+    //! Get the grid bin spacing along z
+    real dz() const { return spacing[ZZ]; }
+
+    //! Base for output file names (`fnbase_00001.dat`, ...)
+    std::string fnbase;
+
+    //! Name or identifier for group
+    std::string name;
+
+private:
+    void _setup_grid_and_finalize(const int    nx,
+                                  const int    nz,
+                                  const matrix box)
+    {
+        shape = gmx::IVec{nx, 1, nz};
+        spacing = gmx::RVec{
+            box[XX][XX] / static_cast<real>(nx),
+            box[YY][YY],
+            box[ZZ][ZZ] / static_cast<real>(nz)
+        };
+
+        _finalize();
     }
 };
 
-class FlowData {
-public:
+
+struct FlowData {
+    //! Whether or not to collect flow field data
     bool bDoFlowCollection = false;
 
-    std::string fnbase;
+    //! 2d flow field grid data for all groups (combined field)
+    FlowField flow_field;
 
-    std::vector<double> data;   // A 2D grid is represented by this 1D array
-    std::vector<GroupFlowData> group_data; // Similar data for all separate atom groups
+    //! 2d flow field data for individual groups, if multiple are selected
+    std::vector<FlowField> group_data;
 
-    uint64_t step_collect = 0,
-             step_output = 0,
-             step_ratio = 0;
+    //! Collect flow field data at step multiples of this
+    uint64_t step_collect;
 
-    double bin_volume;
+    //! Average and output flow field data at step multiples of this
+    uint64_t step_output;
 
+    //! Number of samples since last output of flow field
+    uint64_t num_samples;
+
+    //! Empty constructor, turns off flow field collection
     FlowData() {}
 
-    FlowData(const std::string fnbase,
-             const std::vector<std::string> group_names,
-             const size_t nx,
-             const size_t nz,
-             const double dx,
-             const double dy,
-             const double dz,
-             const uint64_t step_collect,
-             const uint64_t step_output)
+    //! Constructor for full flow field, turns on collection
+    FlowData(const std::string              &fnbase,
+             const std::vector<std::string> &group_names,
+             const size_t                    nx,
+             const size_t                    nz,
+             const matrix                    box,
+             const uint64_t                  step_collect,
+             const uint64_t                  step_output)
     :bDoFlowCollection { true },
-     fnbase { fnbase },
-     data(nx * nz * NUM_FLOW_VARIABLES, 0.0),
      step_collect { step_collect },
      step_output { step_output },
-     step_ratio { static_cast<uint64_t>(step_output / step_collect) },
-     bin_volume { dx * dy * dz },
-     num_bins { nx, nz },
-     bin_size { dx, dz },
-     inv_bin_size { 1.0 / dx, 1.0 / dz }
+     num_samples { 0 }
      {
-         for (const auto& name : group_names)
-         {
-             group_data.push_back(GroupFlowData(fnbase, name, data.size()));
-         }
+        flow_field = FlowField(fnbase, nx, nz, box);
+        for (const auto& name : group_names)
+        {
+            group_data.push_back(FlowField(fnbase, name, nx, nz, box));
+        }
      }
 
-    double dx() const { return bin_size[static_cast<size_t>(GridAxes::X)]; }
-    double dz() const { return bin_size[static_cast<size_t>(GridAxes::Z)]; }
-
-    double inv_dx() const { return inv_bin_size[static_cast<size_t>(GridAxes::X)]; }
-    double inv_dz() const { return inv_bin_size[static_cast<size_t>(GridAxes::Z)]; }
-
-    size_t nx() const { return num_bins[static_cast<size_t>(GridAxes::X)]; }
-    size_t nz() const { return num_bins[static_cast<size_t>(GridAxes::Z)]; }
-
-    size_t get_1d_index(const size_t ix, const size_t iz) const
-    {
-        return (iz * nx() + ix) * NUM_FLOW_VARIABLES;
-    }
-
-    size_t get_xbin(const real x) const { return get_bin_from_position(x, nx(), inv_dx()); }
-    size_t get_zbin(const real z) const { return get_bin_from_position(z, nz(), inv_dz()); }
-
-    float get_x(const size_t ix) const { return get_position(ix, dx()); }
-    float get_z(const size_t iz) const { return get_position(iz, dz()); }
-
+    //! Zero all data for all collected flow fields and reset sample counter
     void reset_data() {
-        data.assign(data.size(), 0.0);
+        for (auto& bin : flow_field.values)
+        {
+            bin.fill(0.0);
+        }
 
         for (auto& group : group_data)
         {
-            group.data.assign(group.data.size(), 0.0);
-        }
-    }
-
-private:
-    std::array<size_t, NUM_FLOW_AXES> num_bins;
-    std::array<double, NUM_FLOW_AXES> bin_size,
-                                      inv_bin_size;
-
-    size_t get_bin_from_position(const real x, const size_t num_bins, const real inv_bin) const
-    {
-        auto index = static_cast<int>(floor(x * inv_bin)) % static_cast<int>(num_bins);
-
-        while (index < 0)
-        {
-            index += num_bins;
+            for (auto& bin : group.values)
+            {
+                bin.fill(0.0);
+            }
         }
 
-        return index;
-    }
-
-    float get_position(const size_t index, const float bin_size) const
-    {
-        return (static_cast<float>(index) + 0.5) * bin_size;
+        num_samples = 0;
     }
 };
 
-// Prepare and return a container for flow field data
-FlowData
-init_flow_container(const int               nfile,
-                    const t_filenm          fnm[],
-                    const t_inputrec       *ir,
-                    const SimulationGroups *groups,
-                    const t_state          *state);
 
-// Write information about the flow field collection
-void
-print_flow_collection_information(const FlowData       &flowcr,
-                                  const double          dt,
-                                  const gmx::MDLogger  &mdlog);
+//! Prepare and return a container for flow field data
+FlowData init_flow_container(const int               nfile,
+                             const t_filenm          fnm[],
+                             const t_inputrec       *ir,
+                             const SimulationGroups *groups,
+                             const t_state          *state);
 
-// If at a collection or output step, perform actions
-void
-flow_collect_or_output(FlowData               &flowcr,
-                       const uint64_t          step,
-                       const t_commrec        *cr,
-                       const t_inputrec       *ir,
-                       const t_mdatoms        *mdatoms,
-                       const t_state          *state,
-                       const SimulationGroups *groups);
+
+//! Write information about the flow field collection
+void print_flow_collection_information(const FlowData       &flowcr,
+                                       const double          dt,
+                                       const gmx::MDLogger  &mdlog);
+
+
+//! If at a collection or output step, perform actions
+void flow_collect_or_output(FlowData               &flowcr,
+                            const int64_t           step,
+                            const t_commrec        *cr,
+                            const t_inputrec       *ir,
+                            const t_mdatoms        *mdatoms,
+                            const t_state          *state,
+                            const SimulationGroups *groups);
 
 } // namespace flow
 
-#endif
+#endif // MD_FLOW_FIELD
