@@ -104,7 +104,7 @@ void integrateVVFirstStep(int64_t                   step,
                           t_nrnb*                                                  nrnb,
                           FILE*                                                    fplog,
                           gmx_wallcycle*                                           wcycle,
-                          const AccelerationFlowOpts& acceleration_flowopts)
+                          const flow::LocalAcceleration& local_acceleration)
 {
     if (!bFirstStep || startingBehavior == gmx::StartingBehavior::NewSimulation)
     {
@@ -157,7 +157,7 @@ void integrateVVFirstStep(int64_t                   step,
                            etrtVELOCITY1,
                            cr,
                            constr != nullptr,
-                           acceleration_flowopts);
+                           local_acceleration);
 
         wallcycle_stop(wcycle, WallCycleCounter::Update);
         constrain_velocities(constr, do_log, do_ene, step, state, nullptr, bCalcVir, shake_vir);
@@ -359,7 +359,7 @@ void integrateVVSecondStep(int64_t                   step,
                            gmx::EnumerationArray<TrotterSequence, std::vector<int>> trotter_seq,
                            t_nrnb*                                                  nrnb,
                            gmx_wallcycle*                                           wcycle,
-                           const AccelerationFlowOpts& acceleration_flowopts)
+                           const flow::LocalAcceleration& local_acceleration)
 {
     // This is not used when updating under VV
     gmx::Matrix3x3 dummyParrinelloRahmanM;
@@ -379,7 +379,7 @@ void integrateVVSecondStep(int64_t                   step,
                        etrtVELOCITY2,
                        cr,
                        constr != nullptr,
-                       acceleration_flowopts);
+                       local_acceleration);
 
 
     /* Above, initialize just copies ekinh into ekin,
@@ -413,7 +413,7 @@ void integrateVVSecondStep(int64_t                   step,
                        etrtPOSITION,
                        cr,
                        constr != nullptr,
-                       acceleration_flowopts);
+                       local_acceleration);
 
     wallcycle_stop(wcycle, WallCycleCounter::Update);
 
@@ -483,7 +483,7 @@ void integrateVVSecondStep(int64_t                   step,
                            etrtPOSITION,
                            cr,
                            constr != nullptr,
-                           acceleration_flowopts);
+                           local_acceleration);
         wallcycle_stop(wcycle, WallCycleCounter::Update);
 
         /* do we need an extra constraint here? just need to copy out of as_rvec_array(state->v.data()) to upd->xp? */

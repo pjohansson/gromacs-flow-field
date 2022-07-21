@@ -589,11 +589,8 @@ struct t_inputrec // NOLINT (clang-analyzer-optin.performance.Padding)
     //! Flow field collection options
     flow::FlowFieldOptions flowFieldOptions;
 
-    //! Flow field acceleration
-    bool acceleration_doLocal = false;
-    real* acceleration_local_origin = nullptr;
-    real* acceleration_local_extent = nullptr;
-    real acceleration_tau = 0.0;
+    //! Local acceleration in system options
+    flow::LocalAccelerationOptions localAccelerationOptions;
 };
 
 int ir_optimal_nstcalcenergy(const t_inputrec* ir);

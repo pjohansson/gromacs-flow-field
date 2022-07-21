@@ -128,7 +128,7 @@ public:
                        int                                              UpdatePart,
                        const t_commrec*                                 cr,
                        bool                                             haveConstraints,
-                       const AccelerationFlowOpts&                      acceleration_flowopts);
+                       const flow::LocalAcceleration&                   local_acceleration);
 
     void finish_update(const t_inputrec&                   inputRecord,
                        bool                                havePartiallyFrozenAtoms,
@@ -227,7 +227,7 @@ void Update::update_coords(const t_inputrec&                 inputRecord,
                            int                                              updatePart,
                            const t_commrec*                                 cr,
                            const bool                                       haveConstraints,
-                           const AccelerationFlowOpts&                      acceleration_flowopts)
+                           const flow::LocalAcceleration&    local_acceleration)
 {
     return impl_->update_coords(inputRecord,
                                 step,
@@ -244,7 +244,7 @@ void Update::update_coords(const t_inputrec&                 inputRecord,
                                 updatePart,
                                 cr,
                                 haveConstraints,
-                                acceleration_flowopts);
+                                local_acceleration);
 }
 
 void Update::finish_update(const t_inputrec& inputRecord,
@@ -573,7 +573,7 @@ static void updateMDLeapfrogGeneral(int                                 start,
                                     gmx::ArrayRef<const unsigned short> cTC,
                                     gmx::ArrayRef<const unsigned short> cAcceleration,
                                     const rvec* gmx_restrict            acceleration,
-                                    const AccelerationFlowOpts&         acceleration_flowopts,
+                                    const flow::LocalAcceleration&      local_acceleration,
                                     const real                          acceleration_multiplier,
                                     gmx::ArrayRef<const gmx::RVec>      invMassPerDim,
                                     const gmx_ekindata_t*               ekind,
@@ -644,9 +644,9 @@ static void updateMDLeapfrogGeneral(int                                 start,
         // For group acceleration *only*, ensure that we are either using
         // non-local acceleration (i.e. full simulation box) or that
         // the atom is inside the locally defined acceleration box
-        const bool atomInLocalBox = acceleration_flowopts.contains(x[n], box);
+        const bool atomInLocalBox = local_acceleration.contains(x[n], box);
         const bool addGroupAcceleration = (
-            (!acceleration_flowopts.doLocalAcceleration)
+            (!local_acceleration.doLocalAcceleration)
             || atomInLocalBox
         );
 
@@ -703,7 +703,7 @@ static void do_update_md(int                                  start,
                          const bool                           useConstantAcceleration,
                          gmx::ArrayRef<const unsigned short>  cAcceleration,
                          const rvec*                          acceleration,
-                         const AccelerationFlowOpts&          acceleration_flowopts,
+                         const flow::LocalAcceleration&       local_acceleration,
                          gmx::ArrayRef<const real> gmx_unused invmass,
                          gmx::ArrayRef<const gmx::RVec>       invMassPerDim,
                          const gmx_ekindata_t*                ekind,
@@ -738,7 +738,7 @@ static void do_update_md(int                                  start,
                                                                        : AccelerationType::None));
 
     // [FLOW]: Calculate acceleration multiplier from the given step
-    const real acceleration_multiplier = acceleration_flowopts.calc_acceleration_multiplier(step);
+    const real acceleration_multiplier = local_acceleration.calc_acceleration_multiplier(step);
 
     if (doNoseHoover || (parrinelloRahmanVelocityScaling == ParrinelloRahmanVelocityScaling::Anisotropic)
         || accelerationType != AccelerationType::None)
@@ -759,7 +759,7 @@ static void do_update_md(int                                  start,
                                                                      cTC,
                                                                      cAcceleration,
                                                                      acceleration,
-                                                                     acceleration_flowopts,
+                                                                     local_acceleration,
                                                                      acceleration_multiplier,
                                                                      invMassPerDim,
                                                                      ekind,
@@ -1710,7 +1710,7 @@ void Update::Impl::update_coords(const t_inputrec&                 inputRecord,
                                  int                                              updatePart,
                                  const t_commrec*                                 cr,
                                  const bool                                       haveConstraints,
-                                 const AccelerationFlowOpts&                      acceleration_flowopts)
+                                 const flow::LocalAcceleration&    local_acceleration)
 {
     /* Running the velocity half does nothing except for velocity verlet */
     if ((updatePart == etrtVELOCITY1 || updatePart == etrtVELOCITY2) && !EI_VV(inputRecord.eI))
@@ -1767,7 +1767,7 @@ void Update::Impl::update_coords(const t_inputrec&                 inputRecord,
                                  inputRecord.useConstantAcceleration,
                                  cAcceleration_,
                                  inputRecord.opts.acceleration,
-                                 acceleration_flowopts,
+                                 local_acceleration,
                                  invMass,
                                  invMassPerDim,
                                  ekind,

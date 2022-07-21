@@ -1429,6 +1429,7 @@ static void do_inputrec(gmx::ISerializer* serializer, t_inputrec* ir, int file_v
 
     // [FLOW_FIELD]
     flow::do_tpx_flow_field(serializer, ir->flowFieldOptions);
+    flow::do_tpx_local_acceleration(serializer, ir->localAccelerationOptions);
 
     serializer->doInt(&ir->userint1);
     serializer->doInt(&ir->userint2);
@@ -1637,24 +1638,6 @@ static void do_inputrec(gmx::ISerializer* serializer, t_inputrec* ir, int file_v
             {
                 ir->useConstantAcceleration = true;
             }
-        }
-    }
-    // [FLOW]
-    {
-        serializer->doBool(&ir->acceleration_doLocal);
-
-        if (serializer->reading())
-        {
-            snew(ir->acceleration_local_origin, DIM);
-            snew(ir->acceleration_local_extent, DIM);
-        }
-
-        if (ir->acceleration_doLocal)
-        {
-
-            serializer->doRealArray(ir->acceleration_local_origin, DIM);
-            serializer->doRealArray(ir->acceleration_local_extent, DIM);
-            serializer->doReal(&ir->acceleration_tau);
         }
     }
     serializer->doIntArray(ir->opts.egp_flags, ir->opts.ngener * ir->opts.ngener);

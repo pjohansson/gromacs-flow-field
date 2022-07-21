@@ -805,9 +805,6 @@ void gmx::LegacySimulator::do_md()
     // and reading all parameter values.
     flow::FlowData flowcr; // flow field = disabled by default
 
-    // Acceleration stuff
-    const auto acceleration_flowopts = AccelerationFlowOpts(ir);
-
     if (ir->flowFieldOptions.doFlowFieldCollection)
     {
         flowcr = flow::init_flow_container(nfile, fnm, ir, groups, state);
@@ -831,9 +828,14 @@ void gmx::LegacySimulator::do_md()
         gmx_fatal(FARGS, message.c_str());
     }
 
+    // [FLOW_FIELD] Local acceleration setup
+    const auto local_acceleration = flow::LocalAcceleration(
+        ir->localAccelerationOptions, ir->delta_t
+    );
+
     if (MASTER(cr))
     {
-        acceleration_flowopts.print_info();
+        flow::print_local_acceleration_info(local_acceleration, mdlog);
     }
 
     step     = ir->init_step;
@@ -1290,7 +1292,7 @@ void gmx::LegacySimulator::do_md()
                                  nrnb,
                                  fplog,
                                  wcycle,
-                                 acceleration_flowopts);
+                                 local_acceleration);
             if (vsite != nullptr && needVirtualVelocitiesThisStep)
             {
                 // Positions were calculated earlier
@@ -1530,7 +1532,7 @@ void gmx::LegacySimulator::do_md()
                                   trotter_seq,
                                   nrnb,
                                   wcycle,
-                                  acceleration_flowopts);
+                                  local_acceleration);
         }
         else
         {
@@ -1637,7 +1639,7 @@ void gmx::LegacySimulator::do_md()
                                   etrtPOSITION,
                                   cr,
                                   constr != nullptr,
-                                  acceleration_flowopts);
+                                  local_acceleration);
 
                 wallcycle_stop(wcycle, WallCycleCounter::Update);
 

@@ -44,7 +44,7 @@
 #include "gromacs/utility/arrayref.h"
 #include "gromacs/utility/real.h"
 
-// [FLOW]
+// [FLOW_FIELD]
 #include "gromacs/flow/accelerate.h"
 
 class ekinstate_t;
@@ -139,7 +139,7 @@ public:
                        int                                              updatePart,
                        const t_commrec*                                 cr,
                        bool                                             haveConstraints,
-                       const AccelerationFlowOpts&                      acceleration_flowopts);
+                       const flow::LocalAcceleration&                   local_acceleration);
 
     /*! \brief Finalize the coordinate update.
      *

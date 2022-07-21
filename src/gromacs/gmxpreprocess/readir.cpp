@@ -113,9 +113,7 @@ struct gmx_inputrec_strings
             acceleration[STRLEN], freeze[STRLEN], frdim[STRLEN], energy[STRLEN], user1[STRLEN],
             user2[STRLEN], vcm[STRLEN], x_compressed_groups[STRLEN], couple_moltype[STRLEN],
             orirefitgrp[STRLEN], egptable[STRLEN], egpexcl[STRLEN], wall_atomtype[STRLEN],
-            wall_density[STRLEN], deform[STRLEN], QMMM[STRLEN], imd_grp[STRLEN],
-            // [FLOW]
-            acc_local_origin[STRLEN], acc_local_extent[STRLEN];
+            wall_density[STRLEN], deform[STRLEN], QMMM[STRLEN], imd_grp[STRLEN];
     gmx::EnumerationArray<FreeEnergyPerturbationCouplingType, std::string> fep_lambda;
     char                                                                   lambda_weights[STRLEN];
     std::vector<std::string>                                               pullGroupNames;
@@ -1754,6 +1752,10 @@ void check_ir(const char*                    mdparin,
     {
         flow::check_flow_field_opts(ir, wi);
     }
+    if (ir->localAccelerationOptions.doLocalAcceleration)
+    {
+        flow::check_local_acceleration_opts(ir, wi);
+    }
 }
 
 /* interpret a number of doubles from a string and put them in an array,
@@ -1989,30 +1991,6 @@ static void convertReals(WarningHandler* wi, gmx::ArrayRef<const std::string> in
         }
         ++i;
     }
-}
-
-// [FLOW]
-//! \brief Read exactly N values from a string into output real*.
-static void convertRealsN(WarningHandler *wi, const char* input, const char* name, const size_t N, real* output)
-{
-    const auto values = gmx::splitString(input);
-
-    if (values.size() != N)
-    {
-        auto message = gmx::formatString(
-                "Invalid value for mdp option %s. %s should consist of %lu real "
-                "numbers separated by whitespace (got %lu).",
-                name,
-                name,
-                N,
-                values.size()
-        );
-
-        wi->addError(message);
-        return;
-    }
-
-    convertReals(wi, values, name, output);
 }
 
 static void convertRvecs(WarningHandler* wi, gmx::ArrayRef<const std::string> inputs, const char* name, rvec* outputs)
@@ -2633,18 +2611,10 @@ void get_ir(const char*     mdparin,
     setStringEntry(&inp, "acc-grps", inputrecStrings->accelerationGroups, nullptr);
     setStringEntry(&inp, "accelerate", inputrecStrings->acceleration, nullptr);
 
-    // [FLOW] Start of local acceleration options
-    printStringNewline(&inp, "FLOW: Accelerate atoms inside a set local area only");
-    ir->acceleration_doLocal = (getEnum<Boolean>(&inp, "accelerate-local", wi) == Boolean::Yes);
-    printStringNoNewline(&inp, "Area begins at an origin and is of a system absolute size (extent)");
-    printStringNoNewline(&inp, "Negative extent along any dimension means use entire length");
-    setStringEntry(&inp, "accelerate-local-origin", inputrecStrings->acc_local_origin, nullptr);
-    setStringEntry(&inp, "accelerate-local-extent", inputrecStrings->acc_local_extent, nullptr);
-    printStringNoNewline(&inp, "For tau positive: increase acceleration from 0 at t=0 to full at t=tau");
-    ir->acceleration_tau     = get_ereal(&inp, "accelerate-tau", 0.0, wi);
-
-    printStringNewline(&inp, "Other Gromacs Non-equilibrium options");
-    // [FLOW] End of local acceleration options
+    // [FLOW_FIELD] Local acceleration
+    // We put these local acceleration options right where the standard
+    // acceleration options are defined
+    flow::read_local_acceleration_opts(inp, ir->localAccelerationOptions, wi);
 
     setStringEntry(&inp, "freezegrps", inputrecStrings->freeze, nullptr);
     setStringEntry(&inp, "freezedim", inputrecStrings->frdim, nullptr);
@@ -3130,15 +3100,6 @@ void get_ir(const char*     mdparin,
     if (ir->bDoAwh)
     {
         gmx::checkAwhParams(*ir->awhParams, *ir, wi);
-    }
-
-    // [FLOW]
-    if (ir->acceleration_doLocal)
-    {
-        snew(ir->acceleration_local_origin, DIM);
-        snew(ir->acceleration_local_extent, DIM);
-        convertRealsN(wi, inputrecStrings->acc_local_origin, "accelerate-local-origin", DIM, ir->acceleration_local_origin);
-        convertRealsN(wi, inputrecStrings->acc_local_extent, "accelerate-local-extent", DIM, ir->acceleration_local_extent);
     }
 
     sfree(dumstr[0]);

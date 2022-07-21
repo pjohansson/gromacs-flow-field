@@ -1,6 +1,8 @@
 #ifndef MD_FLOW_FIELD_IR_TYPES
 #define MD_FLOW_FIELD_IR_TYPES
 
+#include "gromacs/math/vectypes.h"
+
 namespace flow
 {
 
@@ -23,6 +25,16 @@ struct FlowFieldOptions {
 
     //! Number of flow field grid bins along z
     int nz = 0;
+};
+
+struct LocalAccelerationOptions {
+    bool doLocalAcceleration = false;
+
+    gmx::RVec origin = {0.0, 0.0, 0.0};
+
+    gmx::RVec extent = {0.0, 0.0, 0.0};
+
+    real tau = 0.0;
 };
 
 } // namespace flow
