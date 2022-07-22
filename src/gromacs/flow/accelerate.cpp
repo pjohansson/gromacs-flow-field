@@ -3,6 +3,26 @@
 namespace flow
 {
 
+//! Calculate the current acceleration multiplier
+//!
+//! Uses a smooth-step function to slowly increase the acceleration
+//! multiplier from 0.0 to 1.0. If step_complete <= 0, always returns 1.0.
+real calc_acceleration_multiplier(const int64_t step,
+                                  const int64_t step_complete)
+{
+    if ((step >= step_complete) || (step_complete <= 0))
+    {
+        return 1.0;
+    }
+    else
+    {
+        const auto x = static_cast<real>(step) / static_cast<real>(step_complete);
+
+        // Smoothstep function for range [0.0, 1.0) -> [0.0, 1.0)
+        return 6.0 * powf(x, 5.0) - 15.0 * powf(x, 4.0) + 10 * powf(x, 3.0);
+    }
+}
+
 void print_local_acceleration_info(const flow::LocalAcceleration &opts,
                                    const gmx::MDLogger           &mdlog)
 {

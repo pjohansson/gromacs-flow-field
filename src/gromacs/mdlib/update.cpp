@@ -737,8 +737,11 @@ static void do_update_md(int                                  start,
                                      : ((ekind->cosacc.cos_accel != 0) ? AccelerationType::Cosine
                                                                        : AccelerationType::None));
 
-    // [FLOW]: Calculate acceleration multiplier from the given step
-    const real acceleration_multiplier = local_acceleration.calc_acceleration_multiplier(step);
+    // [FLOW_FIELD]
+    // Calculate acceleration multiplier from the given step
+    const real acceleration_multiplier = flow::calc_acceleration_multiplier(
+        step, local_acceleration.step_max_acceleration
+    );
 
     if (doNoseHoover || (parrinelloRahmanVelocityScaling == ParrinelloRahmanVelocityScaling::Anisotropic)
         || accelerationType != AccelerationType::None)

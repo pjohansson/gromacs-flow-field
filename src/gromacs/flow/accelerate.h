@@ -26,7 +26,7 @@ struct LocalAcceleration {
     :doLocalAcceleration { opts.doLocalAcceleration },
      rmin { opts.origin },
      tau { opts.tau },
-     step_full_acceleration { static_cast<int64_t>(tau / delta_t) }
+     step_max_acceleration { static_cast<int64_t>(tau / delta_t) }
     {
         for (size_t d = 0; d < DIM; d++)
         {
@@ -73,21 +73,6 @@ struct LocalAcceleration {
         return true;
     }
 
-    //! For non-zero tau, calculate the current acceleration multiplier
-    real calc_acceleration_multiplier(const int64_t step) const
-    {
-        if ((step >= step_full_acceleration) || (step_full_acceleration <= 0))
-        {
-            return 1.0;
-        }
-        else
-        {
-            // Smoothstep function for range [0.0, 1.0) -> [0.0, 1.0)
-            const real x = static_cast<real>(step) / static_cast<real>(step_full_acceleration);
-            return 6.0 * powf(x, 5.0) - 15.0 * powf(x, 4.0) + 10 * powf(x, 3.0);
-        }
-    }
-
     //! Whether we are doing local acceleration only or not
     bool doLocalAcceleration = false;
 
@@ -101,11 +86,14 @@ struct LocalAcceleration {
     real tau;
 
     //! Computed step at which full acceleration is applied (non-positive for immediate)
-    int64_t step_full_acceleration;
+    int64_t step_max_acceleration;
 
     //! For each axis: whether to check the position along it
     std::array<bool, DIM> check_axis;
 };
+
+real calc_acceleration_multiplier(const int64_t step,
+                                  const int64_t step_complete);
 
 void print_local_acceleration_info(const LocalAcceleration &opts,
                                    const gmx::MDLogger     &mdlog);
