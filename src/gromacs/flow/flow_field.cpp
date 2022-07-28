@@ -514,7 +514,8 @@ FlowData init_flow_container(const int               nfile,
     // If more than one group is selected for output,
     // collect them to do separate collection for each
     // individual group (as well as them all combined)
-    const size_t num_groups = get_num_groups(groups);
+    const size_t num_groups =
+        get_num_groups(groups, SimulationAtomGroupType::User1);
 
     std::vector<std::string> group_names;
 

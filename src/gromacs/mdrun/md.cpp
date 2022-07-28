@@ -829,8 +829,8 @@ void gmx::LegacySimulator::do_md()
     }
 
     // [FLOW_FIELD] Local acceleration setup
-    const auto local_acceleration = flow::LocalAcceleration(
-        ir->localAccelerationOptions, ir->delta_t
+    auto local_acceleration = flow::LocalAcceleration(
+        ir->localAccelerationOptions, ir->delta_t, state->box
     );
 
     if (MASTER(cr))
@@ -1244,6 +1244,23 @@ void gmx::LegacySimulator::do_md()
                      fr->longRangeNonbondeds.get(),
                      (bNS ? GMX_FORCE_NS : 0) | force_flags,
                      ddBalanceRegionHandler);
+        }
+
+        // [FLOW_FIELD]
+        // Before any update starts (velocity-verlet begins below),
+        // update the local acceleration grid
+        if (
+            local_acceleration.density_grid.doDensityScaling
+            && do_per_step(step, local_acceleration.density_grid.step_update)
+        )
+        {
+            flow::update_local_acceleration_grid(
+                local_acceleration.density_grid,
+                cr,
+                md,
+                state,
+                groups
+            );
         }
 
         // VV integrators do not need the following velocity half step

@@ -7,18 +7,18 @@
 
 namespace flow
 {
-/*! \brief Get the number of groups in User1
+/*! \brief Get the number of groups of a given type
 
     This is slightly complicated by how Gromacs adds a "rest" group
     to the array of names if the other groups do not add up to all
     atoms in the system. Thus, we detect if the final group is called
     exactly "rest" and if so do not count it as one of the groups. */
-static size_t get_num_groups(const SimulationGroups *groups)
+static size_t get_num_groups(const SimulationGroups *groups,
+                             const SimulationAtomGroupType type)
 {
     size_t num_groups = 0;
 
-    for (const auto global_group_index
-         : groups->groups[SimulationAtomGroupType::User1])
+    for (const auto global_group_index : groups->groups[type])
     {
         const auto name = groups->groupNames[global_group_index];
 
