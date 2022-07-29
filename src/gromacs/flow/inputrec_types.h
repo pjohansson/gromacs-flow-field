@@ -27,6 +27,7 @@ struct FlowFieldOptions {
     int nz = 0;
 };
 
+
 struct LocalAccelerationOptions {
     bool doLocalAcceleration = false;
 
@@ -37,6 +38,34 @@ struct LocalAccelerationOptions {
     real tau = 0.0;
 };
 
+
+enum class GridAxes : int {
+    XY,
+    XZ,
+    YZ,
+    Count,
+    Default = XZ
+};
+
+
+struct AccelerationPressureOptions {
+    bool doPressure = false;
+
+    int axis_pressure = XX;
+
+    GridAxes grid_axes;
+
+    int step_update = 1000;
+
+    real density_grid_resolution = 0.1;
+
+    real density_grid_smoothing = 0.2;
+};
+
 } // namespace flow
+
+// Must be outside of the flow namespace because it's dynamically accessed
+// by other Gromacs functions (through functions in readinp.h)
+const char* enumValueToString(flow::GridAxes enumValue);
 
 #endif // MD_FLOW_FIELD_IR_TYPES

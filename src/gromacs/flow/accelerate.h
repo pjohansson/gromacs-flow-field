@@ -25,100 +25,43 @@
 namespace flow
 {
 
-//! Grid which samples the number density (1/nm^3) inside the acceleration zone
-class DensityGrid : public Grid3d<float> {
+//! Container for a density grid used for pressure acceleration
+//!
+//! NOTE: Grid is always the same size as the input system.
+class AccelerationPressure : public Grid3d<float> {
 public:
-    DensityGrid() {}
+    //! Constructor using the set .mdp options and box size
+    AccelerationPressure(const AccelerationPressureOptions &opts,
+                         const matrix                       box);
 
-    DensityGrid(const gmx::RVec rmin,
-                const gmx::RVec rmax)
-    :doDensityScaling{true},
-     end{rmax}
-    {
-        for (size_t i = 0; i < DIM; ++i)
-        {
-            origin[i] = rmin[i];
-            shape[i] = static_cast<int>((end[i] - origin[i]) / resolution);
-            spacing[i] = (end[i] - origin[i]) / static_cast<real>(shape[i]);
-        }
+    //! Get the scaling factor for the acceleration at the given position
+    float& get_factor_at_pos(const gmx::RVec r);
+    const float& get_factor_at_pos(const gmx::RVec r) const;
 
-        _finalize();
-        reset();
-    }
+    //! Divide the value of all bins by their area transverse to the pressure axis
+    void div_bins_by_area();
 
-    //! Return the y-z area of bins in the grid
-    //!
-    //! NOTE: Assumes that the acceleration is directed fully along the x axis
-    float bin_area() noexcept
-    {
-        return spacing[YY] * spacing[ZZ];
-    }
+    //! Set all values in the grid to 0
+    void reset();
 
-    //! Set the value of all bins to 0
-    void reset() noexcept
-    {
-        for (auto& v : values)
-        {
-            v = 0.0;
-        }
-    }
+    bool doPressure = false;
 
-    bool contains2(const rvec r) const
-    {
-        for (size_t i = 0; i < DIM; ++i)
-        {
-            if ((r[i] < origin[i]) || (r[i] > end[i]))
-            {
-                return false;
-            }
-        }
+    int axis_pressure = XX;
 
-        return true;
-    }
+    real sigma = 0.0;
 
-    //! Get 1 / area_density for the bin at a position
-    //!
-    //! Returns 0 if the position is outside the grid.
-    float get(const rvec r0, const matrix box) const
-    {
-        rvec r;
+    real target_resolution = 0.0;
 
-        copy_rvec(r0, r);
+    int64_t step_update = 0;
 
-        for (size_t d = 0; d < DIM; ++d)
-        {
-            r[d] = fmod(r[d], box[d][d]);
+private:
+    void _make_axis_1d(const size_t axis, const matrix box_matrix);
 
-            while (r[d] < 0.0)
-            {
-                r[d] += box[d][d];
-            }
-        }
+    float _bin_area() const;
 
-        if (contains2(r))
-        {
-            const auto value = at_pos(r);
+    size_t _get_index_unchecked(const gmx::RVec r) const;
 
-            if (value != 0.0)
-            {
-                return 1.0 / value;
-            }
-        }
-
-        return 0.0;
-    }
-
-    //! Whether or not to use per-density scaling
-    bool doDensityScaling = false;
-
-    //! End of grid in system coordinates (rmin + extent)
-    gmx::RVec end;
-
-    //! Target grid resolution (final per-dim resolution depends on extent)
-    float resolution = 0.25;
-
-    //! Interval in steps between updates of the local density grid
-    int64_t step_update = 5000;
+    size_t _get_index_along_axis(const gmx::RVec r, const size_t axis) const;
 };
 
 
@@ -151,8 +94,6 @@ struct LocalAcceleration {
                 rmax[d] = std::min(rmin[d] + opts.extent[d], box[d]);
             }
         }
-
-        density_grid = DensityGrid(rmin, rmax);
     }
 
     /*! \brief Check if a position is inside the acceleration box.
@@ -196,9 +137,6 @@ struct LocalAcceleration {
     //! Whether we are doing local acceleration only or not
     bool doLocalAcceleration = false;
 
-    //! Atom number density per area on a 3d grid
-    DensityGrid density_grid;
-
     //! Local acceleration box origin/start
     gmx::RVec rmin;
 
@@ -219,6 +157,21 @@ struct LocalAcceleration {
     std::array<bool, DIM> check_axis;
 };
 
+
+//! Container for acceleration modifications done by the Flow Field module
+struct AccelerationFlowField {
+    AccelerationFlowField(const t_inputrec *ir, const matrix box)
+    :pressure{AccelerationPressure{ir->accelerationPressureOptions, box}},
+     local{LocalAcceleration{ir->localAccelerationOptions, ir->delta_t, box}} {}
+
+    //! Configuration for adding an external pressure for acceleration
+    AccelerationPressure pressure;
+
+    //! Configuration for using an acceleration zone instead of the entire system
+    LocalAcceleration local;
+};
+
+
 //! Calculate the current acceleration multiplier
 //!
 //! Uses a smooth-step function to slowly increase the acceleration
@@ -229,7 +182,7 @@ real calc_acceleration_multiplier(const int64_t step,
 void print_local_acceleration_info(const LocalAcceleration &opts,
                                    const gmx::MDLogger     &mdlog);
 
-void update_local_acceleration_grid(DensityGrid            &grid,
+void update_local_acceleration_grid(AccelerationPressure   &pressure_grid,
                                     const t_commrec        *cr,
                                     const t_mdatoms        *mdatoms,
                                     const t_state          *state,

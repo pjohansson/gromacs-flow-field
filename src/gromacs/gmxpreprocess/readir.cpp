@@ -1754,7 +1754,11 @@ void check_ir(const char*                    mdparin,
     }
     if (ir->localAccelerationOptions.doLocalAcceleration)
     {
-        flow::check_local_acceleration_opts(ir, wi);
+        flow::check_acceleration_opts(ir, wi);
+    }
+    if (ir->accelerationPressureOptions.doPressure)
+    {
+        flow::check_pressure_opts(ir, wi);
     }
 }
 
@@ -2611,10 +2615,11 @@ void get_ir(const char*     mdparin,
     setStringEntry(&inp, "acc-grps", inputrecStrings->accelerationGroups, nullptr);
     setStringEntry(&inp, "accelerate", inputrecStrings->acceleration, nullptr);
 
-    // [FLOW_FIELD] Local acceleration
-    // We put these local acceleration options right where the standard
+    // [FLOW_FIELD] Local and pressure acceleration
+    // We put these acceleration options right where the standard
     // acceleration options are defined
-    flow::read_local_acceleration_opts(inp, ir->localAccelerationOptions, wi);
+    flow::read_pressure_opts(inp, ir->accelerationPressureOptions, wi);
+    flow::read_acceleration_opts(inp, ir->localAccelerationOptions, wi);
 
     setStringEntry(&inp, "freezegrps", inputrecStrings->freeze, nullptr);
     setStringEntry(&inp, "freezedim", inputrecStrings->frdim, nullptr);
@@ -5092,6 +5097,12 @@ void triple_check(const char* mdparin, t_inputrec* ir, gmx_mtop_t* sys, WarningH
     }
 
     check_disre(*sys);
+
+    // [FLOW_FIELD]
+    if (ir->accelerationPressureOptions.doPressure)
+    {
+        flow::triple_check_pressure_opts(ir, wi);
+    }
 }
 
 void double_check(t_inputrec* ir, matrix box, bool bHasNormalConstraints, bool bHasAnyConstraints, WarningHandler* wi)

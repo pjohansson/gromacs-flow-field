@@ -155,7 +155,7 @@ void integrateVVFirstStep(int64_t                   step,
                           FILE*                                                    fplog,
                           gmx_wallcycle*                                           wcycle,
                           // [FLOW_FIELD]
-                          const flow::LocalAcceleration& local_acceleration);
+                          const flow::AccelerationFlowField& acc_flow);
 
 
 /*! \brief Make the second step of Velocity Verlet integration
@@ -228,7 +228,7 @@ void integrateVVSecondStep(int64_t                   step,
                            t_nrnb*                                                  nrnb,
                            gmx_wallcycle*                                           wcycle,
                            // [FLOW_FIELD]
-                           const flow::LocalAcceleration& local_acceleration);
+                           const flow::AccelerationFlowField& acc_flow);
 
 
 #endif // GMX_MDLIB_UPDATE_VV_H

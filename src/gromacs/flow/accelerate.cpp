@@ -2,12 +2,147 @@
 
 #include "gromacs/domdec/domdec_struct.h"
 #include "gromacs/math/vec.h"
+#include "gromacs/utility/fatalerror.h"
 
 #include "accelerate.h"
 #include "utils.h"
 
 namespace flow
 {
+
+AccelerationPressure::AccelerationPressure(
+    const AccelerationPressureOptions &opts,
+    const matrix                       box_matrix
+)
+:doPressure{opts.doPressure},
+ axis_pressure{opts.axis_pressure},
+ sigma{opts.density_grid_smoothing},
+ target_resolution{opts.density_grid_resolution},
+ step_update{opts.step_update}
+{
+    for (size_t i = 0; i < DIM; ++i)
+    {
+        origin[i] = 0.0;
+        shape[i] = static_cast<int>(box_matrix[i][i] / target_resolution);
+        spacing[i] = box_matrix[i][i] / static_cast<real>(shape[i]);
+    }
+
+    switch (opts.grid_axes)
+    {
+        case GridAxes::XY:
+            _make_axis_1d(ZZ, box_matrix);
+            break;
+        case GridAxes::XZ:
+            _make_axis_1d(YY, box_matrix);
+            break;
+        case GridAxes::YZ:
+            _make_axis_1d(XX, box_matrix);
+            break;
+        default:
+            gmx_fatal(
+                FARGS,
+                "AccelerationPressure::AccelerationPressure got an invalid GridAxis value"
+            );
+    }
+
+    _finalize();
+    reset();
+};
+
+float& AccelerationPressure::get_factor_at_pos(const gmx::RVec r)
+{
+    return values.at(_get_index_unchecked(r));
+}
+
+const float& AccelerationPressure::get_factor_at_pos(const gmx::RVec r) const
+{
+    return values.at(_get_index_unchecked(r));
+}
+
+
+//! Fast method for getting the bin index for a 3D position
+//!
+//! (Modified from the FlowField class)
+//!
+//! Implemented specifically here since I have not figured out how
+//! this interface could look like in `Grid3d`. We want as fast access
+//! to the storage as possible and thus make some optimizations:
+//!
+//! 1) We know that the grid covers the entire system and not just
+//!    a subset of it. This means we can more easily calculate
+//!    the indexing and won't need to check for saturation at the
+//!    edges as the built in methods currently do.
+//!
+//! 2) After calculating the indices along each axis we use them
+//!    directly to access the bin, which skips a check for each
+//!    dimension inside the index accessor.
+//!
+//! The risk is that we make a mistake in the indexing or PBC removal
+//! which results in out-of-memory access, but this calculation is
+//! relatively easy to check.
+//!
+//! TODO: Write tests.
+size_t AccelerationPressure::_get_index_unchecked(const gmx::RVec r) const
+{
+    const auto ix = _get_index_along_axis(r, XX);
+    const auto iy = _get_index_along_axis(r, YY);
+    const auto iz = _get_index_along_axis(r, ZZ);
+
+    // Grid3d is ZYX ordered, so:
+    // index = iz + iy * nz + ix * (ny * nz)
+    return static_cast<size_t>(
+        iz + iy * shape[ZZ] + ix * (shape[YY] * shape[ZZ])
+    );
+}
+
+size_t AccelerationPressure::_get_index_along_axis(const gmx::RVec r, const size_t axis) const
+{
+    auto index = static_cast<int>(floor(r[axis] * inv_spacing[axis])) % shape[axis];
+
+    while (index < 0)
+    {
+        index += shape[axis];
+    }
+
+    return index;
+}
+
+float AccelerationPressure::_bin_area() const
+{
+    switch (axis_pressure)
+    {
+        case XX: return spacing[YY] * spacing[ZZ];
+        case YY: return spacing[XX] * spacing[ZZ];
+        case ZZ: return spacing[XX] * spacing[YY];
+        default: return 1.0;
+    }
+}
+
+void AccelerationPressure::div_bins_by_area()
+{
+    const auto area = _bin_area();
+
+    for (auto& v : values)
+    {
+        v /= area;
+    }
+}
+
+void AccelerationPressure::reset()
+{
+    for (auto& v : values)
+    {
+        v = 0.0;
+    }
+}
+
+void AccelerationPressure::_make_axis_1d(const size_t axis,
+                                         const matrix box_matrix)
+{
+    shape[axis] = 1;
+    spacing[axis] = box_matrix[axis][axis];
+}
+
 
 real calc_acceleration_multiplier(const int64_t step,
                                   const int64_t step_complete)
@@ -27,7 +162,7 @@ real calc_acceleration_multiplier(const int64_t step,
 
 
 //! Sum the number of atoms on grid and send to all ranks
-static void mpi_collect_grid(DensityGrid &grid, const t_commrec *cr)
+static void mpi_collect_grid(AccelerationPressure &grid, const t_commrec *cr)
 {
     if (PAR(cr))
     {
@@ -43,7 +178,7 @@ static void mpi_collect_grid(DensityGrid &grid, const t_commrec *cr)
 }
 
 
-static void collect_grid_data(DensityGrid            &grid,
+static void collect_grid_data(AccelerationPressure   &grid,
                               const t_commrec        *cr,
                               const t_mdatoms        *mdatoms,
                               const t_state          *state,
@@ -63,7 +198,7 @@ static void collect_grid_data(DensityGrid            &grid,
             : static_cast<int>(i);
 
         const auto group_index = getGroupType(
-            *groups, SimulationAtomGroupType::User1, global_atom_index
+            *groups, SimulationAtomGroupType::Acceleration, global_atom_index
         );
 
         if (group_index < static_cast<int>(num_groups))
@@ -80,10 +215,7 @@ static void collect_grid_data(DensityGrid            &grid,
                 }
             }
 
-            if (grid.contains(r))
-            {
-                grid.at_pos(r) += 1.0;
-            }
+            grid.at_pos(r) += 1.0;
         }
     }
 }
@@ -92,12 +224,12 @@ static void collect_grid_data(DensityGrid            &grid,
 class GaussianKernel {
 public:
     GaussianKernel(const gmx::RVec spacing,
-           const float     sigma,
-           const float     cutoff)
+                   const float     sigma,
+                   const float     cutoff)
     :half_distance{
-        static_cast<int>(cutoff / spacing[XX]),
-        static_cast<int>(cutoff / spacing[YY]),
-        static_cast<int>(cutoff / spacing[ZZ])
+        static_cast<int>(std::floor(cutoff / spacing[XX])),
+        static_cast<int>(std::floor(cutoff / spacing[YY])),
+        static_cast<int>(std::floor(cutoff / spacing[ZZ]))
     }
     {
         const auto row = std::vector<float>(2 * half_distance[ZZ] + 1, 0.0);
@@ -144,7 +276,7 @@ public:
         return weights.at(ix_adjusted).at(iy_adjusted).at(iz_adjusted);
     }
 
-    void add_weights(const DensityGrid  &grid,
+    void add_weights(const AccelerationPressure &grid,
                      std::vector<float> &result,
                      std::vector<float> &weights,
                      const int           ix0,
@@ -206,22 +338,21 @@ private:
 //! This is likely a very expensive operation, but we shouldn't be
 //! updating the local density grid very often which means that it
 //! should be negligible compared to the force calculation.
-static void smooth_gaussian_kernel(DensityGrid &grid,
-                                   const real   sigma)
+static void smooth_gaussian_kernel(AccelerationPressure &grid)
 {
-    if (sigma <= 0.0)
+    if (grid.sigma <= 0.0)
     {
         return;
     }
 
     // 3 sigma ~ 97 percent of all possible weights, by far sufficient
     // for this silly little smoothing kernel
-    const auto cutoff = 3.0 * sigma;
+    const auto cutoff = 3.0 * grid.sigma;
 
     std::vector<float> result(grid.values.size(), 0.0);
     std::vector<float> weights(grid.values.size(), 0.0);
 
-    GaussianKernel kernel(grid.spacing, sigma, cutoff);
+    GaussianKernel kernel(grid.spacing, grid.sigma, cutoff);
 
     for (int ix = 0; ix < grid.shape[XX]; ++ix)
     {
@@ -244,22 +375,20 @@ static void smooth_gaussian_kernel(DensityGrid &grid,
 }
 
 
-void update_local_acceleration_grid(DensityGrid            &grid,
+void update_local_acceleration_grid(AccelerationPressure  &pressure_grid,
                                     const t_commrec        *cr,
                                     const t_mdatoms        *mdatoms,
                                     const t_state          *state,
                                     const SimulationGroups *groups)
 {
-    grid.reset();
-    collect_grid_data(grid, cr, mdatoms, state, groups);
-    mpi_collect_grid(grid, cr);
+    pressure_grid.reset();
 
-    for (auto& v : grid.values)
-    {
-        v /= grid.bin_area();
-    }
+    collect_grid_data(pressure_grid, cr, mdatoms, state, groups);
+    mpi_collect_grid(pressure_grid, cr);
 
-    smooth_gaussian_kernel(grid, 0.25);
+    pressure_grid.div_bins_by_area();
+
+    smooth_gaussian_kernel(pressure_grid);
 }
 
 void print_local_acceleration_info(const flow::LocalAcceleration &opts,

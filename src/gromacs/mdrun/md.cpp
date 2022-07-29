@@ -829,13 +829,11 @@ void gmx::LegacySimulator::do_md()
     }
 
     // [FLOW_FIELD] Local acceleration setup
-    auto local_acceleration = flow::LocalAcceleration(
-        ir->localAccelerationOptions, ir->delta_t, state->box
-    );
+    flow::AccelerationFlowField acc_flow(ir, state->box);
 
     if (MASTER(cr))
     {
-        flow::print_local_acceleration_info(local_acceleration, mdlog);
+        flow::print_local_acceleration_info(acc_flow.local, mdlog);
     }
 
     step     = ir->init_step;
@@ -1247,15 +1245,15 @@ void gmx::LegacySimulator::do_md()
         }
 
         // [FLOW_FIELD]
-        // Before any update starts (velocity-verlet begins below),
-        // update the local acceleration grid
+        // Before any update starts (velocity-verlet begins right below),
+        // update the density grid which is used for pressure calculation
         if (
-            local_acceleration.density_grid.doDensityScaling
-            && do_per_step(step, local_acceleration.density_grid.step_update)
+            acc_flow.pressure.doPressure
+            && do_per_step(step, acc_flow.pressure.step_update)
         )
         {
             flow::update_local_acceleration_grid(
-                local_acceleration.density_grid,
+                acc_flow.pressure,
                 cr,
                 md,
                 state,
@@ -1309,7 +1307,7 @@ void gmx::LegacySimulator::do_md()
                                  nrnb,
                                  fplog,
                                  wcycle,
-                                 local_acceleration);
+                                 acc_flow);
             if (vsite != nullptr && needVirtualVelocitiesThisStep)
             {
                 // Positions were calculated earlier
@@ -1549,7 +1547,7 @@ void gmx::LegacySimulator::do_md()
                                   trotter_seq,
                                   nrnb,
                                   wcycle,
-                                  local_acceleration);
+                                  acc_flow);
         }
         else
         {
@@ -1656,7 +1654,7 @@ void gmx::LegacySimulator::do_md()
                                   etrtPOSITION,
                                   cr,
                                   constr != nullptr,
-                                  local_acceleration);
+                                  acc_flow);
 
                 wallcycle_stop(wcycle, WallCycleCounter::Update);
 

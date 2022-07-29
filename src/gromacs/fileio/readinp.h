@@ -46,6 +46,9 @@
 #include "gromacs/utility/enumerationhelpers.h"
 #include "gromacs/utility/stringutil.h"
 
+// [FLOW_FIELD]
+#include "gromacs/flow/inputrec_types.h"
+
 namespace gmx
 {
 template<typename>

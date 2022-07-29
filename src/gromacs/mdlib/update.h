@@ -139,7 +139,7 @@ public:
                        int                                              updatePart,
                        const t_commrec*                                 cr,
                        bool                                             haveConstraints,
-                       const flow::LocalAcceleration&                   local_acceleration);
+                       const flow::AccelerationFlowField&               acc_flow);
 
     /*! \brief Finalize the coordinate update.
      *

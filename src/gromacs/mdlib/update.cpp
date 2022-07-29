@@ -132,7 +132,7 @@ public:
                        int                                              UpdatePart,
                        const t_commrec*                                 cr,
                        bool                                             haveConstraints,
-                       const flow::LocalAcceleration&                   local_acceleration);
+                       const flow::AccelerationFlowField&               acc_flow);
 
     void finish_update(const t_inputrec&                   inputRecord,
                        bool                                havePartiallyFrozenAtoms,
@@ -231,7 +231,7 @@ void Update::update_coords(const t_inputrec&                 inputRecord,
                            int                                              updatePart,
                            const t_commrec*                                 cr,
                            const bool                                       haveConstraints,
-                           const flow::LocalAcceleration&    local_acceleration)
+                           const flow::AccelerationFlowField& acc_flow)
 {
     return impl_->update_coords(inputRecord,
                                 step,
@@ -248,7 +248,7 @@ void Update::update_coords(const t_inputrec&                 inputRecord,
                                 updatePart,
                                 cr,
                                 haveConstraints,
-                                local_acceleration);
+                                acc_flow);
 }
 
 void Update::finish_update(const t_inputrec& inputRecord,
@@ -542,6 +542,7 @@ enum class AccelerationType
     None,
     Group,
     Cosine,
+    Pressure, // [FLOW_FIELD]
     Count
 };
 
@@ -577,8 +578,8 @@ static void updateMDLeapfrogGeneral(int                                 start,
                                     gmx::ArrayRef<const unsigned short> cTC,
                                     gmx::ArrayRef<const unsigned short> cAcceleration,
                                     const rvec* gmx_restrict            acceleration,
-                                    const flow::LocalAcceleration&      local_acceleration,
-                                    const real                          acceleration_multiplier,
+                                    const flow::AccelerationFlowField&  acc_flow,
+                                    const real                          acc_tau,
                                     gmx::ArrayRef<const gmx::RVec>      invMassPerDim,
                                     const gmx_ekindata_t*               ekind,
                                     const matrix                        box,
@@ -607,8 +608,8 @@ static void updateMDLeapfrogGeneral(int                                 start,
     // [FLOW_FIELD]
     // For debugging, create a grid to collect pressure in
 #ifdef NDEBUG
-    auto pressure_grid = local_acceleration.density_grid;
-    pressure_grid.reset();
+    auto pressure_result_grid = acc_flow.pressure;
+    pressure_result_grid.reset();
     static int step = 0;
 #endif
 
@@ -626,6 +627,7 @@ static void updateMDLeapfrogGeneral(int                                 start,
         {
             case AccelerationType::None: copy_rvec(v[n], vRel); break;
             case AccelerationType::Group:
+            case AccelerationType::Pressure: // [FLOW_FIELD] use same initialization as the constant group scheme
                 if (!cAcceleration.empty())
                 {
                     ga = cAcceleration[n];
@@ -652,26 +654,26 @@ static void updateMDLeapfrogGeneral(int                                 start,
             factorNH = 0.5 * nsttcouple * dt * nh_vxi[gt];
         }
 
-        // [FLOW]
-        // For group acceleration *only*, ensure that we are either using
+        // [FLOW_FIELD]
+        // For group/pressure acceleration *only*, ensure that we are either using
         // non-local acceleration (i.e. full simulation box) or that
         // the atom is inside the locally defined acceleration box
-        const bool atomInLocalBox = local_acceleration.contains(x[n]);
+        const bool atomInLocalBox = acc_flow.local.contains(x[n]);
         const bool addGroupAcceleration = (
-            (!local_acceleration.doLocalAcceleration)
+            (!acc_flow.local.doLocalAcceleration)
             || atomInLocalBox
         );
 
-        real acc_multiplier_final = acceleration_multiplier;
+        real inv_num_area_density = 1.0;
 
-        if (atomInLocalBox && local_acceleration.density_grid.doDensityScaling)
+        if (acc_flow.pressure.doPressure)
         {
-            acc_multiplier_final *= local_acceleration.density_grid.get(x[n], box);
+            inv_num_area_density = acc_flow.pressure.get_factor_at_pos(x[n]);
+        }
 
 #ifdef NDEBUG
-            pressure_grid.at_pos_pbc(x[n], box) += acc_multiplier_final;
+        pressure_result_grid.at_pos_pbc(x[n], box) += inv_num_area_density;
 #endif
-        }
 
         const RVec parrinelloRahmanScaledVelocity =
                 dtPressureCouple * multiplyVectorByMatrix(parrinelloRahmanM, vRel);
@@ -688,14 +690,10 @@ static void updateMDLeapfrogGeneral(int                                 start,
                 case AccelerationType::Group:
                     /* Apply the constant acceleration */
 
-                    // [FLOW]
-                    // TODO: We actually want to add a *force*, not acceleration.
-                    // So, we should divide by the atom mass. Expand the
-                    // `AccelerationType` enum for this?
+                    // [FLOW_FIELD]
                     if (addGroupAcceleration)
                     {
-                        vNew += acc_multiplier_final * acceleration[ga][d] * dt;
-                        // vNew += acceleration_multiplier * acceleration[ga][d] * dt;
+                        vNew += acc_tau * acceleration[ga][d] * dt;
                     }
 
                     break;
@@ -704,6 +702,21 @@ static void updateMDLeapfrogGeneral(int                                 start,
                     {
                         /* Add back the mean velocity and apply acceleration */
                         vNew += vCosine + cosineZ * ekind->cosacc.cos_accel * dt;
+                    }
+                    break;
+                // [FLOW_FIELD]
+                case AccelerationType::Pressure:
+                    if (addGroupAcceleration)
+                    {
+                        // Pressure is force per area, so divide acceleration
+                        // by mass and number density per area
+                        vNew += (
+                            inv_num_area_density
+                            * acc_tau
+                            * acceleration[ga][d]
+                            * invMassPerDim[n][d]
+                            * dt
+                        );
                     }
                     break;
             }
@@ -715,11 +728,11 @@ static void updateMDLeapfrogGeneral(int                                 start,
     // [FLOW]
 #ifdef NDEBUG
     static size_t i = 1;
+    constexpr size_t step_output = 5000;
 
-    if (step == 5000)
+    if ((step > 0) && (step % step_output == 0))
     {
-
-        const auto& grid = local_acceleration.density_grid;
+        const auto& grid = acc_flow.pressure;
 
         flow::FlowField flow_field("local", grid.shape[XX], grid.shape[ZZ], box);
 
@@ -732,7 +745,7 @@ static void updateMDLeapfrogGeneral(int                                 start,
                 for (int iy = 0; iy < grid.shape[YY]; ++iy)
                 {
                     sum_density += grid.at(ix, iy, iz);
-                    sum_pressure += pressure_grid.at(ix, iy, iz);
+                    sum_pressure += pressure_result_grid.at(ix, iy, iz);
                 }
                 sum_density /= static_cast<float>(grid.shape[YY]);
                 sum_pressure /= static_cast<float>(grid.shape[YY]);
@@ -770,7 +783,7 @@ static void do_update_md(int                                  start,
                          const bool                           useConstantAcceleration,
                          gmx::ArrayRef<const unsigned short>  cAcceleration,
                          const rvec*                          acceleration,
-                         const flow::LocalAcceleration&       local_acceleration,
+                         const flow::AccelerationFlowField&   acc_flow,
                          gmx::ArrayRef<const real> gmx_unused invmass,
                          gmx::ArrayRef<const gmx::RVec>       invMassPerDim,
                          const gmx_ekindata_t*                ekind,
@@ -799,15 +812,28 @@ static void do_update_md(int                                  start,
             ((parrinelloRahmanVelocityScaling != ParrinelloRahmanVelocityScaling::No) ? nstpcouple * dt : 0);
 
     /* NEMD (also cosine) acceleration is applied in updateMDLeapFrogGeneral */
-    AccelerationType accelerationType =
-            (useConstantAcceleration ? AccelerationType::Group
-                                     : ((ekind->cosacc.cos_accel != 0) ? AccelerationType::Cosine
-                                                                       : AccelerationType::None));
+    AccelerationType accelerationType = AccelerationType::None;
+    if (useConstantAcceleration)
+    {
+        // [FLOW_FIELD]
+        if (acc_flow.pressure.doPressure)
+        {
+            accelerationType = AccelerationType::Pressure;
+        }
+        else
+        {
+            accelerationType = AccelerationType::Group;
+        }
+    }
+    else if (ekind->cosacc.cos_accel != 0)
+    {
+        accelerationType = AccelerationType::Cosine;
+    }
 
     // [FLOW_FIELD]
     // Calculate acceleration multiplier from the given step
-    const real acceleration_multiplier = flow::calc_acceleration_multiplier(
-        step, local_acceleration.step_max_acceleration
+    const real acc_tau = flow::calc_acceleration_multiplier(
+        step, acc_flow.local.step_max_acceleration
     );
 
     if (doNoseHoover || (parrinelloRahmanVelocityScaling == ParrinelloRahmanVelocityScaling::Anisotropic)
@@ -829,8 +855,8 @@ static void do_update_md(int                                  start,
                                                                      cTC,
                                                                      cAcceleration,
                                                                      acceleration,
-                                                                     local_acceleration,
-                                                                     acceleration_multiplier,
+                                                                     acc_flow,
+                                                                     acc_tau,
                                                                      invMassPerDim,
                                                                      ekind,
                                                                      box,
@@ -1780,7 +1806,7 @@ void Update::Impl::update_coords(const t_inputrec&                 inputRecord,
                                  int                                              updatePart,
                                  const t_commrec*                                 cr,
                                  const bool                                       haveConstraints,
-                                 const flow::LocalAcceleration&    local_acceleration)
+                                 const flow::AccelerationFlowField& acc_flow)
 {
     /* Running the velocity half does nothing except for velocity verlet */
     if ((updatePart == etrtVELOCITY1 || updatePart == etrtVELOCITY2) && !EI_VV(inputRecord.eI))
@@ -1837,7 +1863,7 @@ void Update::Impl::update_coords(const t_inputrec&                 inputRecord,
                                  inputRecord.useConstantAcceleration,
                                  cAcceleration_,
                                  inputRecord.opts.acceleration,
-                                 local_acceleration,
+                                 acc_flow,
                                  invMass,
                                  invMassPerDim,
                                  ekind,
