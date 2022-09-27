@@ -19,7 +19,7 @@ set -e
 
 # Build and install gmxapi python package from local source.
 # Note that tool chain may be provided differently across GROMACS versions.
-python -m pip install --no-build-isolation --no-cache-dir --no-deps --no-index python_packaging/src
+python -m pip install --no-build-isolation --no-cache-dir --no-deps --no-index python_packaging/gmxapi
 
 pushd python_packaging/sample_restraint
   rm -rf build
@@ -27,7 +27,7 @@ pushd python_packaging/sample_restraint
   pushd build
     # TODO: Update with respect to https://gitlab.com/gromacs/gromacs/-/issues/3133
     cmake .. \
-      -C $GROMACS_ROOT/share/cmake/gromacs/gromacs-hints.cmake \
+      -C $GROMACS_ROOT/share/cmake/gromacs${GMX_SUFFIX}/gromacs-hints${GMX_SUFFIX}.cmake \
       -DPYTHON_EXECUTABLE=`which python` \
       -DGMXAPI_EXTENSION_DOWNLOAD_PYBIND=ON
     make -j4 tests

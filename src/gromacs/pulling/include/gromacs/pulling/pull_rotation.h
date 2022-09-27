@@ -45,7 +45,7 @@
 #ifndef GMX_PULLING_PULL_ROTATION_H
 #define GMX_PULLING_PULL_ROTATION_H
 
-#include <stdio.h>
+#include <cstdio>
 
 #include <memory>
 
@@ -102,7 +102,7 @@ private:
  *                 of the rotation output files.
  * \param atomSets Tracks indices of atoms subject to enforced rotation for each DD rank.
  * \param cr       Pointer to MPI communication data.
- * \param globalState  The global state, only used on the master rank.
+ * \param globalState  The global state, only used on the main rank.
  * \param mtop     Molecular topology.
  * \param oenv     Needed to open the rotation output xvgr file.
  * \param mdrunOptions  Options for mdrun.

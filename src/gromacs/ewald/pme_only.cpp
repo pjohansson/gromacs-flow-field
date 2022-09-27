@@ -101,7 +101,7 @@
 #include "pme_output.h"
 #include "pme_pp_communication.h"
 
-/*! \brief Master PP-PME communication data structure */
+/*! \brief Main PP-PME communication data structure */
 struct gmx_pme_pp
 {
     MPI_Comm             mpi_comm_mysim; /**< MPI communicator for this simulation */
@@ -463,12 +463,12 @@ static int gmx_pme_recv_coeffs_coords(struct gmx_pme_t*            pme,
                     {
                         if (GMX_THREAD_MPI)
                         {
-                            pme_pp->pmeCoordinateReceiverGpu->receiveCoordinatesSynchronizerFromPpCudaDirect(
+                            pme_pp->pmeCoordinateReceiverGpu->receiveCoordinatesSynchronizerFromPpPeerToPeer(
                                     sender.rankId);
                         }
                         else
                         {
-                            pme_pp->pmeCoordinateReceiverGpu->launchReceiveCoordinatesFromPpCudaMpi(
+                            pme_pp->pmeCoordinateReceiverGpu->launchReceiveCoordinatesFromPpGpuAwareMpi(
                                     stateGpu->getCoordinates(),
                                     nat,
                                     sender.numAtoms * sizeof(rvec),
@@ -559,7 +559,7 @@ static void gmx_pme_send_force_vir_ener(const gmx_pme_t& pme, gmx_pme_pp* pme_pp
         for (int i = 0; i < numPpRanks; i++)
         {
             auto& receiver = pme_pp->ppRanks[i];
-            pme_pp->pmeForceSenderGpu->sendFToPpCudaDirect(
+            pme_pp->pmeForceSenderGpu->sendFToPpPeerToPeer(
                     receiver.rankId, receiver.numAtoms, pme_pp->sendForcesDirectToPpGpu);
         }
     }
@@ -571,11 +571,11 @@ static void gmx_pme_send_force_vir_ener(const gmx_pme_t& pme, gmx_pme_pp* pme_pp
             ind_end   = ind_start + receiver.numAtoms;
             if (pme_pp->useGpuDirectComm)
             {
-                pme_pp->pmeForceSenderGpu->sendFToPpCudaMpi(pme_gpu_get_device_f(&pme),
-                                                            ind_start,
-                                                            receiver.numAtoms * sizeof(rvec),
-                                                            receiver.rankId,
-                                                            &pme_pp->req[messages]);
+                pme_pp->pmeForceSenderGpu->sendFToPpGpuAwareMpi(pme_gpu_get_device_f(&pme),
+                                                                ind_start,
+                                                                receiver.numAtoms * sizeof(rvec),
+                                                                receiver.rankId,
+                                                                &pme_pp->req[messages]);
             }
             else
             {
@@ -735,7 +735,7 @@ int gmx_pmeonly(struct gmx_pme_t*               pme,
             walltime_accounting_start_time(walltime_accounting);
         }
 
-        wallcycle_start(wcycle, WallCycleCounter::PmeMesh);
+        wallcycle_start(wcycle, useGpuForPme ? WallCycleCounter::PmeGpuMesh : WallCycleCounter::PmeMesh);
 
         // TODO Make a struct of array refs onto these per-atom fields
         // of pme_pp (maybe box, energy and virial, too; and likewise
@@ -775,7 +775,6 @@ int gmx_pmeonly(struct gmx_pme_t*               pme,
             pme_gpu_launch_complex_transforms(pme, wcycle, stepWork);
             pme_gpu_launch_gather(pme, wcycle, lambda_q);
             output = pme_gpu_wait_finish_task(pme, computeEnergyAndVirial, lambda_q, wcycle);
-            pme_gpu_reinit_computation(pme, wcycle);
         }
         else
         {
@@ -809,13 +808,26 @@ int gmx_pmeonly(struct gmx_pme_t*               pme,
             output.forces_ = pme_pp->f;
         }
 
-        cycles = wallcycle_stop(wcycle, WallCycleCounter::PmeMesh);
+        cycles = wallcycle_stop(
+                wcycle, useGpuForPme ? WallCycleCounter::PmeGpuMesh : WallCycleCounter::PmeMesh);
+
         gmx_pme_send_force_vir_ener(*pme, pme_pp.get(), output, cycles);
+
+        // Reinit after PME->PP force send so it is removed from the critical path
+        if (useGpuForPme)
+        {
+            pme_gpu_reinit_computation(pme, wcycle);
+        }
 
         count++;
     } /***** end of quasi-loop, we stop with the break above */
     while (TRUE);
 
+    // The first element, `pme`, will be freed outside this function
+    for (size_t i = 1; i < pmedata.size(); i++)
+    {
+        gmx_pme_destroy(pmedata[i], false);
+    }
     walltime_accounting_end_time(walltime_accounting);
 
     return 0;

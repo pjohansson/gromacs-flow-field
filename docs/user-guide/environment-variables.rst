@@ -161,9 +161,9 @@ Performance and Run Control
 
 ``GMX_ENABLE_DIRECT_GPU_COMM``
         Enable direct GPU communication in multi-rank parallel runs.
-	Note that domain decomposition with CUDA-aware MPI does not support
-	multiple pulses along the second and third decomposition dimension,
-	so for very small systems the feature will be disabled internally.
+        Note that domain decomposition with GPU-aware MPI does not support
+        multiple pulses along the second and third decomposition dimension,
+        so for very small systems the feature will be disabled internally.
 
 ``GMX_ENABLE_STAGED_GPU_TO_CPU_PMEPP_COMM``
         Use a staged implementation of GPU communications for PME force
@@ -182,10 +182,6 @@ Performance and Run Control
 ``GMX_GPU_SYCL_NO_SYNCHRONIZE``
         disable synchronizations between different GPU streams in SYCL build, instead relying on SYCL runtime to
         do scheduling based on data dependencies. Experimental.
-
-``GMX_GPU_SYCL_USE_SUBDEVICES``
-        partition the GPUs that support it into sub-devices, and treat each one as an independent device.
-        GPUs that can not be split are ignored. Intended for use with multi-tile GPUs.
 
 ``GMX_GPU_SYCL_USE_GPU_FFT``
         enable the use of GPU FFT with DPC++ on Intel GPUs. Unless this variable is set, only Mixed Mode PME is
@@ -257,8 +253,8 @@ Performance and Run Control
 ``GMX_FORCE_GPU_AWARE_MPI``
         Override the result of build- and runtime GPU-aware MPI detection and force the use of
         direct GPU MPI communication. Aimed at cases where the user knows that the MPI library is
-        GPU-aware, but |GROMACS| is not able to detect this. Note that only CUDA builds support
-        such functionality.
+        GPU-aware, but |GROMACS| is not able to detect this. Note that only CUDA and SYCL builds 
+        support such functionality.
 
 ``GMX_FORCE_UPDATE_DEFAULT_GPU``
         Force update to run on the GPU by default, overriding the ``mdrun -update auto`` option. Works similar to setting
@@ -486,10 +482,6 @@ compilation of OpenCL kernels, but they are also used in device selection.
 
 Analysis and Core Functions
 ---------------------------
-
-``DSSP``
-        used by :ref:`gmx do_dssp` to point to the ``dssp``
-        executable (not just its path).
 
 ``GMX_DIPOLE_SPACING``
         spacing used by :ref:`gmx dipoles`.

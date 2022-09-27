@@ -140,8 +140,8 @@ libraries and require no further configuration. If your vendor's
 compiler also manages the standard library library via compiler flags,
 these will be honored. For configuration of other compilers, read on.
 
-On Linux, the clang compilers use the libstdc++ which
-comes with gcc as the default C++ library. For |Gromacs|, we require
+On Linux, the clang compilers typically use for their C++ library
+the libstdc++ which comes with g++. For |Gromacs|, we require
 the compiler to support libstc++ version 7.1 or higher. To select a
 particular libstdc++ library, provide the path to g++ with
 ``-DGMX_GPLUSPLUS_PATH=/path/to/g++``.
@@ -333,20 +333,11 @@ slightly faster.
 Using MKL
 ~~~~~~~~~
 
-Use MKL bundled with Intel compilers by setting up the compiler
-environment, e.g., through ``source /path/to/compilervars.sh intel64``
-or similar before running CMake including setting
-``-DGMX_FFT_LIBRARY=mkl``.
-
-If you need to customize this further, use
-
-::
-
-    cmake -DGMX_FFT_LIBRARY=mkl \
-          -DMKL_LIBRARIES="/full/path/to/libone.so;/full/path/to/libtwo.so" \
-          -DMKL_INCLUDE_DIR="/full/path/to/mkl/include"
-
-The full list and order(!) of libraries you require are found in Intel's MKL documentation for your system.
+Use OneAPI MKL(>=2021.3) by setting up the environment, e.g., through
+``source /opt/intel/oneapi/setvars.sh`` or
+``source /opt/intel/oneapi/mkl/latest/env/vars.sh``
+or manually setting environment variable ``MKLROOT=/full/path/to/mkl``.
+Then run CMake with setting ``-DGMX_FFT_LIBRARY=mkl``.
 
 Using ARM Performance Libraries
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -365,6 +356,25 @@ options:
           -DFFTWF_LIBRARY="${ARMPL_DIR}/lib/libarmpl_lp64.so" \
           -DFFTWF_INCLUDE_DIR=${ARMPL_DIR}/include
 
+.. _cufftmp installation:
+
+Using cuFFTMp
+~~~~~~~~~~~~~
+
+PME decomposition is supported with PME offloaded to NVIDIA GPUs when using a CUDA build. This requires building |Gromacs| with the NVIDIA `cuFFTMp (cuFFT Multi-process) library
+<https://docs.nvidia.com/hpc-sdk/cufftmp>`_, shipped with the NVIDIA HPC SDK, which provides distributed FFTs including across multiple compute nodes. To enable cuFFTMp support use the following cmake options:
+
+::
+
+    cmake -DGMX_USE_CUFFTMP=ON \
+          -DcuFFTMp_ROOT=<path to NVIDIA HPC SDK math_libs folder>
+
+Please make sure `cuFFTMp's hardware and software requirements
+<https://docs.nvidia.com/hpc-sdk/cufftmp/usage/requirements.html>`_
+are met before trying to use GPU PME decomposition feature.
+Also, since cuFFTMp internally uses `NVSHMEM <https://developer.nvidia.com/nvshmem>`_ it is advisable to refer to the `NVSHMEM FAQ page
+<https://docs.nvidia.com/hpc-sdk/nvshmem/api/faq.html#general-faqs>`_ for
+any issues faced at runtime.
 
 Other optional build components
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -565,7 +575,8 @@ lead to performance loss, e.g. on Intel Skylake-X/SP and AMD Zen.
    processors support this, so this can also be considered a good
    baseline if you are content with slow simulations and prefer
    portability between reasonably modern processors.
-4. ``AVX_128_FMA`` AMD Bulldozer, Piledriver (and later Family 15h) processors have this.
+4. ``AVX_128_FMA`` AMD Bulldozer, Piledriver (and later Family 15h) processors
+   have this but it is NOT supported on any AMD processors since Zen1.
 5. ``AVX_256`` Intel processors since Sandy Bridge (2011). While this
    code will work on the  AMD Bulldozer and Piledriver processors, it is significantly less
    efficient than the ``AVX_128_FMA`` choice above - do not be fooled
@@ -863,10 +874,6 @@ The following flags can be passed to CMake in order to tune |Gromacs|:
       changes the data layout of non-bonded kernels. Default values: 4 when
       compiling with `Intel oneAPI DPC++`_, 8 when compiling with hipSYCL_.
       Those are reasonable defaults for Intel and AMD devices, respectively.
-
-``-DGMX_SYCL_USE_USM``
-      switches between SYCL buffers (``OFF``) and USM (``ON``) for data management.
-      Default: on (for performance reasons).
 
 Static linking
 ~~~~~~~~~~~~~~

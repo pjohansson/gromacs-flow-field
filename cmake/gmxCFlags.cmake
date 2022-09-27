@@ -455,6 +455,9 @@ function(gmx_warn_on_everything target)
     gmx_target_warning_suppression(${target} "-Wno-c++98-compat" HAS_WARNING_NO_CPLUSPLUS98_COMPAT)
     gmx_target_warning_suppression(${target} "-Wno-c++98-compat-pedantic" HAS_WARNING_NO_CPLUSPLUS98_COMPAT_PEDANTIC)
 
+    # We require newer C++ than version 11, so ignore c++11 specific warnings
+    gmx_target_warning_suppression(${target} "-Wno-return-std-move-in-c++11" HAS_WARNING_NO_RETURN_STD_MOVE_IN_CPLUSPLUS11)
+
     # Don't warn for use of OpenMP pragmas in no-omp build
     gmx_target_warning_suppression(${target} "-Wno-source-uses-openmp" HAS_WARNING_NO_SOURCE_USED_OPENMP)
 
@@ -514,6 +517,14 @@ function(gmx_warn_on_everything target)
     # difference and there's no good way to suppress this on a
     # case-by-base basis.
     gmx_target_warning_suppression(${target} "-Wno-float-equal" HAS_WARNING_NO_FLOAT_EQUAL)
+
+    if(GMX_GPU_SYCL)
+        # Intel oneAPI compiler warns about compiling kernels with non-32 subgroups for CUDA devices.
+        # But we can not avoid compiling kernels for other sub-group sizes unless we have
+        # sycl_ext_oneapi_kernel_properties and/or sycl::any_device_has (https://github.com/intel/llvm/issues/5562).
+        # Even then, we might want to build for multiple devices. So, we silence the warning.
+        gmx_target_warning_suppression(${target} "-Wno-cuda-compat" HAS_WARNING_NO_CUDA_COMPAT)
+    endif()
 
     #
     # Exceptions we should consider fixing

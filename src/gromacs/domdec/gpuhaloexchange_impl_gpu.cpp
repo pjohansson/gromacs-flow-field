@@ -60,22 +60,13 @@
 #include "domdec_internal.h"
 
 // NOLINTNEXTLINE(misc-redundant-expression)
-constexpr bool supportedLibMpiBuild = ((GMX_LIB_MPI != 0) && (GMX_GPU_CUDA != 0));
+constexpr bool supportedLibMpiBuild =
+        ((GMX_LIB_MPI != 0) && ((GMX_GPU_CUDA != 0) || (GMX_GPU_SYCL != 0)));
 // NOLINTNEXTLINE(misc-redundant-expression)
 constexpr bool supportedThreadMpiBuild = ((GMX_THREAD_MPI != 0) && (GMX_GPU_CUDA != 0));
 
 namespace gmx
 {
-
-template<typename T>
-static T* asMpiPointer(DeviceBuffer<T>& buffer)
-{
-#if GMX_GPU_CUDA
-    return buffer;
-#else
-    assert(false);
-#endif
-}
 
 void GpuHaloExchange::Impl::reinitHalo(DeviceBuffer<Float3> d_coordinatesBuffer,
                                        DeviceBuffer<Float3> d_forcesBuffer)
@@ -238,7 +229,7 @@ void GpuHaloExchange::Impl::enqueueWaitRemoteCoordinatesReadyEvent(GpuEventSynch
 GpuEventSynchronizer* GpuHaloExchange::Impl::communicateHaloCoordinates(const matrix box,
                                                                         GpuEventSynchronizer* dependencyEvent)
 {
-    wallcycle_start(wcycle_, WallCycleCounter::LaunchGpu);
+    wallcycle_start(wcycle_, WallCycleCounter::LaunchGpuPp);
 
     // ensure stream waits until dependency has been satisfied
     dependencyEvent->enqueueWaitEvent(*haloStream_);
@@ -247,7 +238,7 @@ GpuEventSynchronizer* GpuHaloExchange::Impl::communicateHaloCoordinates(const ma
     launchPackXKernel(box);
     wallcycle_sub_stop(wcycle_, WallCycleSubCounter::LaunchGpuMoveX);
 
-    wallcycle_stop(wcycle_, WallCycleCounter::LaunchGpu);
+    wallcycle_stop(wcycle_, WallCycleCounter::LaunchGpuPp);
 
     // Consider time spent in communicateHaloData as Comm.X counter
     // TODO: We need further refinement here as communicateHaloData includes launch time for async mem copy
@@ -313,7 +304,7 @@ void GpuHaloExchange::Impl::communicateHaloForces(bool accumulateForces,
 
     wallcycle_stop(wcycle_, WallCycleCounter::MoveF);
 
-    wallcycle_start_nocount(wcycle_, WallCycleCounter::LaunchGpu);
+    wallcycle_start_nocount(wcycle_, WallCycleCounter::LaunchGpuPp);
     wallcycle_sub_start(wcycle_, WallCycleSubCounter::LaunchGpuMoveF);
 
     // Unpack halo buffer into force array
@@ -330,7 +321,7 @@ void GpuHaloExchange::Impl::communicateHaloForces(bool accumulateForces,
     fReadyOnDevice_.markEvent(*haloStream_);
 
     wallcycle_sub_stop(wcycle_, WallCycleSubCounter::LaunchGpuMoveF);
-    wallcycle_stop(wcycle_, WallCycleCounter::LaunchGpu);
+    wallcycle_stop(wcycle_, WallCycleCounter::LaunchGpuPp);
 }
 
 void GpuHaloExchange::Impl::communicateHaloData(Float3* sendPtr,
@@ -536,7 +527,9 @@ void GpuHaloExchange::Impl::communicateHaloDataPeerToPeer(Float3* sendPtr,
 #else
     GMX_UNUSED_VALUE(sendPtr);
     GMX_UNUSED_VALUE(sendSize);
+    GMX_UNUSED_VALUE(sendRank);
     GMX_UNUSED_VALUE(remotePtr);
+    GMX_UNUSED_VALUE(recvRank);
 #endif
 }
 

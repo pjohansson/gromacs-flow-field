@@ -43,8 +43,6 @@ set(GMX_GPU_SYCL ON)
 
 option(GMX_SYCL_HIPSYCL "Use hipSYCL instead of Intel/Clang for SYCL compilation" OFF)
 
-option(GMX_SYCL_USE_USM "Use USM instead of SYCL buffers" ON)
-
 if(GMX_DOUBLE)
     message(FATAL_ERROR "SYCL acceleration is not available in double precision")
 endif()
@@ -264,7 +262,7 @@ else()
             DISABLE_SYCL_CXX_FLAGS_RESULT)
     
         if(DISABLE_SYCL_CXX_FLAGS_RESULT)
-            set(DISABLE_SYCL_CXX_FLAGS "-fno-sycl")
+            set(SYCL_TOOLCHAIN_CXX_FLAGS "-fno-sycl")
         endif()
         if(NOT CHECK_DISABLE_SYCL_CXX_FLAGS_QUIETLY)
             if(DISABLE_SYCL_CXX_FLAGS_RESULT)
@@ -275,42 +273,84 @@ else()
             set(CHECK_DISABLE_SYCL_CXX_FLAGS_QUIETLY 1 CACHE INTERNAL "Keep quiet on future calls to detect no-SYCL flags" FORCE)
         endif()
     endif()
-    
+
     # Find the flags to enable (or re-enable) SYCL with Intel extensions. In case we turned it off above,
     # it's important that we check the combination of both flags, to make sure the second one re-enables SYCL.
     if(NOT CHECK_SYCL_CXX_FLAGS_QUIETLY)
         message(STATUS "Checking for flags to enable SYCL")
     endif()
-    gmx_find_flag_for_source(SYCL_CXX_FLAGS_RESULT
+    set(SAMPLE_SYCL_SOURCE
         "#include <CL/sycl.hpp>
          int main(){
              sycl::queue q(sycl::default_selector{});
              return 0;
-         }
-         " "CXX" DISABLE_SYCL_CXX_FLAGS SYCL_CXX_FLAGS " -fsycl -fsycl-device-code-split=per_kernel ${SYCL_CXX_FLAGS_EXTRA}")
-    
-    string(STRIP "${SYCL_CXX_FLAGS}" SYCL_CXX_FLAGS)
-    if(NOT CHECK_SYCL_CXX_FLAGS_QUIETLY)
-        if(SYCL_CXX_FLAGS_RESULT)
-            message(STATUS "Checking for flags to enable SYCL - ${SYCL_CXX_FLAGS}")
+         }")
+    set(SYCL_CXX_FLAGS "-fsycl")
+    gmx_check_source_compiles_with_flags(
+        "${SAMPLE_SYCL_SOURCE}"
+        "${SYCL_TOOLCHAIN_CXX_FLAGS} ${SYCL_CXX_FLAGS}"
+        "CXX"
+        SYCL_CXX_FLAGS_RESULT
+        )
+    if (SYCL_CXX_FLAGS_RESULT)
+        if(NOT CHECK_SYCL_CXX_FLAGS_QUIETLY)
+            message(STATUS "Checking for flags to enable SYCL - ${SYCL_TOOLCHAIN_CXX_FLAGS} ${SYCL_CXX_FLAGS}")
         endif()
         set(CHECK_SYCL_CXX_FLAGS_QUIETLY 1 CACHE INTERNAL "Keep quiet on future calls to detect SYCL flags" FORCE)
-    endif()
-    
-    if(NOT SYCL_CXX_FLAGS_RESULT)
-        message(FATAL_ERROR "Cannot compile with SYCL Intel compiler. Try a different compiler or disable SYCL.")
+        set(SYCL_TOOLCHAIN_CXX_FLAGS "${SYCL_TOOLCHAIN_CXX_FLAGS} ${SYCL_CXX_FLAGS}")
+        set(SYCL_TOOLCHAIN_LINKER_FLAGS "${SYCL_TOOLCHAIN_LINKER_FLAGS} ${SYCL_CXX_FLAGS}")
+    else()
+        message(FATAL_ERROR "Cannot compile a SYCL program with ${SYCL_TOOLCHAIN_CXX_FLAGS} ${SYCL_CXX_FLAGS}. Try a different compiler or disable SYCL.")
     endif()
 
-    if(NOT WIN32)
-         set(SYCL_CXX_FLAGS "${SYCL_CXX_FLAGS} -ffast-math")
+    # Add kernel-splitting flag if available, both for compiling and linking
+    set(SYCL_DEVICE_CODE_SPLIT_CXX_FLAGS "-fsycl-device-code-split=per_kernel")
+    gmx_check_source_compiles_with_flags(
+        "${SAMPLE_SYCL_SOURCE}"
+        "${SYCL_TOOLCHAIN_CXX_FLAGS} ${SYCL_DEVICE_CODE_SPLIT_CXX_FLAGS}"
+        "CXX"
+        SYCL_DEVICE_CODE_SPLIT_CXX_FLAGS_RESULT
+        )
+    if (SYCL_DEVICE_CODE_SPLIT_CXX_FLAGS_RESULT)
+        set(SYCL_TOOLCHAIN_CXX_FLAGS "${SYCL_TOOLCHAIN_CXX_FLAGS} ${SYCL_DEVICE_CODE_SPLIT_CXX_FLAGS}")
+        set(SYCL_TOOLCHAIN_LINKER_FLAGS "${SYCL_TOOLCHAIN_LINKER_FLAGS} ${SYCL_DEVICE_CODE_SPLIT_CXX_FLAGS}")
+    else()
+        message(WARNING "Cannot compile SYCL with per-kernel device-code splitting. Simulations will work, but the first step will be much slower than it needs to be. Try a different compiler.")
+    endif()
+
+    # Add fast-math flag where available
+    gmx_find_flag_for_source(
+        SYCL_FAST_MATH_CXX_FLAGS_RESULT
+        "${SAMPLE_SYCL_SOURCE}"
+        "CXX"
+        SYCL_TOOLCHAIN_CXX_FLAGS
+        SYCL_FAST_MATH_CXX_FLAGS
+        "-ffast-math" "/clang:-ffast-math")
+    if (SYCL_FAST_MATH_CXX_FLAGS_RESULT)
+        set(SYCL_TOOLCHAIN_CXX_FLAGS "${SYCL_TOOLCHAIN_CXX_FLAGS} ${SYCL_FAST_MATH_CXX_FLAGS}")
+    endif()
+
+    if("${SYCL_CXX_FLAGS_EXTRA}" MATCHES "fsycl-targets=.*(nvptx64|amdgcn)")
+        # When compiling for NVIDIA/AMD, Intel LLVM produces tons of harmless warnings, ignore them
+        set(SYCL_WARNINGS_CXX_FLAGS "-Wno-linker-warnings -Wno-override-module")
+        gmx_check_source_compiles_with_flags(
+            "${SAMPLE_SYCL_SOURCE}"
+            "${SYCL_TOOLCHAIN_CXX_FLAGS} ${SYCL_WARNING_CXX_FLAGS}"
+            "CXX"
+            SYCL_WARNINGS_CXX_FLAGS_RESULT
+            )
+        if (SYCL_WARNINGS_CXX_FLAGS_RESULT)
+            set(SYCL_TOOLCHAIN_CXX_FLAGS "${SYCL_TOOLCHAIN_CXX_FLAGS} ${SYCL_WARNINGS_CXX_FLAGS}")
+        endif()
     endif()
 
     include(gmxManageFFTLibraries)
-    if(NOT GMX_FFT_MKL)
+    # Don't warn in CI builds
+    if(NOT GMX_FFT_MKL AND NOT DEFINED ENV{GITLAB_CI})
         message(WARNING "Building SYCL version with ${GMX_FFT_LIBRARY} instead of MKL. GPU FFT is disabled!")
     endif()
-    if(WIN32 AND GMX_FFT_MKL)
-        list(APPEND GMX_EXTRA_LIBRARIES "opencl")
+    if(GMX_FFT_MKL)
+	list(APPEND GMX_EXTRA_LIBRARIES "mkl_sycl;OpenCL")
     endif()
 
     # Add function wrapper similar to the one used by ComputeCPP and hipSYCL
@@ -321,8 +361,17 @@ else()
             "" # No options
             "TARGET" # One-value keyword
             "SOURCES" # Multi-value keyword
-        )
-        set_source_files_properties(${ARGS_SOURCES} PROPERTIES COMPILE_FLAGS "${SYCL_CXX_FLAGS}")
-        target_link_libraries(${ARGS_TARGET} PRIVATE ${SYCL_CXX_FLAGS})
+            )
+        # convert the space-separated string to a list
+        separate_arguments(SYCL_TOOLCHAIN_CXX_FLAGS)
+        set_property(SOURCE ${ARGS_SOURCES} APPEND PROPERTY COMPILE_OPTIONS
+            ${SYCL_TOOLCHAIN_CXX_FLAGS}
+            ${SYCL_CXX_FLAGS_EXTRA})
+        if (WIN32) # Linking flags handling is not reliable on Windows, so we pass the bare minimum
+            target_link_options(${ARGS_TARGET} PRIVATE ${SYCL_CXX_FLAGS})
+        else()
+            string(REPLACE " " ";" SYCL_TOOLCHAIN_LINKER_FLAGS_LIST "${SYCL_TOOLCHAIN_LINKER_FLAGS} ${SYCL_CXX_FLAGS_EXTRA}")
+            target_link_options(${ARGS_TARGET} PRIVATE ${SYCL_TOOLCHAIN_LINKER_FLAGS_LIST})
+        endif()
     endfunction(add_sycl_to_target)
 endif()

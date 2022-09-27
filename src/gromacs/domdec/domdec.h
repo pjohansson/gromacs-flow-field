@@ -226,9 +226,12 @@ void dd_move_x_constraints(struct gmx_domdec_t*     dd,
                            bool                     bX1IsCoord);
 
 /*! \brief Communicates the coordinates involved in virtual sites */
-void dd_move_x_vsites(const gmx_domdec_t& dd, const matrix box, rvec* x);
+void dd_move_x_vsites(const gmx_domdec_t& dd, const matrix box, gmx::ArrayRef<gmx::RVec> x);
 /*! \brief Communicates the positions and velocities involved in virtual sites */
-void dd_move_x_and_v_vsites(const gmx_domdec_t& dd, const matrix box, rvec* x, rvec* v);
+void dd_move_x_and_v_vsites(const gmx_domdec_t&      dd,
+                            const matrix             box,
+                            gmx::ArrayRef<gmx::RVec> x,
+                            gmx::ArrayRef<gmx::RVec> v);
 
 /*! \brief Returns the local atom count array for all constraints
  *
@@ -287,7 +290,7 @@ void communicateGpuHaloForces(const t_commrec&                                  
 /*! \brief Wraps the \c positions so that atoms from the same
  * update group share the same periodic image wrt \c box.
  *
- * When DD and update groups are in use, the simulation master rank
+ * When DD and update groups are in use, the simulation main rank
  * should call this to ensure that e.g. when restarting a simulation
  * that did not use update groups that the coordinates satisfy the new
  * requirements.

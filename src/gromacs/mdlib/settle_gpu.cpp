@@ -45,10 +45,9 @@
 
 #include "settle_gpu.h"
 
-#include <assert.h>
-#include <stdio.h>
-
+#include <cassert>
 #include <cmath>
+#include <cstdio>
 
 #include <algorithm>
 
@@ -152,6 +151,9 @@ SettleGpu::~SettleGpu()
     {
         return;
     }
+    // Wait for all the tasks to complete before freeing the memory. See #4519.
+    deviceStream_.synchronize();
+
     freeDeviceBuffer(&d_virialScaled_);
     if (numAtomIdsAlloc_ > 0)
     {

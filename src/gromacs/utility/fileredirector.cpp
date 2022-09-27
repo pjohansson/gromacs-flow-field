@@ -66,7 +66,7 @@ namespace
 class DefaultInputRedirector : public IFileInputRedirector
 {
 public:
-    bool fileExists(const char* filename, File::NotFoundHandler onNotFound) const override
+    bool fileExists(const std::filesystem::path& filename, const File::NotFoundHandler& onNotFound) const override
     {
         return File::exists(filename, onNotFound);
     }
@@ -85,7 +85,7 @@ class DefaultOutputRedirector : public IFileOutputRedirector
 {
 public:
     TextOutputStream&       standardOutput() override { return TextOutputFile::standardOutput(); }
-    TextOutputStreamPointer openTextOutputFile(const char* filename) override
+    TextOutputStreamPointer openTextOutputFile(const std::filesystem::path& filename) override
     {
         return TextOutputStreamPointer(new TextOutputFile(filename));
     }

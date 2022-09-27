@@ -66,9 +66,10 @@
 #include "gromacs/ewald/pme.h"
 #include "gromacs/ewald/pme_coordinate_receiver_gpu.h"
 #include "gromacs/hardware/device_information.h"
-#include "gromacs/math/invertmatrix.h"
+#include "gromacs/math/boxmatrix.h"
 #include "gromacs/math/units.h"
 #include "gromacs/timing/gpu_timing.h"
+#include "gromacs/timing/wallcycle.h"
 #include "gromacs/utility/exceptions.h"
 #include "gromacs/utility/fatalerror.h"
 #include "gromacs/utility/gmxassert.h"
@@ -1203,7 +1204,8 @@ static void pme_gpu_copy_common_data_from(const gmx_pme_t* pme)
  */
 static void pme_gpu_select_best_performing_pme_spreadgather_kernels(PmeGpu* pmeGpu)
 {
-    if (GMX_GPU_CUDA && pmeGpu->kernelParams->atoms.nAtoms > c_pmeGpuPerformanceAtomLimit)
+    if (((GMX_GPU_CUDA != 0) || (GMX_GPU_SYCL != 0))
+        && pmeGpu->kernelParams->atoms.nAtoms > c_pmeGpuPerformanceAtomLimit)
     {
         pmeGpu->settings.threadsPerAtom     = ThreadsPerAtom::Order;
         pmeGpu->settings.recalculateSplines = true;
@@ -1314,6 +1316,9 @@ void pme_gpu_reinit(gmx_pme_t*           pme,
 
 void pme_gpu_destroy(PmeGpu* pmeGpu)
 {
+    // Wait for all the tasks to complete before freeing the memory. See #4519.
+    pmeGpu->archSpecific->pmeStream_.synchronize();
+
     /* Free lots of data */
     pme_gpu_free_energy_virial(pmeGpu);
     pme_gpu_free_bspline_values(pmeGpu);
@@ -1663,7 +1668,8 @@ void pme_gpu_spread(const PmeGpu*                  pmeGpu,
                     bool                           spreadCharges,
                     const real                     lambda,
                     const bool                     useGpuDirectComm,
-                    gmx::PmeCoordinateReceiverGpu* pmeCoordinateReceiverGpu)
+                    gmx::PmeCoordinateReceiverGpu* pmeCoordinateReceiverGpu,
+                    gmx_wallcycle*                 wcycle)
 {
     GMX_ASSERT(
             pmeGpu->common->ngrids == 1 || pmeGpu->common->ngrids == 2,
@@ -1776,8 +1782,12 @@ void pme_gpu_spread(const PmeGpu*                  pmeGpu,
 
             for (int i = 0; i < numStagesInPipeline; i++)
             {
+                wallcycle_start(wcycle, WallCycleCounter::WaitGpuPmePPRecvX);
                 int senderRank = manageSyncWithPpCoordinateSenderGpu(
-                        pmeGpu, pmeCoordinateReceiverGpu, kernelParamsPtr->usePipeline, i);
+                        pmeGpu, pmeCoordinateReceiverGpu, kernelParamsPtr->usePipeline != 0, i);
+                wallcycle_stop(wcycle, WallCycleCounter::WaitGpuPmePPRecvX);
+
+                wallcycle_start(wcycle, WallCycleCounter::LaunchGpuPme);
 
                 // set kernel configuration options specific to this stage of the pipeline
                 std::tie(kernelParamsPtr->pipelineAtomStart, kernelParamsPtr->pipelineAtomEnd) =
@@ -1811,24 +1821,29 @@ void pme_gpu_spread(const PmeGpu*                  pmeGpu,
 #endif
 
                 launchGpuKernel(kernelPtr, config, *launchStream, timingEvent, "PME spline/spread", kernelArgs);
+                wallcycle_stop(wcycle, WallCycleCounter::LaunchGpuPme);
             }
+            wallcycle_start(wcycle, WallCycleCounter::LaunchGpuPme);
             // Set dependencies for PME stream on all pipeline streams
             for (int i = 0; i < pmeCoordinateReceiverGpu->ppCommNumSenderRanks(); i++)
             {
-                GpuEventSynchronizer event;
-                event.markEvent(*(pmeCoordinateReceiverGpu->ppCommStream(i)));
-                event.enqueueWaitEvent(pmeGpu->archSpecific->pmeStream_);
+                pmeCoordinateReceiverGpu->insertAsDependencyIntoStream(i, pmeGpu->archSpecific->pmeStream_);
             }
+            wallcycle_stop(wcycle, WallCycleCounter::LaunchGpuPme);
         }
         else // pipelining is not in use
         {
             if (useGpuDirectComm) // Sync all PME-PP communications to PME stream
             {
+                wallcycle_start(wcycle, WallCycleCounter::WaitGpuPmePPRecvX);
                 for (int i = 0; i < pmeCoordinateReceiverGpu->ppCommNumSenderRanks(); i++)
                 {
                     manageSyncWithPpCoordinateSenderGpu(pmeGpu, pmeCoordinateReceiverGpu);
                 }
+                wallcycle_stop(wcycle, WallCycleCounter::WaitGpuPmePPRecvX);
             }
+
+            wallcycle_start(wcycle, WallCycleCounter::LaunchGpuPme);
 
 #if c_canEmbedBuffers
             const auto kernelArgs = prepareGpuKernelArguments(kernelPtr, config, kernelParamsPtr);
@@ -1855,6 +1870,8 @@ void pme_gpu_spread(const PmeGpu*                  pmeGpu,
                             timingEvent,
                             "PME spline/spread",
                             kernelArgs);
+
+            wallcycle_stop(wcycle, WallCycleCounter::LaunchGpuPme);
         }
 
         pme_gpu_stop_timing(pmeGpu, timingId);
@@ -1865,8 +1882,10 @@ void pme_gpu_spread(const PmeGpu*                  pmeGpu,
     // halo exchange
     if (settings.useDecomposition)
     {
-        pmeGpuGridHaloExchange(pmeGpu);
+        pmeGpuGridHaloExchange(pmeGpu, wcycle);
     }
+
+    wallcycle_start(wcycle, WallCycleCounter::LaunchGpuPme);
 
     // full PME GPU decomposition
     const bool convertPmeToFftGridOnGpu = settings.performGPUFFT && settings.useDecomposition;
@@ -1907,6 +1926,8 @@ void pme_gpu_spread(const PmeGpu*                  pmeGpu,
     {
         pme_gpu_copy_output_spread_atom_data(pmeGpu);
     }
+
+    wallcycle_stop(wcycle, WallCycleCounter::LaunchGpuPme);
 }
 
 void pme_gpu_solve(const PmeGpu* pmeGpu,
@@ -2150,7 +2171,11 @@ inline auto selectGatherKernelPtr(const PmeGpu*  pmeGpu,
     return kernelPtr;
 }
 
-void pme_gpu_gather(PmeGpu* pmeGpu, real** h_grids, gmx_parallel_3dfft_t* fftSetup, const float lambda)
+void pme_gpu_gather(PmeGpu*               pmeGpu,
+                    real**                h_grids,
+                    gmx_parallel_3dfft_t* fftSetup,
+                    const float           lambda,
+                    gmx_wallcycle*        wcycle)
 {
     GMX_ASSERT(
             pmeGpu->common->ngrids == 1 || pmeGpu->common->ngrids == 2,
@@ -2158,6 +2183,8 @@ void pme_gpu_gather(PmeGpu* pmeGpu, real** h_grids, gmx_parallel_3dfft_t* fftSet
 
     const auto& settings        = pmeGpu->settings;
     auto*       kernelParamsPtr = pmeGpu->kernelParams.get();
+
+    wallcycle_start(wcycle, WallCycleCounter::LaunchGpuPme);
 
     // full PME GPU decomposition
     const bool convertFftToPmeGridOnGpu = settings.performGPUFFT && settings.useDecomposition;
@@ -2199,11 +2226,15 @@ void pme_gpu_gather(PmeGpu* pmeGpu, real** h_grids, gmx_parallel_3dfft_t* fftSet
         pme_gpu_copy_input_gather_atom_data(pmeGpu);
     }
 
+    wallcycle_stop(wcycle, WallCycleCounter::LaunchGpuPme);
+
     // reverse halo exchange
     if (settings.useDecomposition)
     {
-        pmeGpuGridHaloExchangeReverse(pmeGpu);
+        pmeGpuGridHaloExchangeReverse(pmeGpu, wcycle);
     }
+
+    wallcycle_start(wcycle, WallCycleCounter::LaunchGpuPme);
 
     /* Set if we have unit tests */
     const bool   readGlobal = pmeGpu->settings.copyAllOutputs;
@@ -2287,6 +2318,8 @@ void pme_gpu_gather(PmeGpu* pmeGpu, real** h_grids, gmx_parallel_3dfft_t* fftSet
     {
         pme_gpu_copy_output_forces(pmeGpu);
     }
+
+    wallcycle_stop(wcycle, WallCycleCounter::LaunchGpuPme);
 }
 
 DeviceBuffer<gmx::RVec> pme_gpu_get_kernelparam_forces(const PmeGpu* pmeGpu)

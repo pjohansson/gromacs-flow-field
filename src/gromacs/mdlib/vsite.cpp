@@ -84,7 +84,7 @@
  * Note that this option is turned off with large (local) atom counts
  * to avoid high memory usage.
  *
- * Any remaining vsites are assigned to a separate master thread task.
+ * Any remaining vsites are assigned to a separate main thread task.
  */
 namespace gmx
 {
@@ -1169,12 +1169,11 @@ static void construct_vsites(const ThreadingInfo*            threadingInfo,
     {
         if (calculateVelocity == VSiteCalculateVelocity::Yes)
         {
-            dd_move_x_and_v_vsites(
-                    *domainInfo.domdec_, box, as_rvec_array(x.data()), as_rvec_array(v.data()));
+            dd_move_x_and_v_vsites(*domainInfo.domdec_, box, x, v);
         }
         else
         {
-            dd_move_x_vsites(*domainInfo.domdec_, box, as_rvec_array(x.data()));
+            dd_move_x_vsites(*domainInfo.domdec_, box, x);
         }
     }
 
@@ -2740,7 +2739,7 @@ static void assignVsitesToThread(VsiteThread*                    tData,
                         GMX_ASSERT(ptype[iat[j]] != ParticleType::VSite,
                                    "A vsite to be assigned in assignVsitesToThread has a vsite as "
                                    "a constructing atom that does not belong to our task, such "
-                                   "vsites should be assigned to the single 'master' task");
+                                   "vsites should be assigned to the single 'main' task");
 
                         if (tData->useInterdependentTask)
                         {

@@ -179,9 +179,6 @@
 /* Fallback path for VMD plug-ins */
 #define GMX_VMD_PLUGIN_PATH "@GMX_VMD_PLUGIN_PATH@"
 
-/* Default path for DSSP program */
-#define GMX_DSSP_PROGRAM_PATH "@GMX_DSSP_PROGRAM_PATH@"
-
 /* Define when pthreads are used */
 #cmakedefine THREAD_PTHREADS
 
@@ -233,15 +230,14 @@
 /* Define if Intel's DPC++ is used (default unless hipSYCL is chosen) */
 #define GMX_SYCL_DPCPP (!GMX_SYCL_HIPSYCL && GMX_GPU_SYCL)
 
-/* Define if we wish to use USM (otherwise buffer-accessor mechanism is used) */
-#cmakedefine01 GMX_SYCL_USE_USM
-
 /* Use a single compilation unit when compiling the CUDA (non-bonded) kernels.  */
 #cmakedefine01 GMX_CUDA_NB_SINGLE_COMPILATION_UNIT
 
-/* Use CUDA-aware MPI.  */
+/* Whether MPI can report its GPU-awareness  */
 #cmakedefine01 HAVE_MPI_EXT
 #cmakedefine01 MPI_SUPPORTS_CUDA_AWARE_DETECTION
+#cmakedefine01 MPI_SUPPORTS_HIP_AWARE_DETECTION
+#cmakedefine01 MPI_SUPPORTS_ZE_AWARE_DETECTION
 
 /* Define if HeFFTe library found */
 #cmakedefine01 GMX_USE_Heffte

@@ -43,6 +43,8 @@
 
 #include "config.h"
 
+#include <filesystem>
+
 #if GMX_FFT_FFTW3 || GMX_FFT_ARMPL_FFTW3
 // Needed for construction of the FFT library description string
 #    include <fftw3.h>
@@ -190,8 +192,29 @@ void printCopyright(gmx::TextWriter* writer)
             writer, "Coordinated by the GROMACS project leaders:", gmx::currentProjectLeaders);
 }
 
+std::string describeMkl()
+{
+#if HAVE_LIBMKL
+    MKLVersion mklVersion;
+    mkl_get_version(&mklVersion);
+    auto description = formatString("Intel MKL version %d.%d.%d Build %s",
+                                    mklVersion.MajorVersion,
+                                    mklVersion.MinorVersion,
+                                    mklVersion.UpdateVersion,
+                                    mklVersion.Build);
+    if (mklVersion.ProductStatus != std::string("Product"))
+    {
+        description += " ";
+        description += mklVersion.ProductStatus;
+    }
+    return description;
+#else
+    return "Intel MKL";
+#endif
+}
+
 //! Construct a string that describes the library that provides CPU FFT support to this build
-const char* getCpuFftDescriptionString()
+std::string getCpuFftDescriptionString()
 {
 // Define the FFT description string
 #if GMX_FFT_FFTW3 || GMX_FFT_ARMPL_FFTW3
@@ -208,7 +231,7 @@ const char* getCpuFftDescriptionString()
 #    endif
 #endif
 #if GMX_FFT_MKL
-    return "Intel MKL";
+    return describeMkl();
 #endif
 #if GMX_FFT_FFTPACK
     return "fftpack (built-in)";
@@ -216,7 +239,7 @@ const char* getCpuFftDescriptionString()
 };
 
 //! Construct a string that describes the library that provides GPU FFT support to this build
-const char* getGpuFftDescriptionString()
+std::string getGpuFftDescriptionString()
 {
     if (GMX_GPU)
     {
@@ -230,7 +253,14 @@ const char* getGpuFftDescriptionString()
         }
         else if (GMX_GPU_SYCL)
         {
-            return "unknown";
+            if (GMX_FFT_MKL)
+            {
+                return describeMkl();
+            }
+            else
+            {
+                return "unknown";
+            }
         }
         else
         {
@@ -269,11 +299,23 @@ void gmx_print_version_info(gmx::TextWriter* writer)
 #if GMX_THREAD_MPI
     writer->writeLine("MPI library:        thread_mpi");
 #elif GMX_MPI
-    const bool haveDetectedCudaAwareMpi =
-            (gmx::checkMpiCudaAwareSupport() == gmx::GpuAwareMpiStatus::Supported);
-    if (haveDetectedCudaAwareMpi)
+    std::vector<std::string> gpuAwareBackendsSupported;
+    if (gmx::checkMpiCudaAwareSupport() == gmx::GpuAwareMpiStatus::Supported)
     {
-        writer->writeLine("MPI library:        MPI (CUDA-aware)");
+        gpuAwareBackendsSupported.emplace_back("CUDA");
+    }
+    if (gmx::checkMpiHipAwareSupport() == gmx::GpuAwareMpiStatus::Supported)
+    {
+        gpuAwareBackendsSupported.emplace_back("HIP");
+    }
+    if (gmx::checkMpiZEAwareSupport() == gmx::GpuAwareMpiStatus::Supported)
+    {
+        gpuAwareBackendsSupported.emplace_back("LevelZero");
+    }
+    if (!gpuAwareBackendsSupported.empty())
+    {
+        writer->writeLine(formatString("MPI library:        MPI (GPU-aware: %s)",
+                                       gmx::joinStrings(gpuAwareBackendsSupported, ", ").c_str()));
     }
     else
     {
@@ -289,9 +331,12 @@ void gmx_print_version_info(gmx::TextWriter* writer)
     writer->writeLine("OpenMP support:     disabled");
 #endif
     writer->writeLine(formatString("GPU support:        %s", getGpuImplementationString()));
+#if GMX_GPU
+    writer->writeLine(formatString("NB cluster size:    %d", GMX_GPU_NB_CLUSTER_SIZE));
+#endif
     writer->writeLine(formatString("SIMD instructions:  %s", GMX_SIMD_STRING));
-    writer->writeLine(formatString("CPU FFT library:    %s", getCpuFftDescriptionString()));
-    writer->writeLine(formatString("GPU FFT library:    %s", getGpuFftDescriptionString()));
+    writer->writeLine(formatString("CPU FFT library:    %s", getCpuFftDescriptionString().c_str()));
+    writer->writeLine(formatString("GPU FFT library:    %s", getGpuFftDescriptionString().c_str()));
 #if GMX_TARGET_X86
     writer->writeLine(formatString("RDTSCP usage:       %s", GMX_USE_RDTSCP ? "enabled" : "disabled"));
 #endif
@@ -316,7 +361,7 @@ void gmx_print_version_info(gmx::TextWriter* writer)
 
 
     /* TODO: The below strings can be quite long, so it would be nice to wrap
-     * them. Can wait for later, as the master branch has ready code to do all
+     * them. Can wait for later, as the main branch has ready code to do all
      * that. */
     writer->writeLine(formatString("C compiler:         %s", BUILD_C_COMPILER));
     writer->writeLine(formatString(
@@ -326,8 +371,12 @@ void gmx_print_version_info(gmx::TextWriter* writer)
             "C++ compiler flags: %s %s", BUILD_CXXFLAGS, CMAKE_BUILD_CONFIGURATION_CXX_FLAGS));
 #if HAVE_LIBMKL
     /* MKL might be used for LAPACK/BLAS even if FFTs use FFTW, so keep it separate */
-    writer->writeLine(formatString(
-            "Intel MKL version:  %d.%d.%d", __INTEL_MKL__, __INTEL_MKL_MINOR__, __INTEL_MKL_UPDATE__));
+    MKLVersion mklVersion;
+    mkl_get_version(&mklVersion);
+    writer->writeLine(formatString("Intel MKL version:  %d.%d.%d",
+                                   mklVersion.MajorVersion,
+                                   mklVersion.MinorVersion,
+                                   mklVersion.UpdateVersion));
 #endif
 #if GMX_GPU_OPENCL
     writer->writeLine(formatString("OpenCL include dir: %s", OPENCL_INCLUDE_DIR));
@@ -427,21 +476,21 @@ void printBinaryInformation(TextWriter*                      writer,
         writer->writeLine(formatString(
                 "%sGROMACS:      %s, version %s%s%s", prefix, name, gmx_version(), precisionString, suffix));
     }
-    const char* const binaryPath = programContext.fullBinaryPath();
-    if (!gmx::isNullOrEmpty(binaryPath))
+    const auto& binaryPath = programContext.fullBinaryPath();
+    if (!binaryPath.empty())
     {
-        writer->writeLine(formatString("%sExecutable:   %s%s", prefix, binaryPath, suffix));
+        writer->writeLine(formatString("%sExecutable:   %s%s", prefix, binaryPath.c_str(), suffix));
     }
     const gmx::InstallationPrefixInfo installPrefix = programContext.installationPrefix();
-    if (!gmx::isNullOrEmpty(installPrefix.path))
+    if (!installPrefix.path.empty())
     {
         writer->writeLine(formatString("%sData prefix:  %s%s%s",
                                        prefix,
-                                       installPrefix.path,
+                                       installPrefix.path.c_str(),
                                        installPrefix.bSourceLayout ? " (source tree)" : "",
                                        suffix));
     }
-    const std::string workingDir = Path::getWorkingDirectory();
+    const auto workingDir = std::filesystem::current_path();
     if (!workingDir.empty())
     {
         writer->writeLine(formatString("%sWorking dir:  %s%s", prefix, workingDir.c_str(), suffix));

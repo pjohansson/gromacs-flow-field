@@ -212,7 +212,7 @@ public:
      *
      * \param[in]  ms      Multi-sim handler.
      *
-     * May only be called from the master rank of each simulation.
+     * May only be called from the main rank of each simulation.
      *
      * \throws InconsistentInputError if either simulations restart
      * differently, or from checkpoints from different simulation parts.
@@ -293,7 +293,7 @@ StartingBehaviorHandler chooseStartingBehavior(const AppendingBehavior appending
                        "The checkpoint file or its reading is broken, as no output "
                        "file information is stored in it");
     const char* logFilename = outputFiles[0].filename;
-    GMX_RELEASE_ASSERT(Path::extensionMatches(logFilename, ftp2ext(efLOG)),
+    GMX_RELEASE_ASSERT(extensionMatches(std::filesystem::path(logFilename), ftp2ext(efLOG)),
                        formatString("The checkpoint file or its reading is broken, the first "
                                     "output file '%s' must be a log file with extension '%s'",
                                     logFilename,
@@ -639,7 +639,7 @@ std::optional<int> StartingBehaviorHandler::makeIndexOfNextPart(const AppendingB
 
 } // namespace
 
-std::tuple<StartingBehavior, LogFilePtr> handleRestart(const bool              isSimulationMaster,
+std::tuple<StartingBehavior, LogFilePtr> handleRestart(const bool              isSimulationMain,
                                                        MPI_Comm                communicator,
                                                        const gmx_multisim_t*   ms,
                                                        const AppendingBehavior appendingBehavior,
@@ -654,10 +654,10 @@ std::tuple<StartingBehavior, LogFilePtr> handleRestart(const bool              i
     int                numErrorsFound = 0;
     std::exception_ptr exceptionPtr;
 
-    // Only the master rank of each simulation can do anything with
+    // Only the main rank of each simulation can do anything with
     // output files, so it is the only one that needs to consider
     // whether a restart might take place, and how to implement it.
-    if (isSimulationMaster)
+    if (isSimulationMain)
     {
         try
         {
@@ -691,7 +691,7 @@ std::tuple<StartingBehavior, LogFilePtr> handleRestart(const bool              i
             numErrorsFound = 1;
         }
     }
-    // Since the master rank (perhaps of only one simulation) may have
+    // Since the main rank (perhaps of only one simulation) may have
     // found an error condition, we now coordinate the behavior across
     // all ranks. However, only the applicable ranks will throw a
     // non-default exception.

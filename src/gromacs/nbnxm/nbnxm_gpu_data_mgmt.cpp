@@ -111,8 +111,39 @@ static inline void init_ewald_coulomb_force_table(const EwaldCorrectionTables& t
             &nbp->coulomb_tab, &nbp->coulomb_tab_texobj, tables.tableF.data(), tables.tableF.size(), deviceContext);
 }
 
+static bool useTabulatedEwaldByDefault(const DeviceInformation& deviceInfo)
+{
+    /* By default, use analytical Ewald except:
+     *  - NVIDIA CC 7.0 and 8.0,
+     *  - all AMD GPUs (although tested for gfx906 and 908 only).
+     *
+     * Note 1: this function does not handle OpenCL.
+     * Note 2: for SYCL, the heuristics are taken from CUDA/HIP ports, and were only partially
+     *         verified on oneAPI/hipSYCL themselves on AMD gfx 906/908/90a.
+     */
+#if GMX_GPU_CUDA
+    return (deviceInfo.prop.major == 7 && deviceInfo.prop.minor == 0)
+           || (deviceInfo.prop.major == 8 && deviceInfo.prop.minor == 0);
+#elif GMX_GPU_SYCL
+    switch (deviceInfo.deviceVendor)
+    {
+        case DeviceVendor::Amd: return true;
+        case DeviceVendor::Nvidia:
+        {
+            const int major = deviceInfo.hardwareVersionMajor.value_or(-1);
+            const int minor = deviceInfo.hardwareVersionMinor.value_or(-1);
+            return ((major == 7 && minor == 0) || (major == 8 && minor == 0));
+        }
+        default: return false;
+    }
+#else
+    GMX_UNUSED_VALUE(deviceInfo);
+    return false;
+#endif
+}
+
 static inline ElecType nbnxn_gpu_pick_ewald_kernel_type(const interaction_const_t& ic,
-                                                        const DeviceInformation gmx_unused& deviceInfo)
+                                                        const DeviceInformation&   deviceInfo)
 {
     bool bTwinCut = (ic.rcoulomb != ic.rvdw);
 
@@ -129,16 +160,8 @@ static inline ElecType nbnxn_gpu_pick_ewald_kernel_type(const interaction_const_
                 "requested through environment variables.");
     }
 
-    /* By default, use analytical Ewald except with CUDA on NVIDIA CC 7.0 and 8.0.
-     */
-    const bool c_useTabulatedEwaldDefault =
-#if GMX_GPU_CUDA
-            (deviceInfo.prop.major == 7 && deviceInfo.prop.minor == 0)
-            || (deviceInfo.prop.major == 8 && deviceInfo.prop.minor == 0);
-#else
-            false;
-#endif
-    bool bUseAnalyticalEwald = !c_useTabulatedEwaldDefault;
+    const bool c_useTabulatedEwaldDefault = useTabulatedEwaldByDefault(deviceInfo);
+    bool       bUseAnalyticalEwald        = !c_useTabulatedEwaldDefault;
     if (forceAnalyticalEwald)
     {
         bUseAnalyticalEwald = true;
@@ -197,17 +220,17 @@ static inline void init_plist(gpu_plist* pl)
 {
     /* initialize to nullptr pointers to data that is not allocated here and will
        need reallocation in nbnxn_gpu_init_pairlist */
-    pl->sci   = nullptr;
-    pl->cj4   = nullptr;
-    pl->imask = nullptr;
-    pl->excl  = nullptr;
+    pl->sci      = nullptr;
+    pl->cjPacked = nullptr;
+    pl->imask    = nullptr;
+    pl->excl     = nullptr;
 
     /* size -1 indicates that the respective array hasn't been initialized yet */
     pl->na_c                   = -1;
     pl->nsci                   = -1;
     pl->sci_nalloc             = -1;
-    pl->ncj4                   = -1;
-    pl->cj4_nalloc             = -1;
+    pl->ncjPacked              = -1;
+    pl->cjPacked_nalloc        = -1;
     pl->nimask                 = -1;
     pl->imask_nalloc           = -1;
     pl->nexcl                  = -1;
@@ -559,18 +582,21 @@ void gpu_init_pairlist(NbnxmGpu* nb, const NbnxnPairlistGpu* h_plist, const Inte
                        GpuApiCallBehavior::Async,
                        bDoTime ? iTimers.pl_h2d.fetchNextEvent() : nullptr);
 
-    reallocateDeviceBuffer(
-            &d_plist->cj4, h_plist->cj4.size(), &d_plist->ncj4, &d_plist->cj4_nalloc, deviceContext);
-    copyToDeviceBuffer(&d_plist->cj4,
-                       h_plist->cj4.data(),
+    reallocateDeviceBuffer(&d_plist->cjPacked,
+                           h_plist->cjPacked.size(),
+                           &d_plist->ncjPacked,
+                           &d_plist->cjPacked_nalloc,
+                           deviceContext);
+    copyToDeviceBuffer(&d_plist->cjPacked,
+                       h_plist->cjPacked.list_.data(),
                        0,
-                       h_plist->cj4.size(),
+                       h_plist->cjPacked.size(),
                        deviceStream,
                        GpuApiCallBehavior::Async,
                        bDoTime ? iTimers.pl_h2d.fetchNextEvent() : nullptr);
 
     reallocateDeviceBuffer(&d_plist->imask,
-                           h_plist->cj4.size() * c_nbnxnGpuClusterpairSplit,
+                           h_plist->cjPacked.size() * c_nbnxnGpuClusterpairSplit,
                            &d_plist->nimask,
                            &d_plist->imask_nalloc,
                            deviceContext);
@@ -1092,6 +1118,20 @@ void gpu_free(NbnxmGpu* nb)
         return;
     }
 
+    /* Synchronize to make sure there are no leftover operations in the streams.
+     * Ideally, there should not be any, but just in case we synchronize there
+     * to avoid freeing buffers that can be still used. See #4519.
+     *
+     * In practice, that's not needed for CUDA since cudaFree synchronizes internally.
+     * But explicitly waiting for tasks to complete before freeing the memory they use is logically
+     * sound and should not have any performance impact.
+     */
+    nb->deviceStreams[Nbnxm::InteractionLocality::Local]->synchronize();
+    if (nb->deviceStreams[Nbnxm::InteractionLocality::NonLocal])
+    {
+        nb->deviceStreams[Nbnxm::InteractionLocality::NonLocal]->synchronize();
+    }
+
     gpu_free_platform_specific(nb);
 
     delete nb->timers;
@@ -1135,7 +1175,7 @@ void gpu_free(NbnxmGpu* nb)
     /* Free plist */
     auto* plist = nb->plist[InteractionLocality::Local];
     freeDeviceBuffer(&plist->sci);
-    freeDeviceBuffer(&plist->cj4);
+    freeDeviceBuffer(&plist->cjPacked);
     freeDeviceBuffer(&plist->imask);
     freeDeviceBuffer(&plist->excl);
     delete plist;
@@ -1143,7 +1183,7 @@ void gpu_free(NbnxmGpu* nb)
     {
         auto* plist_nl = nb->plist[InteractionLocality::NonLocal];
         freeDeviceBuffer(&plist_nl->sci);
-        freeDeviceBuffer(&plist_nl->cj4);
+        freeDeviceBuffer(&plist_nl->cjPacked);
         freeDeviceBuffer(&plist_nl->imask);
         freeDeviceBuffer(&plist_nl->excl);
         delete plist_nl;
@@ -1167,6 +1207,12 @@ void gpu_free(NbnxmGpu* nb)
     {
         fprintf(debug, "Cleaned up NBNXM GPU data structures.\n");
     }
+}
+
+NBAtomDataGpu* gpuGetNBAtomData(NbnxmGpu* nb)
+{
+    GMX_ASSERT(nb != nullptr, "nb pointer must be valid");
+    return nb->atdat;
 }
 
 DeviceBuffer<gmx::RVec> gpu_get_f(NbnxmGpu* nb)

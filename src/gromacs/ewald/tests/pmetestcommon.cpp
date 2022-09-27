@@ -61,7 +61,7 @@
 #include "gromacs/ewald/pme_spread.h"
 #include "gromacs/fft/parallel_3dfft.h"
 #include "gromacs/gpu_utils/gpu_utils.h"
-#include "gromacs/math/invertmatrix.h"
+#include "gromacs/math/boxmatrix.h"
 #include "gromacs/mdtypes/commrec.h"
 #include "gromacs/pbcutil/pbc.h"
 #include "gromacs/topology/topology.h"
@@ -298,11 +298,7 @@ static void pmeGetGridAndSizesInternal(const gmx_pme_t* /*unused*/,
                                        CodePath /*unused*/,
                                        ValueType*& /*unused*/, //NOLINT(google-runtime-references)
                                        IVec& /*unused*/,       //NOLINT(google-runtime-references)
-                                       IVec& /*unused*/)       //NOLINT(google-runtime-references)
-{
-    GMX_THROW(InternalError("Deleted function call"));
-    // explicitly deleting general template does not compile in clang, see https://llvm.org/bugs/show_bug.cgi?id=17537
-}
+                                       IVec& /*unused*/) = delete; //NOLINT(google-runtime-references)
 
 //! Getting the PME real grid memory buffer and its sizes
 template<>
@@ -376,7 +372,8 @@ void pmePerformSplineAndSpread(gmx_pme_t* pme,
                            spreadCharges,
                            lambdaQ,
                            useGpuDirectComm,
-                           pmeCoordinateReceiverGpu);
+                           pmeCoordinateReceiverGpu,
+                           nullptr);
         }
         break;
 #endif
@@ -498,7 +495,7 @@ void pmePerformGather(gmx_pme_t* pme, CodePath mode, ForcesVector& forces)
             PmeOutput  output = pme_gpu_getOutput(*pme, computeEnergyAndVirial, lambdaQ);
             GMX_ASSERT(forces.size() == output.forces_.size(),
                        "Size of force buffers did not match");
-            pme_gpu_gather(pme->gpu, fftgrid, pme->pfft_setup, lambdaQ);
+            pme_gpu_gather(pme->gpu, fftgrid, pme->pfft_setup, lambdaQ, nullptr);
             std::copy(std::begin(output.forces_), std::end(output.forces_), std::begin(forces));
         }
         break;

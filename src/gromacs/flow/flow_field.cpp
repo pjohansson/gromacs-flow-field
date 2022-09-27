@@ -466,10 +466,10 @@ static void mpi_collect_single_flow_field(FlowField       &flow_field,
     );
 
     MPI_Reduce(
-        MASTER(cr) ? MPI_IN_PLACE : flow_field.values.data(),
-        MASTER(cr) ? flow_field.values.data() : NULL,
+        MAIN(cr) ? MPI_IN_PLACE : flow_field.values.data(),
+        MAIN(cr) ? flow_field.values.data() : NULL,
         FlowVar::NumVars * flow_field.values.size(), // total number of doubles stored in vector
-        MPI_DOUBLE, MPI_SUM, MASTERRANK(cr),
+        MPI_DOUBLE, MPI_SUM, MAINRANK(cr),
         cr->mpi_comm_mygroup
     );
 }
@@ -635,7 +635,7 @@ void flow_collect_or_output(FlowData               &flowcr,
     {
         mpi_collect_flow_data_on_master(flowcr, cr);
 
-        if (MASTER(cr))
+        if (MAIN(cr))
         {
             const auto output_data =
                 get_averaged_flow_fields_for_output(flowcr);

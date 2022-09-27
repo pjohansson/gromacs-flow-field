@@ -52,12 +52,12 @@
 #include "gromacs/math/coordinatetransformation.h"
 #include "gromacs/math/densityfit.h"
 #include "gromacs/math/multidimarray.h"
+#include "gromacs/mdrunutility/mdmodulesnotifiers.h"
 #include "gromacs/mdtypes/imdmodule.h"
 #include "gromacs/selection/indexutil.h"
 #include "gromacs/utility/classhelpers.h"
 #include "gromacs/utility/exceptions.h"
 #include "gromacs/utility/keyvaluetreebuilder.h"
-#include "gromacs/utility/mdmodulesnotifiers.h"
 
 #include "densityfittingforceprovider.h"
 #include "densityfittingoptions.h"
@@ -277,7 +277,7 @@ public:
      *   - the writing of checkpoint data
      *     by taking a MDModulesWriteCheckpointData as parameter
      *   - the reading of checkpoint data
-     *     by taking a MDModulesCheckpointReadingDataOnMaster as parameter
+     *     by taking a MDModulesCheckpointReadingDataOnMain as parameter
      *   - the broadcasting of checkpoint data
      *     by taking MDModulesCheckpointReadingBroadcast as parameter
      */
@@ -326,7 +326,7 @@ public:
         notifiers->checkpointingNotifier_.subscribe(checkpointDataWriting);
 
         // reading checkpoint data
-        const auto checkpointDataReading = [this](MDModulesCheckpointReadingDataOnMaster checkpointData) {
+        const auto checkpointDataReading = [this](MDModulesCheckpointReadingDataOnMain checkpointData) {
             densityFittingState_.readState(checkpointData.checkpointedData_,
                                            DensityFittingModuleInfo::name_);
         };

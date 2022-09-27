@@ -68,12 +68,10 @@ See Also:
 import argparse
 import collections
 import collections.abc
+import copy
+import packaging.version
+import shlex
 import typing
-from distutils.version import StrictVersion
-
-import hpccm
-import hpccm.config
-from hpccm.building_blocks.base import bb_base
 
 try:
     import utility
@@ -82,13 +80,25 @@ except ImportError:
         'This module assumes availability of supporting modules in the same directory. Add the directory to '
         'PYTHONPATH or invoke Python from within the module directory so module location can be resolved.')
 
+
+def shlex_join(split_command):
+    """Return a shell-escaped string from *split_command*.
+
+    Copied from Python 3.8.
+    Can be replaced with shlex.join once we don't need to support Python 3.7.
+    """
+    return ' '.join(shlex.quote(arg) for arg in split_command)
+
+
 # Basic packages for all final images.
 _common_packages = ['build-essential',
                     'ca-certificates',
                     'ccache',
+                    'cmake',
                     'git',
                     'gnupg',
                     'gpg-agent',
+                    'less',
                     'libfftw3-dev',
                     'libhwloc-dev',
                     'liblapack-dev',
@@ -119,6 +129,17 @@ _rocm_extra_packages = [
     'libelf1',
     'rocfft',
     'rocfft-dev',
+    'rocm-opencl',
+    'rocm-dev',
+]
+
+_rocm_legacy_extra_packages = [
+    # The following require
+    #             apt_keys=['http://repo.radeon.com/rocm/rocm.gpg.key'],
+    #             apt_repositories=['deb [arch=amd64] http://repo.radeon.com/rocm/apt/X.Y.Z/ ubuntu main']
+    'clinfo',
+    'libelf1',
+    'rocfft',
     'rocm-opencl',
     'rocm-dev',
 ]
@@ -199,7 +220,7 @@ parser = argparse.ArgumentParser(description='GROMACS CI image creation script',
 
 parser.add_argument('--format', type=str, default='docker',
                     choices=['docker', 'singularity'],
-                    help='Container specification format (default: docker)')
+                    help='Container specification format (default: %(default)s)')
 
 
 def base_image_tag(args) -> str:
@@ -280,18 +301,23 @@ def get_rocm_packages(args) -> typing.List[str]:
     if (args.rocm is None):
         return []
     else:
+        if (args.rocm != 'debian'):
+            if (packaging.version.parse(args.rocm) < packaging.version.parse(str(4.2))):
+                return _rocm_legacy_extra_packages
+
         return _rocm_extra_packages
 
+
 def get_cp2k_packages(args) -> typing.List[str]:
-    if args.mpi is not None:
-        packages = _cp2k_extra_packages + ['libfftw3-mpi-dev']
+    cp2k_packages = []
+    if args.cp2k:
+        cp2k_packages.extend(_cp2k_extra_packages)
+        if args.mpi is not None:
+            cp2k_packages.append('libfftw3-mpi-dev')
+    return cp2k_packages
 
-    if (args.cp2k is None):
-        return []
-    else:
-        return packages
 
-def get_compiler(args, compiler_build_stage: hpccm.Stage = None) -> bb_base:
+def get_compiler(args, compiler_build_stage: 'hpccm.Stage' = None) -> 'hpccm.building_blocks.base':
     # Compiler
     if args.llvm is not None:
         # Build our own version instead to get TSAN + OMP
@@ -318,6 +344,15 @@ def get_compiler(args, compiler_build_stage: hpccm.Stage = None) -> bb_base:
 
         else:
             raise RuntimeError('No oneAPI compiler build stage!')
+
+    elif args.intel_llvm is not None:
+        if compiler_build_stage is not None:
+            compiler = compiler_build_stage.runtime(_from='intel_llvm')
+            intel_llvm_toolchain = hpccm.toolchain(CC='/opt/intel-llvm/bin/clang',
+                                               CXX='/opt/intel-llvm/bin/clang++')
+            setattr(compiler, 'toolchain', intel_llvm_toolchain)
+        else:
+            raise RuntimeError('No IntelLLVM compiler build stage!')
 
     elif args.gcc is not None:
         if args.cp2k is not None:
@@ -348,8 +383,11 @@ def get_ucx(args, compiler, gdrcopy):
     if args.cuda is not None:
         if hasattr(compiler, 'toolchain'):
             use_gdrcopy = (gdrcopy is not None)
-            # Version last updated June 7, 2021
-            return hpccm.building_blocks.ucx(toolchain=compiler.toolchain, gdrcopy=use_gdrcopy, version="1.10.1",
+            # We disable `-Werror`, since there are some unknown pragmas and unused variables which upset clang
+            toolchain = copy.copy(compiler.toolchain)
+            toolchain.CFLAGS = '-Wno-error'
+            # Version last updated July 15, 2022
+            return hpccm.building_blocks.ucx(toolchain=toolchain, gdrcopy=use_gdrcopy, version="1.13.0",
                                              cuda=True)
         else:
             raise RuntimeError('compiler is not an HPCCM compiler building block!')
@@ -371,7 +409,23 @@ def get_mpi(args, compiler, ucx):
                                                      ucx=use_ucx, infiniband=False)
             else:
                 raise RuntimeError('compiler is not an HPCCM compiler building block!')
-
+        elif args.mpi == 'mpich':
+            if hasattr(compiler, 'toolchain'):
+                use_cuda = (args.cuda is not None)
+                use_rocm = (args.rocm is not None)
+                use_ucx = (ucx is not None)
+                flags = {}
+                if ucx is not None:
+                    flags['with-device'] = 'ch4:ucx'
+                mpich_stage = hpccm.Stage()
+                # Python needed for configuring
+                mpich_stage += hpccm.building_blocks.python(python3=True, python2=False, devel=False)
+                # Version last updated July 15, 2022
+                mpich_stage += hpccm.building_blocks.mpich(toolchain=compiler.toolchain, version="4.0.2",
+                        cuda=use_cuda, rocm=use_rocm, ucx=use_ucx, infiniband=False, disable_fortran=True, **flags)
+                return mpich_stage
+            else:
+                raise RuntimeError('compiler is not an HPCCM compiler building block!')
         elif args.mpi == 'impi':
             # TODO Intel MPI from the oneAPI repo is not working reliably,
             # reasons are unclear. When solved, add packagages called:
@@ -418,14 +472,16 @@ def get_hipsycl(args):
     if args.hipsycl is None:
         return None
     if args.llvm is None:
-        raise RuntimeError('Can not build hipSYCL without llvm')
-
+        raise RuntimeError('Can not build hipSYCL without LLVM')
     if args.rocm is None:
-        raise RuntimeError('hipSYCL requires the rocm packages')
+        raise RuntimeError('hipSYCL requires the ROCm packages')
 
-    cmake_opts = ['-DLLVM_DIR=/opt/rocm/llvm/lib/cmake/llvm',
+    cmake_opts = ['-DCMAKE_C_COMPILER=clang-{}'.format(args.llvm),
+                  '-DCMAKE_CXX_COMPILER=clang++-{}'.format(args.llvm),
+                  '-DLLVM_DIR=/usr/lib/llvm-{}/cmake/'.format(args.llvm),
                   '-DCMAKE_PREFIX_PATH=/opt/rocm/lib/cmake',
                   '-DWITH_ROCM_BACKEND=ON']
+
     if args.cuda is not None:
         cmake_opts += ['-DCUDA_TOOLKIT_ROOT_DIR=/usr/local/cuda',
                        '-DWITH_CUDA_BACKEND=ON']
@@ -454,9 +510,9 @@ def get_cp2k(args):
     if args.gcc is None:
         raise RuntimeError('CP2K build requires GNU compilers')
 
-    make_commands = ['make ARCH=local VERSION=ssmp libcp2k']
+    make_commands = ['make -j$(nproc) ARCH=local VERSION=ssmp libcp2k']
     if args.mpi is not None:
-        make_commands += ['make ARCH=local VERSION=psmp libcp2k']
+        make_commands += ['make -j$(nproc) ARCH=local VERSION=psmp libcp2k']
     make_commands += ['rm -rf ./obj']
 
     return hpccm.building_blocks.generic_build(
@@ -490,7 +546,7 @@ def get_cp2k(args):
                 'cd ../../']
                  + make_commands)
 
-def add_tsan_compiler_build_stage(input_args, output_stages: typing.Mapping[str, hpccm.Stage]):
+def add_tsan_compiler_build_stage(input_args, output_stages: typing.Mapping[str, 'hpccm.Stage']):
     """Isolate the expensive TSAN preparation stage.
 
     This is a very expensive stage, but has few and disjoint dependencies, and
@@ -539,7 +595,7 @@ def oneapi_runtime(_from='0'):
     return oneapi_runtime_stage
 
 
-def add_oneapi_compiler_build_stage(input_args, output_stages: typing.Mapping[str, hpccm.Stage]):
+def add_oneapi_compiler_build_stage(input_args, output_stages: typing.Mapping[str, 'hpccm.Stage']):
     """Isolate the oneAPI preparation stage.
 
     This stage is isolated so that its installed components are minimized in the
@@ -579,10 +635,75 @@ def add_oneapi_compiler_build_stage(input_args, output_stages: typing.Mapping[st
     output_stages['compiler_build'] = oneapi_stage
 
 
-def prepare_venv(version: StrictVersion) -> typing.Sequence[str]:
+def intel_llvm_runtime(_from='0'):
+    llvm_runtime_stage = hpccm.Stage()
+    llvm_runtime_stage += hpccm.primitives.copy(_from='intel-llvm-build',
+            files={"/opt/intel-llvm": "/opt/intel-llvm"})
+
+    bashrc = ['export DPCPP_HOME=/opt/intel-llvm',
+              'export PATH=${DPCPP_HOME}/bin:$PATH',
+              'export LD_LIBRARY_PATH=${DPCPP_HOME}/lib:${LD_LIBRARY_PATH}',
+              'export CFLAGS="-isystem ${DPCPP_HOME}/include"',
+              'export CXXFLAGS="-isystem ${DPCPP_HOME}/include"']
+    # Since we cannot just create a file, we write to it line-by-line using "echo".
+    # We must shlex.quote the lines to ensure all spaces/quotes/etc are preserved.
+    commands = ['echo {} >> /opt/intel-llvm/setenv.sh'.format(shlex.quote(line)) for line in bashrc] + \
+               ['echo source "/opt/intel-llvm/setenv.sh" >> /etc/bash.bashrc']
+    llvm_runtime_stage += hpccm.primitives.shell(commands=commands)
+
+    return llvm_runtime_stage
+
+
+def add_intel_llvm_compiler_build_stage(input_args, output_stages: typing.Mapping[str, 'hpccm.Stage']):
+    """Isolate the Intel LLVM (open-source oneAPI) preparation stage.
+
+    This stage is isolated so that its installed components are minimized in the
+    final image (chiefly /opt/intel) and its environment setup script can be
+    sourced. This also helps with rebuild time and final image size.
+    """
+    if not isinstance(output_stages, collections.abc.MutableMapping):
+        raise RuntimeError('Need output_stages container.')
+    if 'compiler_build' in output_stages:
+        raise RuntimeError('"compiler_build" output stage is already present.')
+    llvm_stage = hpccm.Stage()
+    llvm_stage += hpccm.primitives.baseimage(image=base_image_tag(input_args),
+                                             _distro=hpccm_distro_name(input_args),
+                                             _as='intel-llvm-build')
+
+    buildbot_flags = [
+        '--build-type=Release',
+        '--cuda',  # Build with CUDA support
+        '--llvm-external-projects=openmp',  # Enable OpenMP
+        '--obj-dir=/var/tmp/llvm/llvm/build',  # Build directory
+        # Help CMake find CUDA Driver stub, see https://github.com/opencv/opencv/issues/6577
+        '--cmake-opt=-DCMAKE_LIBRARY_PATH=/usr/local/cuda/targets/x86_64-linux/lib/stubs/',
+    ]
+
+    llvm_stage += hpccm.building_blocks.packages(ospackages=['git', 'ninja-build', 'cmake', 'python3', 'build-essential'])
+    llvm_stage += hpccm.building_blocks.generic_build(
+            repository='https://github.com/intel/llvm.git',
+            directory='llvm/llvm',
+            build=[
+                'mkdir -p /var/tmp/llvm/llvm/build',
+                shlex_join(['python3', '/var/tmp/llvm/buildbot/configure.py', *buildbot_flags]),
+                'cd /var/tmp/llvm/llvm/build',
+                # Must be called after the configure.py
+                shlex_join(['cmake', '/var/tmp/llvm/llvm', '-DCMAKE_INSTALL_PREFIX=/opt/intel-llvm/']),
+                'ninja',
+                'ninja sycl-toolchain install'
+                ],
+            install=[],
+            branch=input_args.intel_llvm,
+            )
+
+    setattr(llvm_stage, 'runtime', intel_llvm_runtime)
+
+    output_stages['compiler_build'] = llvm_stage
+
+def prepare_venv(version: packaging.version.Version) -> typing.Sequence[str]:
     """Get shell commands to set up the venv for the requested Python version."""
-    major = version.version[0]
-    minor = version.version[1]  # type: int
+    major = version.major
+    minor = version.minor  # type: int
 
     pyenv = '$HOME/.pyenv/bin/pyenv'
 
@@ -592,14 +713,19 @@ def prepare_venv(version: StrictVersion) -> typing.Sequence[str]:
 
     commands.append(f'{venv_path}/bin/python -m pip install --upgrade pip setuptools')
     # Install dependencies for building and testing gmxapi Python package.
-    # WARNING: Please keep this list synchronized with python_packaging/src/requirements.txt
+    # WARNING: Please keep this list synchronized with python_packaging/gmxapi/requirements.txt
     # TODO: Get requirements.txt from an input argument.
     commands.append(f"""{venv_path}/bin/python -m pip install --upgrade \
+            'black' \
             'breathe' \
-            'cmake>=3.16.3' \
+            'build' \
+            'cmake>=3.18.4' \
             'flake8>=3.7.7' \
+            'furo' \
             'gcovr>=4.2' \
+            'importlib-resources;python_version<"3.10"' \
             'mpi4py>=3.0.3' \
+            'mypy' \
             'networkx>=2.0' \
             'numpy>1.7' \
             'packaging' \
@@ -607,16 +733,53 @@ def prepare_venv(version: StrictVersion) -> typing.Sequence[str]:
             'pybind11>2.6' \
             'Pygments>=2.2.0' \
             'pytest>=4.6' \
-            'setuptools>=42' \
-            'Sphinx>=1.6.3' \
+            'python-gitlab' \
+            'setuptools>=61' \
+            'Sphinx>=4.0' \
+            'sphinx-argparse' \
+            'sphinx-copybutton' \
+            'sphinx_inline_tabs' \
+            'sphinxcontrib-autoprogram' \
             'sphinxcontrib-plantuml>=0.14' \
+            'versioningit>=2' \
             'wheel'""")
     return commands
 
 
+def get_cmake_stages(*, input_args: argparse.Namespace, base: str):
+    """Get the stage(s) necessary for the requested CMake versions.
+
+    One (intermediate) build stage is created
+    for each CMake version, based on the *base* stage.
+    See ``--cmake`` option.
+
+    Each stage uses the version number to determine an installation location:
+        /usr/local/cmake-{version}
+
+    The resulting path is easily copied into the main stage.
+
+    Returns:
+        dict of isolated CMake installation stages with keys from ``cmake-{version}``
+    """
+    cmake_stages = {}
+    for cmake_version in input_args.cmake:
+        stage_name = f'cmake-{cmake_version}'
+        cmake_stages[stage_name] = hpccm.Stage()
+        cmake_stages[stage_name] += hpccm.primitives.baseimage(
+            image=base,
+            _distro=hpccm_distro_name(input_args),
+            _as=stage_name
+        )
+        cmake_stages[stage_name] += hpccm.building_blocks.cmake(
+            eula=True,
+            prefix=f'/usr/local/{stage_name}',
+            version=cmake_version)
+    return cmake_stages
+
+
 def add_python_stages(input_args: argparse.Namespace, *,
                       base: str,
-                      output_stages: typing.MutableMapping[str, hpccm.Stage]):
+                      output_stages: typing.MutableMapping[str, 'hpccm.Stage']):
     """Add the stage(s) necessary for the requested venvs.
 
     One intermediate build stage is created for each venv (see --venv option).
@@ -640,7 +803,7 @@ def add_python_stages(input_args: argparse.Namespace, *,
                                               _as='pyenv')
     pyenv_stage += hpccm.building_blocks.packages(ospackages=_python_extra_packages)
 
-    for version in [StrictVersion(py_ver) for py_ver in sorted(input_args.venvs)]:
+    for version in [packaging.version.parse(py_ver) for py_ver in sorted(input_args.venvs)]:
         stage_name = 'py' + str(version)
         stage = hpccm.Stage()
         stage += hpccm.primitives.baseimage(image=base,
@@ -683,7 +846,7 @@ def add_python_stages(input_args: argparse.Namespace, *,
 
 
 def add_documentation_dependencies(input_args,
-                                   output_stages: typing.MutableMapping[str, hpccm.Stage]):
+                                   output_stages: typing.MutableMapping[str, 'hpccm.Stage']):
     """Add appropriate layers according to doxygen input arguments."""
     if input_args.doxygen is None:
         return
@@ -725,7 +888,7 @@ def add_documentation_dependencies(input_args,
 
 def add_base_stage(name: str,
                    input_args,
-                   output_stages: typing.MutableMapping[str, hpccm.Stage]):
+                   output_stages: typing.MutableMapping[str, 'hpccm.Stage']):
     """Establish dependencies that are shared by multiple parallel stages."""
     # Building blocks are chunks of container-builder instructions that can be
     # copied to any build stage with the addition operator.
@@ -750,7 +913,7 @@ def add_base_stage(name: str,
             output_stages[name] += bb
 
 
-def build_stages(args) -> typing.Iterable[hpccm.Stage]:
+def build_stages(args) -> typing.Iterable['hpccm.Stage']:
     """Define and sequence the stages for the recipe corresponding to *args*."""
 
     # A Dockerfile or Singularity recipe can have multiple build stages.
@@ -769,6 +932,8 @@ def build_stages(args) -> typing.Iterable[hpccm.Stage]:
         add_tsan_compiler_build_stage(input_args=args, output_stages=stages)
     if args.oneapi is not None:
         add_oneapi_compiler_build_stage(input_args=args, output_stages=stages)
+    if args.intel_llvm is not None:
+        add_intel_llvm_compiler_build_stage(input_args=args, output_stages=stages)
 
     add_base_stage(name='build_base', input_args=args, output_stages=stages)
 
@@ -780,12 +945,6 @@ def build_stages(args) -> typing.Iterable[hpccm.Stage]:
     # Building blocks are chunks of container-builder instructions that can be
     # copied to any build stage with the addition operator.
     building_blocks = collections.OrderedDict()
-
-    for i, cmake in enumerate(args.cmake):
-        building_blocks['cmake' + str(i)] = hpccm.building_blocks.cmake(
-            eula=True,
-            prefix=f'/usr/local/cmake-{cmake}',
-            version=cmake)
 
     # Install additional packages early in the build to optimize Docker build layer cache.
     os_packages = list(get_llvm_packages(args)) + get_opencl_packages(args) + get_rocm_packages(args) + get_cp2k_packages(args)
@@ -803,9 +962,13 @@ def build_stages(args) -> typing.Iterable[hpccm.Stage]:
         )
         os_packages += _intel_compute_runtime_extra_packages
     if args.rocm is not None:
+        dist_string = 'ubuntu'
+        if (args.rocm != 'debian'):
+            if (packaging.version.parse(args.rocm) < packaging.version.parse(str(4.2))):
+                dist_string = 'xenial'
         building_blocks['extra_packages'] += hpccm.building_blocks.packages(
             apt_keys=['http://repo.radeon.com/rocm/rocm.gpg.key'],
-            apt_repositories=[f'deb [arch=amd64] http://repo.radeon.com/rocm/apt/{args.rocm}/ ubuntu main']
+            apt_repositories=[f'deb [arch=amd64] http://repo.radeon.com/rocm/apt/{args.rocm}/ '+dist_string+' main']
         )
     building_blocks['extra_packages'] += hpccm.building_blocks.packages(
         ospackages=os_packages,
@@ -843,6 +1006,11 @@ def build_stages(args) -> typing.Iterable[hpccm.Stage]:
     if args.mpi is not None and len(args.venvs) > 0:
         add_python_stages(base='build_base', input_args=args, output_stages=stages)
 
+    cmake_stages = get_cmake_stages(
+        input_args=args,
+        base='build_base')
+    stages.update(cmake_stages)
+
     # Create the stage from which the targeted image will be tagged.
     stages['main'] = hpccm.Stage()
 
@@ -859,6 +1027,14 @@ def build_stages(args) -> typing.Iterable[hpccm.Stage]:
     # Add documentation requirements (doxygen and sphinx + misc).
     if args.doxygen is not None:
         add_documentation_dependencies(args, stages)
+
+    for stage_name in cmake_stages:
+        stages['main'] += hpccm.primitives.copy(
+            _from=stage_name,
+            _mkdir=True,
+            src=[f'/usr/local/{stage_name}/'],
+            dest=f'/usr/local/{stage_name}'
+        )
 
     if 'pyenv' in stages and stages['pyenv'] is not None:
         stages['main'] += hpccm.primitives.copy(_from='pyenv', _mkdir=True, src=['/root/.pyenv/'],
@@ -883,6 +1059,7 @@ def build_stages(args) -> typing.Iterable[hpccm.Stage]:
 
 if __name__ == '__main__':
     args = parser.parse_args()
+    import hpccm.config
 
     # Set container specification output format
     hpccm.config.set_container_format(args.format)

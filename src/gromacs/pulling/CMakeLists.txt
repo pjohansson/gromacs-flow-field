@@ -48,8 +48,13 @@ endif()
 target_link_libraries(pulling PRIVATE
                       common
                       legacy_modules
+        math
         utility
         muparser
+        linearalgebra
+        timing
+        topology
+        utility
 )
 
 # Public interface for modules, including dependencies and interfaces

@@ -226,7 +226,7 @@ static int ddb_name2dir(char* name)
 }
 
 
-static void read_vsite_database(const char*                            ddbname,
+static void read_vsite_database(const std::filesystem::path&           ddbname,
                                 std::vector<VirtualSiteConfiguration>* vsiteconflist,
                                 std::vector<VirtualSiteTopology>*      vsitetoplist)
 {
@@ -284,7 +284,7 @@ static void read_vsite_database(const char*                            ddbname,
                 curdir = ddb_name2dir(dirstr);
                 if (curdir < 0)
                 {
-                    gmx_fatal(FARGS, "Invalid directive %s in vsite database %s", dirstr, ddbname);
+                    gmx_fatal(FARGS, "Invalid directive %s in vsite database %s", dirstr, ddbname.c_str());
                 }
             }
             else
@@ -362,7 +362,7 @@ static void read_vsite_database(const char*                            ddbname,
                         {
                             gmx_fatal(FARGS,
                                       "Need 3 or 4 values to specify bond/angle values in %s: %s\n",
-                                      ddbname,
+                                      ddbname.c_str(),
                                       pline);
                         }
                     }
@@ -1664,7 +1664,7 @@ void do_vsites(gmx::ArrayRef<const PreprocessResidue> rtpFFDB,
                int*                                   cgnr[],
                real                                   mHmult,
                bool                                   bVsiteAromatics,
-               const char*                            ffdir)
+               const std::filesystem::path&           ffdir)
 {
 #define MAXATOMSPERRESIDUE 16
     int     k, m, i0, ni0, whatres, add_shift, nvsite, nadd;
@@ -1759,7 +1759,7 @@ void do_vsites(gmx::ArrayRef<const PreprocessResidue> rtpFFDB,
         fprintf(debug, "# # # VSITES # # #\n");
     }
 
-    std::vector<std::string> db = fflib_search_file_end(ffdir, ".vsd", FALSE);
+    auto db = fflib_search_file_end(ffdir, ".vsd", FALSE);
 
     /* Container of CH3/NH3/NH2 configuration entries.
      * See comments in read_vsite_database. It isnt beautiful,
@@ -1779,7 +1779,7 @@ void do_vsites(gmx::ArrayRef<const PreprocessResidue> rtpFFDB,
     std::vector<VirtualSiteTopology> vsitetop;
     for (const auto& filename : db)
     {
-        read_vsite_database(filename.c_str(), &vsiteconflist, &vsitetop);
+        read_vsite_database(filename, &vsiteconflist, &vsitetop);
     }
 
     bFirstWater = TRUE;
@@ -1968,13 +1968,44 @@ void do_vsites(gmx::ArrayRef<const PreprocessResidue> rtpFFDB,
 
             bWARNING       = FALSE;
             bAddVsiteParam = TRUE;
+            real th;
+            rvec r_ij;
+            rvec r_kj;
             /* nested if's which check nrHatoms, nrbonds and atomname */
             if (nrHatoms == 1)
             {
                 switch (nrbonds)
                 {
                     case 2: /* -O-H */ (*vsite_type)[i] = F_BONDS; break;
-                    case 3: /* =CH-, -NH- or =NH+- */ (*vsite_type)[i] = F_VSITE3FD; break;
+                    case 3: /* =CH-, -NH- or =NH+- */
+                        /* We need special treatment here for the case of tetrahedral
+                         * structures with lone pairs, such as neutral secondary amines */
+                        aj = Heavy; /* Central atom of angle */
+                        ai = heavies[0];
+                        if (nrheavies == 3)
+                        {
+                            ak = heavies[1];
+                        }
+                        else
+                        {
+                            ak = Hatoms[0];
+                        }
+                        rvec_sub((*x)[ai], (*x)[aj], r_ij);
+                        rvec_sub((*x)[ak], (*x)[aj], r_kj);
+                        th = gmx_angle(r_ij, r_kj) * gmx::c_rad2Deg;
+                        /* Check whether angle is closer to 109 or 120 degrees in the current configuration.
+                         * If it is closer to 109, the structure is likely tetrahedral, and requires a
+                         * tetrahedral vsite, otherwise a planar vsite should be used. */
+                        if (th < 111) /* likely tetrahedral geometry */
+                        {
+                            (*vsite_type)[i] = F_VSITE3OUT;
+                        }
+                        else /* planar geometry */
+                        {
+
+                            (*vsite_type)[i] = F_VSITE3FD;
+                        }
+                        break;
                     case 4: /* --CH- (tert) */
                         /* The old type 4FD had stability issues, so
                          * all new constructs should use 4FDN

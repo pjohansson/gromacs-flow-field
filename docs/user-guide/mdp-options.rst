@@ -1018,11 +1018,12 @@ Temperature coupling
 
    (-1)
    The frequency for coupling the temperature. The default value of -1
-   sets :mdp:`nsttcouple` equal to 10, or fewer steps if required
-   for accurate integration. Note that the default value is not 1
-   because additional computation and communication is required for
-   obtaining the kinetic energy. For velocity
-   Verlet integrators :mdp:`nsttcouple` is set to 1.
+   sets :mdp:`nsttcouple` equal to 100, or fewer steps if required
+   for accurate integration (5 steps per tau for first order coupling,
+   20 steps per tau for second order coupling). Note that the default
+   value is large in order to reduce the overhead of the additional
+   computation and communication required for obtaining the kinetic
+   energy. For velocity Verlet integrators :mdp:`nsttcouple` is set to 1.
 
 .. mdp:: nh-chain-length
 
@@ -1163,11 +1164,13 @@ Pressure coupling
 
    (-1)
    The frequency for coupling the pressure. The default value of -1
-   sets :mdp:`nstpcouple` equal to 10, or fewer steps if required
-   for accurate integration. Note that the default value is not 1
-   because additional computation and communication is required for
-   obtaining the virial. For velocity
-   Verlet integrators :mdp:`nstpcouple` is set to 1.
+   sets :mdp:`nstpcouple` equal to 100, or fewer steps if required
+   for accurate integration (5 steps per tau for first order coupling,
+   20 steps per tau for second order coupling). Note that the default
+   value is large in order to reduce the overhead of the additional
+   computation and communication required for obtaining the virial
+   and kinetic energy. For velocity Verlet integrators :mdp:`nsttcouple`
+   is set to 1.
 
 .. mdp:: tau-p
 
@@ -1807,15 +1810,16 @@ pull-coord2-vec, pull-coord2-k, and so on.
    .. mdp-value:: transformation
 
       Transforms other pull coordinates using a mathematical expression defined by :mdp:`pull-coord1-expression`.
-      Pull coordinates of lower indices can be used as variables to this pull coordinate.
-      Thus, pull transformation coordinates should have a higher pull coordinate index
-      than all pull coordinates they transform.
+      Pull coordinates of lower indices, and time, can be used as variables to
+      this pull coordinate. Thus, pull transformation coordinates should have
+      a higher pull coordinate index than all pull coordinates they transform.
 
 .. mdp:: pull-coord1-expression
 
    Mathematical expression to transform pull coordinates of lower indices to a new one.
    The pull coordinates are referred to as variables in the equation so that
    pull-coord1's value becomes 'x1', pull-coord2 value becomes 'x2' etc.
+   Time can also be used a variable, becoming 't'.
    The mathematical expression are evaluated using muParser.
    Only relevant if :mdp:`pull-coord1-geometry` is set to :mdp-value:`transformation`.
 
@@ -1921,7 +1925,8 @@ AWH adaptive biasing
       multidimensional and is defined by mapping each dimension to a pull coordinate index.
       This is only allowed if :mdp-value:`pull-coord1-type=external-potential` and
       :mdp:`pull-coord1-potential-provider` = ``awh`` for the concerned pull coordinate
-      indices. Pull geometry 'direction-periodic' is not supported by AWH.
+      indices. Pull geometry 'direction-periodic' and transformation
+      coordinates that depend on time are not supported by AWH.
 
 .. mdp:: awh-potential
 
@@ -2594,7 +2599,7 @@ Free energy calculations
 
 .. mdp:: sc-power
 
-   (0)
+   (1)
    the power for lambda in the soft-core function, only the values 1
    and 2 are supported. Used only with `sc-function=beutler`
 

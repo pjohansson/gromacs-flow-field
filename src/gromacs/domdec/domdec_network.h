@@ -63,52 +63,6 @@ enum
     dddirBackward
 };
 
-/*! \brief Move T values in the communication region one cell along
- * the domain decomposition
- *
- * Moves in the dimension indexed by ddDimensionIndex, either forward
- * (direction=dddirFoward) or backward (direction=dddirBackward).
- *
- * \todo This function template is deprecated, new calls should be
- * made to the version taking ArrayRef parameters and this function
- * template removed when unused.
- */
-template<typename T>
-void ddSendrecv(const gmx_domdec_t* dd,
-                int                 ddDimensionIndex,
-                int                 direction,
-                T*                  sendBuffer,
-                int                 numElementsToSend,
-                T*                  receiveBuffer,
-                int                 numElementsToReceive);
-
-//! Extern declaration for int specialization
-extern template void ddSendrecv<int>(const gmx_domdec_t* dd,
-                                     int                 ddDimensionIndex,
-                                     int                 direction,
-                                     int*                buf_s,
-                                     int                 n_s,
-                                     int*                buf_r,
-                                     int                 n_r);
-
-//! Extern declaration for real specialization
-extern template void ddSendrecv<real>(const gmx_domdec_t* dd,
-                                      int                 ddDimensionIndex,
-                                      int                 direction,
-                                      real*               buf_s,
-                                      int                 n_s,
-                                      real*               buf_r,
-                                      int                 n_r);
-
-//! Extern declaration for rvec specialization
-extern template void ddSendrecv<rvec>(const gmx_domdec_t* dd,
-                                      int                 ddDimensionIndex,
-                                      int                 direction,
-                                      rvec*               buf_s,
-                                      int                 n_s,
-                                      rvec*               buf_r,
-                                      int                 n_r);
-
 /*! \brief Move a view of T values in the communication region one
  * cell along the domain decomposition
  *
@@ -163,25 +117,25 @@ void dd_sendrecv2_rvec(const struct gmx_domdec_t* dd,
 /* The functions below perform the same operations as the MPI functions
  * with the same name appendices, but over the domain decomposition
  * nodes only.
- * The DD master node is the master for these operations.
+ * The DD main node is the coordinator for these operations.
  */
 
-/*! \brief Broadcasts \p nbytes from \p data on \p DDMASTERRANK to all PP ranks */
+/*! \brief Broadcasts \p nbytes from \p data on \p DDMAINRANK to all PP ranks */
 void dd_bcast(const gmx_domdec_t* dd, int nbytes, void* data);
 
-/*! \brief Scatters \p nbytes from \p src on \p DDMASTERRANK to all PP ranks, received in \p dest */
+/*! \brief Scatters \p nbytes from \p src on \p DDMAINRANK to all PP ranks, received in \p dest */
 void dd_scatter(const gmx_domdec_t* dd, int nbytes, const void* src, void* dest);
 
-/*! \brief Gathers \p nbytes from \p src on all PP ranks, received in \p dest on \p DDMASTERRANK */
+/*! \brief Gathers \p nbytes from \p src on all PP ranks, received in \p dest on \p DDMAINRANK */
 void dd_gather(const gmx_domdec_t* dd, int nbytes, const void* src, void* dest);
 
-/*! \brief Scatters \p scounts bytes from \p src on \p DDMASTERRANK to all PP ranks, receiving \p rcount bytes in \p dest.
+/*! \brief Scatters \p scounts bytes from \p src on \p DDMAINRANK to all PP ranks, receiving \p rcount bytes in \p dest.
  *
  * See man MPI_Scatterv for details of how to construct scounts and disps.
  * If rcount==0, rbuf is allowed to be NULL */
 void dd_scatterv(const gmx_domdec_t* dd, int* scounts, int* disps, const void* sbuf, int rcount, void* rbuf);
 
-/*! \brief Gathers \p rcount bytes from \p src on all PP ranks, received in \p scounts bytes in \p dest on \p DDMASTERRANK.
+/*! \brief Gathers \p rcount bytes from \p src on all PP ranks, received in \p scounts bytes in \p dest on \p DDMAINRANK.
  *
  * See man MPI_Gatherv for details of how to construct scounts and disps.
  *

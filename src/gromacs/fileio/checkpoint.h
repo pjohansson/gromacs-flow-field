@@ -122,14 +122,12 @@ extern template void writeKvtCheckpointValue(const real&               value,
                                              KeyValueTreeObjectBuilder kvtBuilder);
 
 /*! \libinternal
- * \brief Provides the MDModules with the checkpointed data on the master rank.
+ * \brief Provides the MDModules with the checkpointed data on the main rank.
  */
-struct MDModulesCheckpointReadingDataOnMaster
+struct MDModulesCheckpointReadingDataOnMain
 {
     //! The data of the MDModules that is stored in the checkpoint file
     const KeyValueTreeObject& checkpointedData_;
-    //! The version of the read ceckpoint file
-    CheckPointVersion checkpointFileVersion_;
 };
 
 /*! \libinternal
@@ -141,8 +139,6 @@ struct MDModulesCheckpointReadingBroadcast
     MPI_Comm communicator_;
     //! Whether the run is executed in parallel
     bool isParallelRun_;
-    //! The version of the read file version
-    CheckPointVersion checkpointFileVersion_;
 };
 
 /*! \libinternal \brief Writing the MDModules data to a checkpoint file.
@@ -151,8 +147,6 @@ struct MDModulesWriteCheckpointData
 {
     //! Builder for the Key-Value-Tree to store the MDModule checkpoint data
     KeyValueTreeObjectBuilder builder_;
-    //! The version of the read file version
-    CheckPointVersion checkpointFileVersion_;
 };
 
 } // namespace gmx
@@ -319,7 +313,7 @@ void write_checkpoint_data(t_fileio*                         fp,
 
 /* Loads a checkpoint from fn for run continuation.
  * Generates a fatal error on system size mismatch.
- * The master node reads the file
+ * The main node reads the file
  * and communicates all the modified number of steps,
  * but not the state itself.
  * With reproducibilityRequested warns about version, build, #ranks differences.

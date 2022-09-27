@@ -39,6 +39,7 @@ gmx_add_libgromacs_sources(
     hardwaretopology.cpp
     printhardware.cpp
     identifyavx512fmaunits.cpp
+    simd_support.cpp
     )
 
 if(GMX_GPU_OPENCL)
@@ -57,6 +58,7 @@ elseif(GMX_GPU_CUDA)
 elseif(GMX_GPU_SYCL)
     gmx_add_libgromacs_sources(
         device_management_sycl.cpp
+        device_management_sycl_intel_device_ids.cpp
     )
     _gmx_add_files_to_property(SYCL_SOURCES
         device_management_sycl.cpp

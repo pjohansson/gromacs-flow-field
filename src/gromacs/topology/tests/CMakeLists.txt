@@ -36,8 +36,9 @@ gmx_add_unit_test(TopologyTest topology-test
         atoms.cpp
         exclusionblocks.cpp
         idef.cpp
+        index.cpp
         mtop.cpp
         symtab.cpp
         topsort.cpp
         )
-
+target_link_libraries(topology-test PRIVATE topology)

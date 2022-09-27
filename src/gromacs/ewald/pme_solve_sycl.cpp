@@ -104,7 +104,7 @@ auto makeSolveKernel(sycl::handler&                    cgh,
                 minorDim  = ZZ;
                 break;
 
-            default: assert(false);
+            default: SYCL_ASSERT(false);
         }
 
         /* Global memory pointers */
@@ -162,7 +162,7 @@ auto makeSolveKernel(sycl::handler&                    cgh,
         float viryz  = 0.0F;
         float virzz  = 0.0F;
 
-        assert(indexMajor < solveKernelParams.complexGridSize[majorDim]);
+        SYCL_ASSERT(indexMajor < solveKernelParams.complexGridSize[majorDim]);
         if ((indexMiddle < localCountMiddle) & (indexMinor < localCountMinor)
             & (gridLineIndex < gridLinesPerBlock))
         {
@@ -206,7 +206,7 @@ auto makeSolveKernel(sycl::handler&                    cgh,
                     mZ = mMinor;
                     break;
 
-                default: assert(false);
+                default: SYCL_ASSERT(false);
             }
 
             /* 0.5 correction factor for the first and last components of a Z dimension */
@@ -227,7 +227,7 @@ auto makeSolveKernel(sycl::handler&                    cgh,
                     }
                     break;
 
-                default: assert(false);
+                default: SYCL_ASSERT(false);
             }
 
             if (notZeroPoint)
@@ -240,24 +240,20 @@ auto makeSolveKernel(sycl::handler&                    cgh,
                                    + mZ * solveKernelParams.recipBox[ZZ][ZZ];
 
                 const float m2k = mhxk * mhxk + mhyk * mhyk + mhzk * mhzk;
-                assert(m2k != 0.0F);
+                SYCL_ASSERT(m2k != 0.0F);
                 float denom = m2k * float(M_PI) * solveKernelParams.boxVolume * gm_splineValueMajor[kMajor]
                               * gm_splineValueMiddle[kMiddle] * gm_splineValueMinor[kMinor];
-                assert(sycl_2020::isfinite(denom));
-                assert(denom != 0.0F);
+                SYCL_ASSERT(sycl_2020::isfinite(denom));
+                SYCL_ASSERT(denom != 0.0F);
 
                 const float tmp1   = sycl::exp(-solveKernelParams.ewaldFactor * m2k);
                 const float etermk = solveKernelParams.elFactor * tmp1 / denom;
 
-                // sycl::float2::load and store are buggy in hipSYCL,
-                // but can probably be used after resolution of
-                // https://github.com/illuhad/hipSYCL/issues/647
                 sycl::float2 gridValue;
-                sycl_2020::loadToVec(
-                        gridThreadIndex, sycl::global_ptr<const float>(gm_fourierGrid), &gridValue);
+                gridValue.load(gridThreadIndex, sycl::global_ptr<const float>(gm_fourierGrid));
                 const sycl::float2 oldGridValue = gridValue;
                 gridValue *= etermk;
-                sycl_2020::storeFromVec(gridValue, gridThreadIndex, gm_fourierGrid);
+                gridValue.store(gridThreadIndex, gm_fourierGrid);
 
                 if (computeEnergyAndVirial)
                 {
@@ -364,7 +360,7 @@ auto makeSolveKernel(sycl::handler&                    cgh,
              *       To use fewer warps, add to the conditional:
              *       && threadLocalId < activeWarps * stride
              */
-            assert(activeWarps * stride >= subGroupSize);
+            SYCL_ASSERT(activeWarps * stride >= subGroupSize);
             if (threadLocalId < subGroupSize)
             {
                 float output = sm_virialAndEnergy[threadLocalId];
@@ -376,7 +372,7 @@ auto makeSolveKernel(sycl::handler&                    cgh,
                 /* Final output */
                 if (validComponentIndex)
                 {
-                    assert(sycl_2020::isfinite(output));
+                    SYCL_ASSERT(sycl_2020::isfinite(output));
                     atomicFetchAdd(a_virialAndEnergy[componentIndex], output);
                 }
             }

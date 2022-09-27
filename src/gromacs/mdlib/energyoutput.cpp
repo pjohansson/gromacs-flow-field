@@ -66,6 +66,7 @@
 #include "gromacs/mdlib/ebin.h"
 #include "gromacs/mdlib/mdebin_bar.h"
 #include "gromacs/mdrunutility/handlerestart.h"
+#include "gromacs/mdrunutility/mdmodulesnotifiers.h"
 #include "gromacs/mdtypes/energyhistory.h"
 #include "gromacs/mdtypes/fcdata.h"
 #include "gromacs/mdtypes/group.h"
@@ -80,7 +81,6 @@
 #include "gromacs/utility/arraysize.h"
 #include "gromacs/utility/enumerationhelpers.h"
 #include "gromacs/utility/fatalerror.h"
-#include "gromacs/utility/mdmodulesnotifiers.h"
 #include "gromacs/utility/smalloc.h"
 #include "gromacs/utility/stringutil.h"
 
@@ -537,7 +537,7 @@ EnergyOutput::EnergyOutput(ener_file*                fp_ene,
     }
     sfree(grpnms);
 
-    /* Note that fp_ene should be valid on the master rank and null otherwise */
+    /* Note that fp_ene should be valid on the main rank and null otherwise */
     if (fp_ene != nullptr && startingBehavior != StartingBehavior::RestartWithAppending)
     {
         do_enxnms(fp_ene, &ebin_->nener, &ebin_->enm);

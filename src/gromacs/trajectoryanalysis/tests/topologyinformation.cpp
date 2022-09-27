@@ -47,15 +47,12 @@
 #include "gromacs/gmxpreprocess/grompp.h"
 #include "gromacs/math/vectypes.h"
 #include "gromacs/pbcutil/pbc.h"
-#include "gromacs/topology/topology.h"
-#include "gromacs/utility/arrayref.h"
 #include "gromacs/utility/exceptions.h"
 #include "gromacs/utility/textwriter.h"
 
 #include "testutils/cmdlinetest.h"
 #include "testutils/testfilemanager.h"
 
-#include "moduletest.h"
 
 namespace gmx
 {
@@ -208,7 +205,7 @@ TEST(TopologyInformation, WorksWithTprFromPdbFile)
         CommandLine caller;
         caller.append("grompp");
         caller.addOption("-f", mdpInputFileName);
-        caller.addOption("-p", TestFileManager::getInputFilePath(name));
+        caller.addOption("-p", TestFileManager::getInputFilePath(name + ".top"));
         caller.addOption("-c", TestFileManager::getInputFilePath(name + ".pdb"));
         caller.addOption("-o", tprName);
         ASSERT_EQ(0, gmx_grompp(caller.argc(), caller.argv()));

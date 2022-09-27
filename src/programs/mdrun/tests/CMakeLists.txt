@@ -44,7 +44,7 @@ gmx_add_unit_test_library(mdrun_test_infrastructure
     $<TARGET_OBJECTS:mdrun_objlib>
     )
 target_include_directories(mdrun_test_infrastructure SYSTEM PRIVATE ${PROJECT_SOURCE_DIR}/src/external)
-target_link_libraries(mdrun_test_infrastructure PUBLIC legacy_api utility)
+target_link_libraries(mdrun_test_infrastructure PRIVATE legacy_api utility)
 target_compile_definitions(mdrun_test_infrastructure PRIVATE TMPI_USE_VISIBILITY)
 
 # To avoid running into test timeouts, some end-to-end tests of mdrun
@@ -111,8 +111,8 @@ gmx_add_gtest_executable(${exename} MPI
         $<TARGET_OBJECTS:mdrun_objlib>
     )
 target_link_libraries(${exename} PRIVATE mdrun_test_infrastructure)
-gmx_register_gtest_test(MdrunTestsOneRank ${exename} MPI_RANKS 1 OPENMP_THREADS 2 INTEGRATION_TEST IGNORE_LEAKS)
-gmx_register_gtest_test(MdrunTestsTwoRanks ${exename} MPI_RANKS 2 OPENMP_THREADS 2 INTEGRATION_TEST IGNORE_LEAKS)
+gmx_register_gtest_test(MdrunTestsOneRank ${exename} MPI_RANKS 1 OPENMP_THREADS 2 INTEGRATION_TEST SLOW_TEST IGNORE_LEAKS)
+gmx_register_gtest_test(MdrunTestsTwoRanks ${exename} MPI_RANKS 2 OPENMP_THREADS 2 INTEGRATION_TEST SLOW_TEST IGNORE_LEAKS)
 
 # The orires test is separate, as it supports only a single MPI rank
 set(testname "MdrunSingleRankAlgorithmsTests")

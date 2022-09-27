@@ -86,7 +86,7 @@ target_link_libraries(gmxapi PRIVATE libgromacs)
 target_link_libraries(gmxapi PRIVATE common)
 # TODO: Remove `legacy_modules` once specific modules are explicitly linked.
 target_link_libraries(gmxapi PRIVATE legacy_modules)
-target_link_libraries(gmxapi PRIVATE utility)
+target_link_libraries(gmxapi PRIVATE math utility)
 
 
 ################################################
@@ -108,19 +108,36 @@ install(TARGETS gmxapi
 install(EXPORT gmxapi
         NAMESPACE Gromacs::
         DESTINATION share/cmake/gmxapi/
+        # If we use components for clients to ask for an MPI-aware version,
+        # we might want to export the MPI-related details they need to help
+        # with compatibility.
+        # EXPORT_LINK_INTERFACE_LIBRARIES
         )
 add_library(Gromacs::gmxapi ALIAS gmxapi )
 
 include(CMakePackageConfigHelpers)
 
+# WARNING: A hard-coded dependency on a specific gromacs configuration
+# will likely be incompatible with a solution to #4334, but is a necessary
+# workaround for #4563.
+if(${CMAKE_VERSION} VERSION_EQUAL "3.24.0")
+    set(
+        _gmxapi_find_dependencies
+        "set(gromacs${GMX_LIBS_SUFFIX}_ROOT \${PACKAGE_PREFIX_DIR})
+find_dependency(gromacs${GMX_LIBS_SUFFIX} ${GMX_VERSION} CONFIG)"
+    )
+endif()
 get_target_property(_mpi Gromacs::gmxapi MPI)
+# TODO(#4334): Rename to gmxapiConfig.cmake to avoid globbing conflict when <name>.cmake includes <name>-*.cmake.
 configure_package_config_file(
     cmake/gmxapi-config.cmake.in
     "${CMAKE_CURRENT_BINARY_DIR}/cmake/gmxapi-config.cmake"
     INSTALL_DESTINATION share/cmake/gmxapi/
 )
 unset(_mpi)
+unset(_gmxapi_find_dependencies)
 get_target_property(GMXAPI_RELEASE gmxapi RELEASE)
+# TODO(#4334): Rename to gmxapiConfigVersion.cmake to avoid globbing conflict when <name>.cmake includes <name>-*.cmake.
 write_basic_package_version_file(
     ${CMAKE_CURRENT_BINARY_DIR}/cmake/gmxapi-config-version.cmake
     VERSION ${GMXAPI_RELEASE}

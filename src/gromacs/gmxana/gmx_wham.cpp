@@ -211,9 +211,9 @@ typedef struct UmbrellaOptions // NOLINT(clang-analyzer-optin.performance.Paddin
      */
     /*!\{*/
     const char *fnTpr, *fnPullf, *fnCoordSel;
-    const char* fnPullx;              //!< file names of input
-    gmx_bool    bTpr, bPullf, bPullx; //!< input file types given?
-    real        tmin, tmax, dt;       //!< only read input within tmin and tmax with dt
+    const char* fnPullx;        //!< file names of input
+    gmx_bool    bPullf, bPullx; //!< input file types given?
+    real        tmin, tmax, dt; //!< only read input within tmin and tmax with dt
 
     gmx_bool bInitPotByIntegration; //!< before WHAM, guess potential by force integration. Yields 1.5 to 2 times faster convergence
     int stepUpdateContrib; //!< update contribution table every ... iterations. Accelerates WHAM.
@@ -959,14 +959,14 @@ static void calc_cumulatives(t_UmbrellaWindow*  window,
                              const char*        fnhist,
                              const char*        xlabel)
 {
-    int         i, j, k, nbin;
-    double      last;
-    std::string fn;
-    FILE*       fp = nullptr;
+    int                   i, j, k, nbin;
+    double                last;
+    std::filesystem::path fn;
+    FILE*                 fp = nullptr;
 
     if (opt->bs_verbose)
     {
-        fn = gmx::Path::concatenateBeforeExtension(fnhist, "_cumul");
+        fn = gmx::concatenateBeforeExtension(fnhist, "_cumul");
         fp = xvgropen(fn.c_str(), "CDFs of umbrella windows", xlabel, "CDF", opt->oenv);
     }
 
@@ -1198,18 +1198,18 @@ static void print_histograms(const char*        fnhist,
                              t_UmbrellaOptions* opt,
                              const char*        xlabel)
 {
-    std::string fn, title;
-    FILE*       fp;
-    int         bins, l, i, j;
+    std::filesystem::path fn, title;
+    FILE*                 fp;
+    int                   bins, l, i, j;
 
     if (bs_index >= 0)
     {
-        fn    = gmx::Path::concatenateBeforeExtension(fnhist, gmx::formatString("_bs%d", bs_index));
+        fn    = gmx::concatenateBeforeExtension(fnhist, gmx::formatString("_bs%d", bs_index));
         title = gmx::formatString("Umbrella histograms. Bootstrap #%d", bs_index);
     }
     else
     {
-        fn    = gmx_strdup(fnhist);
+        fn    = fnhist;
         title = gmx::formatString("Umbrella histograms");
     }
 
@@ -3170,7 +3170,6 @@ int gmx_wham(int argc, char* argv[])
     opt.bProf0Set = opt2parg_bSet("-zprof0", asize(pa), pa);
 
     opt.bTab         = opt2bSet("-tab", NFILE, fnm);
-    opt.bTpr         = opt2bSet("-it", NFILE, fnm);
     opt.bPullx       = opt2bSet("-ix", NFILE, fnm);
     opt.bPullf       = opt2bSet("-if", NFILE, fnm);
     opt.bTauIntGiven = opt2bSet("-iiact", NFILE, fnm);

@@ -113,8 +113,11 @@ target_include_directories(mdlib INTERFACE
 #target_link_libraries(mdlib PUBLIC
 target_link_libraries(mdlib INTERFACE
                       legacy_api
+                      pbcutil
+                      pulling
+                      topology
+                      timing
                       )
-target_link_libraries(mdlib INTERFACE pulling)
 
 # TODO: when mdlib is an OBJECT target
 #target_link_libraries(mdlib PUBLIC legacy_api)

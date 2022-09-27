@@ -71,8 +71,8 @@
 #include "gromacs/gpu_utils/gpu_utils.h"
 #include "gromacs/imd/imd.h"
 #include "gromacs/listed_forces/listed_forces.h"
+#include "gromacs/math/boxmatrix.h"
 #include "gromacs/math/functions.h"
-#include "gromacs/math/invertmatrix.h"
 #include "gromacs/math/vec.h"
 #include "gromacs/math/vectypes.h"
 #include "gromacs/mdlib/checkpointhandler.h"
@@ -173,7 +173,7 @@ void gmx::LegacySimulator::do_md()
     gmx_bool     bNS = FALSE, bNStList, bStopCM, bFirstStep, bInitStep, bLastStep = FALSE;
     gmx_bool     bDoExpanded = FALSE;
     gmx_bool     do_ene, do_log, do_verbose;
-    gmx_bool     bMasterState;
+    gmx_bool     bMainState;
     unsigned int force_flags;
     tensor    force_vir = { { 0 } }, shake_vir = { { 0 } }, total_vir = { { 0 } }, pres = { { 0 } };
     int       i, m;
@@ -256,15 +256,15 @@ void gmx::LegacySimulator::do_md()
                   "Either specify the -ei option to mdrun, or do not use this checkpoint file.");
     }
 
-    int*                fep_state = MASTER(cr) ? &state_global->fep_state : nullptr;
-    gmx::ArrayRef<real> lambda    = MASTER(cr) ? state_global->lambda : gmx::ArrayRef<real>();
+    int*                fep_state = MAIN(cr) ? &state_global->fep_state : nullptr;
+    gmx::ArrayRef<real> lambda    = MAIN(cr) ? state_global->lambda : gmx::ArrayRef<real>();
     initialize_lambdas(fplog,
                        ir->efep,
                        ir->bSimTemp,
                        *ir->fepvals,
                        ir->simtempvals->temperatures,
                        gmx::arrayRefFromArray(ir->opts.ref_t, ir->opts.ngtc),
-                       MASTER(cr),
+                       MAIN(cr),
                        fep_state,
                        lambda);
     Update upd(*ir, deform);
@@ -354,7 +354,7 @@ void gmx::LegacySimulator::do_md()
 
     {
         double io = compute_io(ir, top_global.natoms, *groups, energyOutput.numEnergyTerms(), 1);
-        if ((io > 2000) && MASTER(cr))
+        if ((io > 2000) && MAIN(cr))
         {
             fprintf(stderr, "\nWARNING: This run will generate roughly %.0f Mb of data\n\n", io);
         }
@@ -371,7 +371,7 @@ void gmx::LegacySimulator::do_md()
         // Local state only becomes valid now.
         dd_init_local_state(*cr->dd, state_global, state);
 
-        /* Distribute the charge groups over the nodes from the master node */
+        /* Distribute the charge groups over the nodes from the main node */
         dd_partition_system(fplog,
                             mdlog,
                             ir->init_step,
@@ -517,7 +517,7 @@ void gmx::LegacySimulator::do_md()
         init_expanded_ensemble(startingBehavior != StartingBehavior::NewSimulation, ir, state->dfhist);
     }
 
-    if (MASTER(cr))
+    if (MAIN(cr))
     {
         EnergyData::initializeEnergyHistory(startingBehavior, observablesHistory, &energyOutput);
     }
@@ -536,7 +536,7 @@ void gmx::LegacySimulator::do_md()
                                 opt2fn("-awh", nfile, fnm),
                                 pull_work);
 
-    if (useReplicaExchange && MASTER(cr))
+    if (useReplicaExchange && MAIN(cr))
     {
         repl_ex = init_replica_exchange(fplog, ms, top_global.natoms, ir, replExParams);
     }
@@ -604,21 +604,21 @@ void gmx::LegacySimulator::do_md()
     // When restarting from a checkpoint, it can be appropriate to
     // initialize ekind from quantities in the checkpoint. Otherwise,
     // compute_globals must initialize ekind before the simulation
-    // starts/restarts. However, only the master rank knows what was
+    // starts/restarts. However, only the main rank knows what was
     // found in the checkpoint file, so we have to communicate in
     // order to coordinate the restart.
     //
     // TODO Consider removing this communication if/when checkpoint
     // reading directly follows .tpr reading, because all ranks can
     // agree on hasReadEkinState at that time.
-    bool hasReadEkinState = MASTER(cr) ? state_global->ekinstate.hasReadEkinState : false;
+    bool hasReadEkinState = MAIN(cr) ? state_global->ekinstate.hasReadEkinState : false;
     if (PAR(cr))
     {
         gmx_bcast(sizeof(hasReadEkinState), &hasReadEkinState, cr->mpi_comm_mygroup);
     }
     if (hasReadEkinState)
     {
-        restore_ekinstate_from_state(cr, ekind, MASTER(cr) ? &state_global->ekinstate : nullptr);
+        restore_ekinstate_from_state(cr, ekind, MAIN(cr) ? &state_global->ekinstate : nullptr);
     }
 
     unsigned int cglo_flags =
@@ -732,7 +732,7 @@ void gmx::LegacySimulator::do_md()
        for non-trotter temperature control */
     auto trotter_seq = init_npt_vars(ir, state, &MassQ, bTrotter);
 
-    if (MASTER(cr))
+    if (MAIN(cr))
     {
         if (!ir->bContinuation)
         {
@@ -806,7 +806,7 @@ void gmx::LegacySimulator::do_md()
     {
         flowcr = flow::init_flow_container(nfile, fnm, ir, groups, state);
 
-        if (MASTER(cr))
+        if (MAIN(cr))
         {
             flow::print_flow_collection_information(
                 flowcr, ir->delta_t, mdlog
@@ -822,7 +822,7 @@ void gmx::LegacySimulator::do_md()
             "must verify that the flow collection parameters are valid."
         );
 
-        gmx_fatal(FARGS, message.c_str());
+        gmx_fatal(FARGS, "%s", message.c_str());
     }
 
     step     = ir->init_step;
@@ -831,7 +831,7 @@ void gmx::LegacySimulator::do_md()
     auto stopHandler = stopHandlerBuilder->getStopHandlerMD(
             compat::not_null<SimulationSignal*>(&signals[eglsSTOPCOND]),
             simulationsShareState,
-            MASTER(cr),
+            MAIN(cr),
             ir->nstlist,
             mdrunOptions.reproducible,
             nstSignalComm,
@@ -846,7 +846,7 @@ void gmx::LegacySimulator::do_md()
             compat::make_not_null<SimulationSignal*>(&signals[eglsCHKPT]),
             simulationsShareState,
             ir->nstlist == 0,
-            MASTER(cr),
+            MAIN(cr),
             mdrunOptions.writeConfout,
             mdrunOptions.checkpointOptions.period);
 
@@ -855,7 +855,7 @@ void gmx::LegacySimulator::do_md()
             compat::make_not_null<SimulationSignal*>(&signals[eglsRESETCOUNTERS]),
             !resetCountersIsLocal,
             ir->nsteps,
-            MASTER(cr),
+            MAIN(cr),
             mdrunOptions.timingOptions.resetHalfway,
             mdrunOptions.maximumHoursToRun,
             mdlog,
@@ -864,7 +864,7 @@ void gmx::LegacySimulator::do_md()
 
     const DDBalanceRegionHandler ddBalanceRegionHandler(cr);
 
-    if (MASTER(cr) && isMultiSim(ms) && !useReplicaExchange)
+    if (MAIN(cr) && isMultiSim(ms) && !useReplicaExchange)
     {
         logInitialMultisimStatus(ms, cr, mdlog, simulationsShareState, ir->nsteps, ir->init_step);
     }
@@ -889,7 +889,7 @@ void gmx::LegacySimulator::do_md()
             /* PME grid + cut-off optimization with GPUs or PME nodes */
             pme_loadbal_do(pme_loadbal,
                            cr,
-                           (mdrunOptions.verbose && MASTER(cr)) ? stderr : nullptr,
+                           (mdrunOptions.verbose && MAIN(cr)) ? stderr : nullptr,
                            fplog,
                            mdlog,
                            *ir,
@@ -986,23 +986,23 @@ void gmx::LegacySimulator::do_md()
 
         if (bNS && !(bFirstStep && ir->bContinuation))
         {
-            bMasterState = FALSE;
+            bMainState = FALSE;
             /* Correct the new box if it is too skewed */
             if (inputrecDynamicBox(ir))
             {
                 if (correct_box(fplog, step, state->box))
                 {
-                    bMasterState = TRUE;
+                    bMainState = TRUE;
                 }
             }
             // If update is offloaded, and the box was changed either
             // above or in a replica exchange on the previous step,
             // the GPU Update object should be informed
-            if (useGpuForUpdate && (bMasterState || bExchanged))
+            if (useGpuForUpdate && (bMainState || bExchanged))
             {
                 integrator->setPbc(PbcType::Xyz, state->box);
             }
-            if (haveDDAtomOrdering(*cr) && bMasterState)
+            if (haveDDAtomOrdering(*cr) && bMainState)
             {
                 dd_collect_state(cr->dd, state, state_global);
             }
@@ -1014,7 +1014,7 @@ void gmx::LegacySimulator::do_md()
                                     mdlog,
                                     step,
                                     cr,
-                                    bMasterState,
+                                    bMainState,
                                     nstglobalcomm,
                                     state_global,
                                     top_global,
@@ -1045,7 +1045,7 @@ void gmx::LegacySimulator::do_md()
             constructGpuHaloExchange(*cr, *fr->deviceStreamManager, wcycle);
         }
 
-        if (MASTER(cr) && do_log)
+        if (MAIN(cr) && do_log)
         {
             gmx::EnergyOutput::printHeader(
                     fplog, step, t); /* can we improve the information printed here? */
@@ -1192,7 +1192,7 @@ void gmx::LegacySimulator::do_md()
                bias function could then be called after do_md_trajectory_writing (then containing
                update_awh_history). The checkpointing will in the future probably moved to the start
                of the md loop which will rid of this issue. */
-            if (awh && checkpointHandler->isCheckpointingStep() && MASTER(cr))
+            if (awh && checkpointHandler->isCheckpointingStep() && MAIN(cr))
             {
                 awh->updateHistory(state_global->awhHistory.get());
             }
@@ -1312,7 +1312,7 @@ void gmx::LegacySimulator::do_md()
                                               md->homenr,
                                               md->cTC);
             /* history is maintained in state->dfhist, but state_global is what is sent to trajectory and log output */
-            if (MASTER(cr))
+            if (MAIN(cr))
             {
                 copy_df_history(state_global->dfhist, state->dfhist);
             }
@@ -1847,7 +1847,7 @@ void gmx::LegacySimulator::do_md()
         }
 
         /* Output stuff */
-        if (MASTER(cr))
+        if (MAIN(cr))
         {
             if (fplog && do_log && bDoExpanded)
             {
@@ -1939,7 +1939,7 @@ void gmx::LegacySimulator::do_md()
             state->fep_state = awh->fepLambdaState();
         }
         /* Print the remaining wall clock time for the run */
-        if (isMasterSimMasterRank(ms, MASTER(cr)) && (do_verbose || gmx_got_usr_signal()) && !bPMETunePrinting)
+        if (isMainSimMainRank(ms, MAIN(cr)) && (do_verbose || gmx_got_usr_signal()) && !bPMETunePrinting)
         {
             if (shellfc)
             {
@@ -1963,7 +1963,7 @@ void gmx::LegacySimulator::do_md()
                                              wcycle,
                                              as_rvec_array(state->x.data()),
                                              state->box,
-                                             MASTER(cr) && mdrunOptions.verbose,
+                                             MAIN(cr) && mdrunOptions.verbose,
                                              bRerunMD);
 
             if (bNeedRepartition && haveDDAtomOrdering(*cr))
@@ -2049,7 +2049,7 @@ void gmx::LegacySimulator::do_md()
         observablesReducer.markAsReadyToReduce();
 
 #if GMX_FAHCORE
-        if (MASTER(cr))
+        if (MAIN(cr))
         {
             fcReportProgress(ir->nsteps + ir->init_step, step);
         }
@@ -2058,7 +2058,7 @@ void gmx::LegacySimulator::do_md()
         resetHandler->resetCounters(
                 step, step_rel, mdlog, fplog, cr, fr->nbv.get(), nrnb, fr->pmedata, pme_loadbal, wcycle, walltime_accounting);
 
-        /* If bIMD is TRUE, the master updates the IMD energy record and sends positions to VMD client */
+        /* If bIMD is TRUE, the main updates the IMD energy record and sends positions to VMD client */
         imdSession->updateEnergyRecordAndSendPositionsAndEnergies(bInteractiveMDstep, step, bCalcEner);
     }
     /* End of main MD loop */
@@ -2076,7 +2076,7 @@ void gmx::LegacySimulator::do_md()
         gmx_pme_send_finish(cr);
     }
 
-    if (MASTER(cr))
+    if (MAIN(cr))
     {
         if (ir->nstcalcenergy > 0)
         {
@@ -2095,7 +2095,7 @@ void gmx::LegacySimulator::do_md()
 
     done_shellfc(fplog, shellfc, step_rel);
 
-    if (useReplicaExchange && MASTER(cr))
+    if (useReplicaExchange && MAIN(cr))
     {
         print_replica_exchange_statistics(fplog, repl_ex);
     }

@@ -41,8 +41,8 @@
 #ifndef GMX_UTILITY_FATALERROR_H
 #define GMX_UTILITY_FATALERROR_H
 
-#include <stdarg.h>
-#include <stdio.h>
+#include <cstdarg>
+#include <cstdio>
 
 #include "gromacs/utility/basedefinitions.h"
 #include "gromacs/utility/stringutil.h"
@@ -55,7 +55,7 @@
  * \code
    if (debug)
    {
-       fprintf(debug, "%s", "Debug text");
+        std::fprintf(debug, "%s", "Debug text");
    }
    \endcode
  */
@@ -116,9 +116,9 @@ enum ExitType
      *
      * There should be some other MPI rank that reaches the same fatal error,
      * but uses ExitType_Abort.  The other ranks can then use
-     * ExitType_NonMasterAbort to wait for that one rank to issue the abort.
+     * ExitType_NonMainAbort to wait for that one rank to issue the abort.
      */
-    ExitType_NonMasterAbort
+    ExitType_NonMainAbort
 };
 
 /*! \brief
@@ -136,7 +136,7 @@ enum ExitType
  *
  * This function works as gmx_fatal(), but provides additional control for
  * cases where it is known that the same error occurs on multiple MPI ranks.
- * The error handler is called only if \p bMaster is `TRUE`, and MPI_Finalize()
+ * The error handler is called only if \p bMain is `TRUE`, and MPI_Finalize()
  * is called instead of MPI_Abort() in MPI-enabled \Gromacs if \p bFinalize is
  * `TRUE`.
  *
@@ -148,7 +148,7 @@ enum ExitType
 [[noreturn]] void gmx_fatal_mpi_va(int         fatal_errno,
                                    const char* file,
                                    int         line,
-                                   gmx_bool    bMaster,
+                                   gmx_bool    bMain,
                                    gmx_bool    bFinalize,
                                    const char* fmt,
                                    va_list     ap);

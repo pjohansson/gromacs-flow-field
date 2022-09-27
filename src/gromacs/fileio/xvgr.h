@@ -34,8 +34,9 @@
 #ifndef GMX_FILEIO_XVGR_H
 #define GMX_FILEIO_XVGR_H
 
-#include <stdio.h>
+#include <cstdio>
 
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -45,7 +46,11 @@
 #include "gromacs/utility/real.h"
 
 struct gmx_output_env_t;
-
+namespace gmx
+{
+template<typename>
+class ArrayRef;
+} // namespace gmx
 /***************************************************
  *            XVGR   DEFINITIONS
  ***************************************************/
@@ -170,18 +175,21 @@ void xvgr_view(FILE* out, real xmin, real ymin, real xmax, real ymax, const stru
 void xvgr_world(FILE* out, real xmin, real ymin, real xmax, real ymax, const struct gmx_output_env_t* oenv);
 /* Set the world in xvgr */
 
-void xvgrLegend(FILE* out, const std::vector<std::string>& setNames, const struct gmx_output_env_t* oenv);
-/* Make a legend box, and also modifies the view to make room for the legend */
+//! Prepare a legend box, also modifies the view to make room for the legend
+void xvgrLegend(FILE* out, gmx::ArrayRef<const std::string> setNames, const struct gmx_output_env_t* oenv);
 
-void xvgr_legend(FILE* out, int nsets, const char* const* setnames, const struct gmx_output_env_t* oenv);
-/* Make a legend box, and also modifies the view to make room for the legend */
-
-void xvgr_new_dataset(FILE* out, int nr_first, int nsets, const char** setnames, const struct gmx_output_env_t* oenv);
-/* End the previous data set(s) and start new one(s).
-    nr_first = the global set number of the first new set (or 0 if no legend)
-    nsets = the number of sets (or 0 if no legends)
-    setnames = the set names (or NULL if no legends)
+/*! \brief
+ * End the previous data set(s) and start new one(s).
+ *
+ * \param[in] out File to write to.
+ * \param[in] firstSetNumber Global number of the first data set, or 0 if no legend.
+ * \param[in] setNames View on collection of strings for legend in the data set.
+ * \param[in] oenv Global output enivornment handling.
  */
+void xvgrNewDataset(FILE*                            out,
+                    int                              firstSetNumber,
+                    gmx::ArrayRef<const std::string> setNames,
+                    const struct gmx_output_env_t*   oenv);
 
 void xvgr_line_props(FILE* out, int NrSet, int LineStyle, int LineColor, const struct gmx_output_env_t* oenv);
 /* Set xvgr line styles and colors */
@@ -233,20 +241,38 @@ int read_xvg(const char* fn, double*** y, int* ny);
 gmx::MultiDimArray<std::vector<double>, gmx::dynamicExtents2D> readXvgData(const std::string& fn);
 
 
-void write_xvg(const char*                    fn,
-               const char*                    title,
-               int                            nx,
-               int                            ny,
-               real**                         y,
-               const char**                   leg,
-               const struct gmx_output_env_t* oenv);
+void write_xvg(const char*                      fn,
+               const char*                      title,
+               int                              nx,
+               int                              ny,
+               real**                           y,
+               gmx::ArrayRef<const std::string> leg,
+               const struct gmx_output_env_t*   oenv);
 /* Write a two D array (y) of dimensions nx rows times
  * ny columns to a file. If leg != NULL it will be written too.
  */
 
+/*! \brief
+ * Read xvg data as a time series.
+ *
+ * Allows truncation of data series to exclude time points.
+ * Expects first row to be
+ * time series. Only one set can be read in at the same time.
+ *
+ * \returns Data series in row major, first row being the time series.
+ * \param[in] fn Xvg file to read
+ * \param[in] startTime Optional first time to read.
+ * \param[in] endTime Optional last time to read.
+ */
+gmx::MultiDimArray<std::vector<double>, gmx::dynamicExtents2D>
+readXvgTimeSeries(const std::string& fn, std::optional<real> startTime, std::optional<real> endTime);
 
-/* This function reads ascii (xvg) files and extracts the data sets to a
+
+/*!\brief
+ *  This function reads ascii (xvg) files and extracts the data sets to a
  * two dimensional array which is returned.
+ *
+ * NOTE: This function is deprecated and shouldn't be used for new code.
  */
 real** read_xvg_time(const char* fn,
                      gmx_bool    bHaveT,

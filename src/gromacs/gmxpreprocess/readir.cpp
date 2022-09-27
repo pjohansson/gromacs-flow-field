@@ -57,6 +57,7 @@
 #include "gromacs/mdlib/calc_verletbuf.h"
 #include "gromacs/mdlib/vcm.h"
 #include "gromacs/mdrun/mdmodules.h"
+#include "gromacs/mdrunutility/mdmodulesnotifiers.h"
 #include "gromacs/mdtypes/awh_params.h"
 #include "gromacs/mdtypes/inputrec.h"
 #include "gromacs/mdtypes/md_enums.h"
@@ -85,7 +86,6 @@
 #include "gromacs/utility/keyvaluetreebuilder.h"
 #include "gromacs/utility/keyvaluetreemdpwriter.h"
 #include "gromacs/utility/keyvaluetreetransform.h"
-#include "gromacs/utility/mdmodulesnotifiers.h"
 #include "gromacs/utility/smalloc.h"
 #include "gromacs/utility/strconvert.h"
 #include "gromacs/utility/stringcompare.h"
@@ -150,12 +150,10 @@ enum class GroupCoverage
     OneGroup //<! Merge all selected groups into one group, make a rest group for the remaining particles
 };
 
-// NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
-static const char* constraints[eshNR + 1] = { "none",     "h-bonds",    "all-bonds",
-                                              "h-angles", "all-angles", nullptr };
+static const char* const constraints[eshNR + 1] = { "none",     "h-bonds",    "all-bonds",
+                                                    "h-angles", "all-angles", nullptr };
 
-// NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
-static const char* couple_lam[ecouplamNR + 1] = { "vdw-q", "vdw", "q", "none", nullptr };
+static const char* const couple_lam[ecouplamNR + 1] = { "vdw-q", "vdw", "q", "none", nullptr };
 
 static void getSimTemps(int ntemps, t_simtemp* simtemp, gmx::ArrayRef<double> temperature_lambdas)
 {
@@ -510,27 +508,15 @@ void check_ir(const char*                    mdparin,
     }
     if (EI_DYNAMICS(ir->eI))
     {
+        // Replace old -1 "automation" values by the default value of 100
         if (ir->nstcalcenergy < 0)
         {
-            ir->nstcalcenergy = ir_optimal_nstcalcenergy(ir);
-            if (ir->nstenergy != 0 && ir->nstenergy < ir->nstcalcenergy)
-            {
-                /* nstcalcenergy larger than nstener does not make sense.
-                 * We ideally want nstcalcenergy=nstener.
-                 */
-                if (ir->nstlist > 0)
-                {
-                    ir->nstcalcenergy = std::gcd(ir->nstenergy, ir->nstlist);
-                }
-                else
-                {
-                    ir->nstcalcenergy = ir->nstenergy;
-                }
-            }
+            ir->nstcalcenergy = 100;
         }
-        else if ((ir->nstenergy > 0 && ir->nstcalcenergy > ir->nstenergy)
-                 || (ir->efep != FreeEnergyPerturbationType::No && ir->fepvals->nstdhdl > 0
-                     && (ir->nstcalcenergy > ir->fepvals->nstdhdl)))
+
+        if ((ir->nstenergy > 0 && ir->nstcalcenergy > ir->nstenergy)
+            || (ir->efep != FreeEnergyPerturbationType::No && ir->fepvals->nstdhdl > 0
+                && (ir->nstcalcenergy > ir->fepvals->nstdhdl)))
 
         {
             const char* nsten    = "nstenergy";
@@ -3095,13 +3081,11 @@ void get_ir(const char*     mdparin,
     sfree(dumstr[1]);
 }
 
-int search_string(const char* s, int ng, char* const gn[])
+int getGroupIndex(const std::string& s, gmx::ArrayRef<const IndexGroup> indexGroups)
 {
-    int i;
-
-    for (i = 0; (i < ng); i++)
+    for (int i = 0; i < gmx::ssize(indexGroups); i++)
     {
-        if (gmx_strcasecmp(s, gn[i]) == 0)
+        if (gmx_strcasecmp(s.c_str(), indexGroups[i].name.c_str()) == 0)
         {
             return i;
         }
@@ -3112,16 +3096,14 @@ int search_string(const char* s, int ng, char* const gn[])
               "Group names must match either [moleculetype] names or custom index group\n"
               "names, in which case you must supply an index file to the '-n' option\n"
               "of grompp.",
-              s);
+              s.c_str());
 }
 
-static void atomGroupRangeValidation(int natoms, int groupIndex, const t_blocka& block)
+static void atomGroupRangeValidation(const int natoms, gmx::ArrayRef<const int> particleIndices)
 {
     /* Now go over the atoms in the group */
-    for (int j = block.index[groupIndex]; (j < block.index[groupIndex + 1]); j++)
+    for (const int aj : particleIndices)
     {
-        int aj = block.a[j];
-
         /* Range checking */
         if ((aj < 0) || (aj >= natoms))
         {
@@ -3135,8 +3117,7 @@ static void atomGroupRangeValidation(int natoms, int groupIndex, const t_blocka&
  * \param[in] natoms  The total number of atoms in the system
  * \param[in,out] groups  Index \p gtype in this list of list of groups will be set
  * \param[in] groupsFromMdpFile  The list of group names set for \p gtype in the mdp file
- * \param[in] block       The list of atom indices for all available index groups
- * \param[in] gnames      The list of names for all available index groups
+ * \param[in] indexGroups The list of all available index groups
  * \param[in] gtype       The group type to creates groups for
  * \param[in] restnm      The index of rest group name in \p gnames
  * \param[in] coverage    How to treat coverage of all atoms in the system
@@ -3146,8 +3127,7 @@ static void atomGroupRangeValidation(int natoms, int groupIndex, const t_blocka&
 static void do_numbering(const int                        natoms,
                          SimulationGroups*                groups,
                          gmx::ArrayRef<const std::string> groupsFromMdpFile,
-                         const t_blocka*                  block,
-                         char* const                      gnames[],
+                         gmx::ArrayRef<const IndexGroup>  indexGroups,
                          const SimulationAtomGroupType    gtype,
                          const int                        restnm,
                          const GroupCoverage              coverage,
@@ -3172,17 +3152,16 @@ static void do_numbering(const int                        natoms,
     for (int i = 0; i != groupsFromMdpFile.ssize(); ++i)
     {
         /* Lookup the group name in the block structure */
-        const int gid = search_string(groupsFromMdpFile[i].c_str(), block->nr, gnames);
+        const int gid = getGroupIndex(groupsFromMdpFile[i], indexGroups);
         if ((coverage != GroupCoverage::OneGroup) || (i == 0))
         {
             grps->emplace_back(gid);
         }
-        GMX_ASSERT(block, "Can't have a nullptr block");
-        atomGroupRangeValidation(natoms, gid, *block);
+        gmx::ArrayRef<const int> indexGroup = indexGroups[gid].particleIndices;
+        atomGroupRangeValidation(natoms, indexGroup);
         /* Now go over the atoms in the group */
-        for (int j = block->index[gid]; (j < block->index[gid + 1]); j++)
+        for (const int aj : indexGroup)
         {
-            const int aj = block->a[j];
             /* Lookup up the old group number */
             const int ognr = cbuf[aj];
             if (ognr != NOGID)
@@ -3262,7 +3241,7 @@ static void do_numbering(const int                        natoms,
     sfree(cbuf);
 }
 
-static void calc_nrdf(const gmx_mtop_t* mtop, t_inputrec* ir, char** gnames)
+static void calc_nrdf(const gmx_mtop_t* mtop, t_inputrec* ir, gmx::ArrayRef<const std::string> gnames)
 {
     t_grpopts*     opts;
     pull_params_t* pull;
@@ -3451,7 +3430,8 @@ static void calc_nrdf(const gmx_mtop_t* mtop, t_inputrec* ir, char** gnames)
                                   "Center of mass pulling constraints caused the number of degrees "
                                   "of freedom for temperature coupling group %s to be negative",
                                   gnames[groups.groups[SimulationAtomGroupType::TemperatureCoupling][getGroupType(
-                                          groups, SimulationAtomGroupType::TemperatureCoupling, ai)]]);
+                                                 groups, SimulationAtomGroupType::TemperatureCoupling, ai)]]
+                                          .c_str());
                     }
                 }
                 else
@@ -3544,7 +3524,7 @@ static void calc_nrdf(const gmx_mtop_t* mtop, t_inputrec* ir, char** gnames)
         }
         fprintf(stderr,
                 "Number of degrees of freedom in T-Coupling group %s is %.2f\n",
-                gnames[groups.groups[SimulationAtomGroupType::TemperatureCoupling][i]],
+                gnames[groups.groups[SimulationAtomGroupType::TemperatureCoupling][i]].c_str(),
                 opts->nrdf[i]);
     }
 
@@ -3611,7 +3591,7 @@ static bool do_egp_flag(t_inputrec* ir, SimulationGroups* groups, const char* op
 }
 
 
-static void make_swap_groups(t_swapcoords* swap, t_blocka* grps, char** gnames)
+static void make_swap_groups(t_swapcoords* swap, gmx::ArrayRef<const IndexGroup> indexGroups)
 {
     int          ig = -1, i = 0, gind;
     t_swapGroup* swapg;
@@ -3631,8 +3611,8 @@ static void make_swap_groups(t_swapcoords* swap, t_blocka* grps, char** gnames)
     for (ig = 0; ig < swap->ngrp; ig++)
     {
         swapg      = &swap->grp[ig];
-        gind       = search_string(swap->grp[ig].molname, grps->nr, gnames);
-        swapg->nat = grps->index[gind + 1] - grps->index[gind];
+        gind       = getGroupIndex(swap->grp[ig].molname, indexGroups);
+        swapg->nat = gmx::ssize(indexGroups[gind].particleIndices);
 
         if (swapg->nat > 0)
         {
@@ -3644,7 +3624,7 @@ static void make_swap_groups(t_swapcoords* swap, t_blocka* grps, char** gnames)
             snew(swapg->ind, swapg->nat);
             for (i = 0; i < swapg->nat; i++)
             {
-                swapg->ind[i] = grps->a[grps->index[gind] + i];
+                swapg->ind[i] = indexGroups[gind].particleIndices[i];
             }
         }
         else
@@ -3655,13 +3635,13 @@ static void make_swap_groups(t_swapcoords* swap, t_blocka* grps, char** gnames)
 }
 
 
-static void make_IMD_group(t_IMD* IMDgroup, char* IMDgname, t_blocka* grps, char** gnames)
+static void make_IMD_group(t_IMD* IMDgroup, const char* IMDgname, gmx::ArrayRef<const IndexGroup> indexGroups)
 {
     int ig, i;
 
 
-    ig            = search_string(IMDgname, grps->nr, gnames);
-    IMDgroup->nat = grps->index[ig + 1] - grps->index[ig];
+    ig            = getGroupIndex(IMDgname, indexGroups);
+    IMDgroup->nat = gmx::ssize(indexGroups[ig].particleIndices);
 
     if (IMDgroup->nat > 0)
     {
@@ -3673,7 +3653,7 @@ static void make_IMD_group(t_IMD* IMDgroup, char* IMDgname, t_blocka* grps, char
         snew(IMDgroup->ind, IMDgroup->nat);
         for (i = 0; i < IMDgroup->nat; i++)
         {
-            IMDgroup->ind[i] = grps->a[grps->index[ig] + i];
+            IMDgroup->ind[i] = indexGroups[ig].particleIndices[i];
         }
     }
 }
@@ -3770,14 +3750,11 @@ void do_index(const char*                    mdparin,
               t_inputrec*                    ir,
               WarningHandler*                wi)
 {
-    t_blocka* defaultIndexGroups;
     int       natoms;
     t_symtab* symtab;
     t_atoms   atoms_all;
-    char**    gnames;
     int       nr;
     real      tau_min;
-    int       nstcmin;
     int       i, j, k, restnm;
     bool      bExcl, bTable, bAnneal;
     char      warn_buf[STRLEN];
@@ -3786,33 +3763,33 @@ void do_index(const char*                    mdparin,
     {
         fprintf(stderr, "processing index file...\n");
     }
+    std::vector<IndexGroup> defaultIndexGroups;
     if (ndx == nullptr)
     {
-        snew(defaultIndexGroups, 1);
-        snew(defaultIndexGroups->index, 1);
-        snew(gnames, 1);
-        atoms_all = gmx_mtop_global_atoms(*mtop);
-        analyse(&atoms_all, defaultIndexGroups, &gnames, FALSE, TRUE);
+        atoms_all          = gmx_mtop_global_atoms(*mtop);
+        defaultIndexGroups = analyse(&atoms_all, false, true);
         done_atom(&atoms_all);
     }
     else
     {
-        defaultIndexGroups = init_index(ndx, &gnames);
+        defaultIndexGroups = init_index(ndx);
     }
 
     SimulationGroups* groups = &mtop->groups;
     natoms                   = mtop->natoms;
     symtab                   = &mtop->symtab;
 
-    for (int i = 0; (i < defaultIndexGroups->nr); i++)
+    // We need a temporary list of the group names from the index file plus the rest group
+    std::vector<std::string> gnames;
+    for (const auto& indexGroup : defaultIndexGroups)
     {
-        groups->groupNames.emplace_back(put_symtab(symtab, gnames[i]));
+        groups->groupNames.emplace_back(put_symtab(symtab, indexGroup.name.c_str()));
+        gnames.emplace_back(*groups->groupNames.back());
     }
     groups->groupNames.emplace_back(put_symtab(symtab, "rest"));
     restnm = groups->groupNames.size() - 1;
-    GMX_RELEASE_ASSERT(restnm == defaultIndexGroups->nr, "Size of allocations must match");
-    srenew(gnames, defaultIndexGroups->nr + 1);
-    gnames[restnm] = *(groups->groupNames.back());
+    GMX_RELEASE_ASSERT(restnm == gmx::ssize(defaultIndexGroups), "Size of allocations must match");
+    gnames.emplace_back(*groups->groupNames.back());
 
     wi->setFileAndLineNumber(mdparin, -1);
 
@@ -3835,7 +3812,6 @@ void do_index(const char*                    mdparin,
                  groups,
                  temperatureCouplingGroupNames,
                  defaultIndexGroups,
-                 gnames,
                  SimulationAtomGroupType::TemperatureCoupling,
                  restnm,
                  useReferenceTemperature ? GroupCoverage::All : GroupCoverage::AllGenerateRest,
@@ -3937,8 +3913,9 @@ void do_index(const char*                    mdparin,
                 wi->addNote(warn_buf);
             }
         }
-        nstcmin = tcouple_min_integration_steps(ir->etc);
-        if (nstcmin > 1)
+        const int nstcmin = tcouple_min_integration_steps(ir->etc);
+        // V-rescale can act correctly with any coupling interval
+        if (nstcmin > 1 && ir->etc != TemperatureCoupling::VRescale)
         {
             if (tau_min / (ir->delta_t * ir->nsttcouple) < nstcmin - 10 * GMX_REAL_EPS)
             {
@@ -4153,35 +4130,33 @@ void do_index(const char*                    mdparin,
     {
         for (int i = 1; i < ir->pull->ngroup; i++)
         {
-            const int gid = search_string(
-                    inputrecStrings->pullGroupNames[i].c_str(), defaultIndexGroups->nr, gnames);
-            GMX_ASSERT(defaultIndexGroups, "Must have initialized default index groups");
-            atomGroupRangeValidation(natoms, gid, *defaultIndexGroups);
+            const int gid = getGroupIndex(inputrecStrings->pullGroupNames[i], defaultIndexGroups);
+            GMX_ASSERT(!defaultIndexGroups.empty(), "Must have initialized default index groups");
+            atomGroupRangeValidation(natoms, defaultIndexGroups[gid].particleIndices);
         }
 
-        process_pull_groups(ir->pull->group, inputrecStrings->pullGroupNames, defaultIndexGroups, gnames);
+        process_pull_groups(ir->pull->group, inputrecStrings->pullGroupNames, defaultIndexGroups);
 
         checkPullCoords(ir->pull->group, ir->pull->coord);
     }
 
     if (ir->bRot)
     {
-        make_rotation_groups(ir->rot.get(), inputrecStrings->rotateGroupNames, defaultIndexGroups, gnames);
+        make_rotation_groups(ir->rot.get(), inputrecStrings->rotateGroupNames, defaultIndexGroups);
     }
 
     if (ir->eSwapCoords != SwapType::No)
     {
-        make_swap_groups(ir->swap, defaultIndexGroups, gnames);
+        make_swap_groups(ir->swap, defaultIndexGroups);
     }
 
     /* Make indices for IMD session */
     if (ir->bIMD)
     {
-        make_IMD_group(ir->imd, inputrecStrings->imd_grp, defaultIndexGroups, gnames);
+        make_IMD_group(ir->imd, inputrecStrings->imd_grp, defaultIndexGroups);
     }
 
-    gmx::IndexGroupsAndNames defaultIndexGroupsAndNames(
-            *defaultIndexGroups, gmx::arrayRefFromArray(gnames, defaultIndexGroups->nr));
+    gmx::IndexGroupsAndNames defaultIndexGroupsAndNames(defaultIndexGroups);
     mdModulesNotifiers.preProcessingNotifier_.notify(defaultIndexGroupsAndNames);
 
     auto accelerations          = gmx::splitString(inputrecStrings->acceleration);
@@ -4197,7 +4172,6 @@ void do_index(const char*                    mdparin,
                  groups,
                  accelerationGroupNames,
                  defaultIndexGroups,
-                 gnames,
                  SimulationAtomGroupType::Acceleration,
                  restnm,
                  GroupCoverage::AllGenerateRest,
@@ -4222,7 +4196,6 @@ void do_index(const char*                    mdparin,
                  groups,
                  freezeGroupNames,
                  defaultIndexGroups,
-                 gnames,
                  SimulationAtomGroupType::Freeze,
                  restnm,
                  GroupCoverage::AllGenerateRest,
@@ -4262,7 +4235,6 @@ void do_index(const char*                    mdparin,
                  groups,
                  energyGroupNames,
                  defaultIndexGroups,
-                 gnames,
                  SimulationAtomGroupType::EnergyOutput,
                  restnm,
                  GroupCoverage::AllGenerateRest,
@@ -4275,7 +4247,6 @@ void do_index(const char*                    mdparin,
                  groups,
                  vcmGroupNames,
                  defaultIndexGroups,
-                 gnames,
                  SimulationAtomGroupType::MassCenterVelocityRemoval,
                  restnm,
                  vcmGroupNames.empty() ? GroupCoverage::AllGenerateRest : GroupCoverage::Partial,
@@ -4295,7 +4266,6 @@ void do_index(const char*                    mdparin,
                  groups,
                  user1GroupNames,
                  defaultIndexGroups,
-                 gnames,
                  SimulationAtomGroupType::User1,
                  restnm,
                  GroupCoverage::AllGenerateRest,
@@ -4306,7 +4276,6 @@ void do_index(const char*                    mdparin,
                  groups,
                  user2GroupNames,
                  defaultIndexGroups,
-                 gnames,
                  SimulationAtomGroupType::User2,
                  restnm,
                  GroupCoverage::AllGenerateRest,
@@ -4317,7 +4286,6 @@ void do_index(const char*                    mdparin,
                  groups,
                  compressedXGroupNames,
                  defaultIndexGroups,
-                 gnames,
                  SimulationAtomGroupType::CompressedPositionOutput,
                  restnm,
                  GroupCoverage::OneGroup,
@@ -4328,7 +4296,6 @@ void do_index(const char*                    mdparin,
                  groups,
                  orirefFitGroupNames,
                  defaultIndexGroups,
-                 gnames,
                  SimulationAtomGroupType::OrientationRestraintsFit,
                  restnm,
                  GroupCoverage::AllGenerateRest,
@@ -4346,7 +4313,6 @@ void do_index(const char*                    mdparin,
                  groups,
                  qmGroupNames,
                  defaultIndexGroups,
-                 gnames,
                  SimulationAtomGroupType::QuantumMechanics,
                  restnm,
                  GroupCoverage::AllGenerateRest,
@@ -4405,13 +4371,6 @@ void do_index(const char*                    mdparin,
                 "by default, but it is recommended to set it to an explicit value!",
                 ir->expandedvals->nstexpanded));
     }
-    for (i = 0; (i < defaultIndexGroups->nr); i++)
-    {
-        sfree(gnames[i]);
-    }
-    sfree(gnames);
-    done_blocka(defaultIndexGroups);
-    sfree(defaultIndexGroups);
 }
 
 
@@ -4870,6 +4829,42 @@ void triple_check(const char* mdparin, t_inputrec* ir, gmx_mtop_t* sys, WarningH
         wi->addWarning(
                 "You are not using center of mass motion removal (mdp option comm-mode), numerical "
                 "rounding errors can lead to build up of kinetic energy of the center of mass");
+    }
+
+    if (ir->pressureCouplingOptions.epc == PressureCoupling::CRescale)
+    {
+        // These checks should be moved to the reference temperature automation/checking
+        // code when we introduce that in the next major release.
+        //
+        // Note that we should also check for atoms not being part of any T-coupling
+        // group. This check is not present here yet.
+
+        if (!EI_RANDOM(ir->eI) && ir->etc == TemperatureCoupling::No)
+        {
+            sprintf(warn_buf,
+                    "Can not use the %s barostat without temperature coupling",
+                    enumValueToString(ir->pressureCouplingOptions.epc));
+            wi->addError(warn_buf);
+        }
+        else
+        {
+            GMX_RELEASE_ASSERT(ir->opts.ngtc > 0, "Expect at least one temperature coupling group");
+            const real refT0 = ir->opts.ref_t[0];
+            for (int i = 1; i < ir->opts.ngtc; i++)
+            {
+                if (ir->opts.ref_t[i] != refT0)
+                {
+                    sprintf(warn_buf,
+                            "The %s barostat needs a reference temperature, but the reference "
+                            "temperatures for the T-coupling groups are not identical. Will "
+                            "use the temperature of the first group as reference temperature.",
+                            enumValueToString(ir->pressureCouplingOptions.epc));
+                    wi->addWarning(warn_buf);
+
+                    break;
+                }
+            }
+        }
     }
 
     if (ir->pressureCouplingOptions.epc == PressureCoupling::ParrinelloRahman

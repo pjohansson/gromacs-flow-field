@@ -19,7 +19,7 @@ https://github.com/kassonlab/gmxapi-scripts
 
 Python framework for gmxapi high-level interface.
 
-The `src` directory provides the files that will be copied to the GROMACS installation location from which users may 
+The `gmxapi` directory provides the files that will be copied to the GROMACS installation location from which users may 
 install Python packages.
 This allows C++ extension modules to be built against a user-chosen GROMACS installation,
 but for a Python interpreter that is very likely different from that used
@@ -32,13 +32,13 @@ Then, install the package in a Python virtualenv.
     source /path/to/gromacs/bin/GMXRC
     python3 -m venv $HOME/somevirtualenv
     source $HOME/somevirtualenv/bin/activate
-    (cd src && pip install -r requirements.txt && pip install .)
+    (cd gmxapi && pip install -r requirements.txt && pip install .)
     python -c 'import gmxapi as gmx'
 
 Use `pytest` to run unit tests and integration tests.
 
-    pip install -r requirements-test.txt
-    pytest src/test
+    cd python_packaging/gmxapi
+    pip install -r requirements.txt
     pytest test
 
 For additional discussion on packaging and distribution, see
@@ -95,19 +95,19 @@ Additional information in `python_packaging/docker/README.md`.
    account will have to push the new repository the first time and then grant access
    to the service account used by the Travis-CI configuration.
    `<tag>` is the (short) git revision hash
-   of the `master` branch commit corresponding to the current state of the `kassonLabFork`
+   of the `main` branch commit corresponding to the current state of the `kassonLabFork`
    branch.
 2. `gmxapi/gromacs-<matrix>:<tag>` Builds on `gromacs-dependencies-<matrix>`, where
    `<matrix>` has the same meaning as above. `<tag>` is the (short) git revision hash
-   of the `master` branch commit corresponding to the current state of the `kassonLabFork`
+   of the `main` branch commit corresponding to the current state of the `kassonLabFork`
    branch.
    This is recorded in the `kassonLabFork` `.travis.yml`.
 3. `gmxapi/ci-<matrix>:<tag>` starts with `gromacs-<matrix>` and merges in the
     `python_packaging` changes associated with the feature branch indicated by `<tag>`
 
-Hint: the fork point from `master` and the current git ref can be set as environment variables:
+Hint: the fork point from `main` and the current git ref can be set as environment variables:
 
-    FORKPOINT=$(git show -s --pretty=format:"%h" `git merge-base master HEAD`)
+    FORKPOINT=$(git show -s --pretty=format:"%h" `git merge-base main HEAD`)
     REF=`git show -s --pretty=format:"%h"`
 
 ## External project code
@@ -167,7 +167,7 @@ For basic tests, install the Python package(s) (presumably into a virtualenv),
 then use the `pytest` executable to run these tests against the installed
 package(s).
 
-`pytest $LOCAL_REPO_DIR/python_packaging/src/test`
+`pytest $LOCAL_REPO_DIR/python_packaging/gmxapi/test`
 
 where `$LOCAL_REPO_DIR` is the path to the local copy of the GROMACS source repository.
 

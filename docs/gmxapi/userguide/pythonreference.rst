@@ -2,9 +2,6 @@
 gmxapi Python module reference
 ==============================
 
-.. contents:: :local:
-    :depth: 2
-
 .. Concise reference documentation extracted directly from code.
 .. For new and non-backwards-compatible features, API versions must be given.
 
@@ -83,6 +80,10 @@ Utilities
 
 .. automodule:: gmxapi.utility
 
+.. autofunction:: config
+
+.. autofunction:: join_path
+
 .. py:currentmodule:: gmxapi
 
 .. autofunction:: concatenate_lists
@@ -117,25 +118,46 @@ Core API
 Exceptions
 ----------
 
+Module Exceptions
+~~~~~~~~~~~~~~~~~
+
 .. autoexception:: gmxapi._gmxapi.Exception
 
     Root exception for the C++ extension module. Derives from `gmxapi.exceptions.Error`.
+
+.. autoexception:: FeatureNotAvailable
+
+
+Wrapped C++ exceptions emitted through the supporting |Gromacs| library
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoexception:: gmxapi._gmxapi.MissingImplementationError
 
 .. autoexception:: gmxapi._gmxapi.ProtocolError
 
-.. autoexception:: gmxapi._gmxapi.UnknownException
-
 .. autoexception:: gmxapi._gmxapi.UsageError
+
+Other
+~~~~~
+
+No other C++ exceptions are expected, but will be wrapped in a
+:py:class:`Exception` to help tracing and reporting bugs.
+
+.. autoexception:: gmxapi._gmxapi.UnknownException
 
 Functions
 ---------
+
+This documentation is provided for completeness and as an aid to developers.
+Users of the :py:mod:`gmxapi` package, generally, should not need to use the
+following tools directly.
 
 Tools for launching simulations
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autofunction:: gmxapi._gmxapi.from_tpr
+
+.. autofunction:: gmxapi._gmxapi.create_context
 
 Tools to manipulate TPR input files
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -147,6 +169,25 @@ Tools to manipulate TPR input files
 .. autofunction:: gmxapi._gmxapi.write_tprfile
 
 .. autofunction:: gmxapi._gmxapi.rewrite_tprfile
+
+Utilities
+~~~~~~~~~
+
+.. autofunction:: gmxapi._gmxapi.has_feature
+
+    Available features may depend on the package version, the details of the
+    supporting |Gromacs| installation, the software environment detected
+    when the package was built, or possibly on detected runtime details.
+    These feature checks are largely for internal use. The :py:mod:`gmxapi`
+    commands may adjust their behavior slightly depending on feature checks,
+    and (at worst) should produce meaningful error messages or exceptions.
+
+    Named features:
+
+    * *create_context*: `create_context` can be used to initialize a `Context`
+      with assigned resources.
+    * *mpi_bindings*: C++ extension module was built with :py:mod:`mpi4py` compatibility.
+
 
 Classes
 -------

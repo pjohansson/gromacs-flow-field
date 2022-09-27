@@ -43,8 +43,9 @@ gmx_add_unit_test(FileIOTests fileio-test
         mrcdensitymap.cpp
         mrcdensitymapheader.cpp
         readinp.cpp
+        timecontrol.cpp
         fileioxdrserializer.cpp
         ${tng_sources}
         xvgio.cpp
     )
-target_link_libraries(fileio-test PRIVATE legacy_api)
+target_link_libraries(fileio-test PRIVATE legacy_api math)

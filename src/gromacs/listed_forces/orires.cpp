@@ -41,9 +41,9 @@
 #include "gromacs/domdec/ga2la.h"
 #include "gromacs/domdec/localatomsetmanager.h"
 #include "gromacs/gmxlib/network.h"
-#include "gromacs/linearalgebra/nrjac.h"
 #include "gromacs/math/do_fit.h"
 #include "gromacs/math/functions.h"
+#include "gromacs/math/nrjac.h"
 #include "gromacs/math/vec.h"
 #include "gromacs/mdrunutility/multisim.h"
 #include "gromacs/mdtypes/commrec.h"
@@ -234,7 +234,7 @@ t_oriresdata::t_oriresdata(FILE*                     fplog,
 
     eigenOutput.resize(numExperiments * c_numEigenRealsPerExperiment);
 
-    /* Determine the reference structure on the master node.
+    /* Determine the reference structure on the main node.
      * Copy it to the other nodes after checking multi compatibility,
      * so we are sure the subsystems match before copying.
      */
@@ -250,7 +250,7 @@ t_oriresdata::t_oriresdata(FILE*                     fplog,
             // Not correct for free-energy with changing masses
             const real mass = local.m;
             // Note that only one rank per sim is supported.
-            if (isMasterSim(ms))
+            if (isMainSim(ms))
             {
                 referenceCoordinates_.push_back(x[i]);
                 for (int d = 0; d < DIM; d++)
@@ -264,7 +264,7 @@ t_oriresdata::t_oriresdata(FILE*                     fplog,
     }
 
     svmul(1.0 / mtot, com, com);
-    if (isMasterSim(ms))
+    if (isMainSim(ms))
     {
         for (auto& refCoord : referenceCoordinates_)
         {
@@ -273,7 +273,6 @@ t_oriresdata::t_oriresdata(FILE*                     fplog,
     }
 
     const size_t numFitAtoms = referenceCoordinates_.size();
-    fitLocalAtomIndices_.resize(numFitAtoms);
     xTmp_.resize(numFitAtoms);
 
     if (fplog)
@@ -300,7 +299,7 @@ t_oriresdata::t_oriresdata(FILE*                     fplog,
         check_multi_int(
                 fplog, ms, numFitAtoms, "the number of fit atoms for orientation restraining", FALSE);
         check_multi_int(fplog, ms, ir.nsteps, "nsteps", FALSE);
-        /* Copy the reference coordinates from the master to the other nodes */
+        /* Copy the reference coordinates from the main to the other nodes */
         gmx_sum_sim(DIM * referenceCoordinates_.size(), as_rvec_array(referenceCoordinates_.data())[0], ms);
     }
 
@@ -449,12 +448,12 @@ real calc_orires_dev(const gmx_multisim_t* ms,
     gmx::index referenceListIndex = 0;
     for (const int fitLocalAtomIndex : fitLocalAtomIndices)
     {
-        const gmx::RVec& x       = xWholeMolecules[fitLocalAtomIndex];
+        const gmx::RVec& xLocal  = xWholeMolecules[fitLocalAtomIndex];
         const real       mass    = od->fitMasses()[referenceListIndex];
-        xFit[referenceListIndex] = x;
+        xFit[referenceListIndex] = xLocal;
         for (int d = 0; d < DIM; d++)
         {
-            com[d] += mass * x[d];
+            com[d] += mass * xLocal[d];
         }
         mtot += mass;
         referenceListIndex++;

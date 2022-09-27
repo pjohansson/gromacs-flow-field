@@ -36,13 +36,22 @@
 
 #include <cstdio>
 
+#include <string>
 #include <vector>
 
 #include "gromacs/utility/arrayref.h"
 #include "gromacs/utility/basedefinitions.h"
 
 struct t_atoms;
-struct t_blocka;
+
+//! An index group consisting or a name and list of atom indices
+struct IndexGroup
+{
+    //! The name of the group, should not be empty
+    std::string name;
+    //! List of atom indices
+    std::vector<int> particleIndices;
+};
 
 void check_index(const char* gname, int n, int index[], const char* traj, int natoms);
 /* Checks if any index is smaller than zero or larger than natoms,
@@ -50,8 +59,8 @@ void check_index(const char* gname, int n, int index[], const char* traj, int na
  * and traj (if traj=NULL, "the trajectory" is used).
  */
 
-struct t_blocka* init_index(const char* gfile, char*** grpname);
-/* Lower level routine than the next */
+/* Returns a list of atom index groups read from gfile */
+std::vector<IndexGroup> init_index(const char* gfile);
 
 void rd_index(const char* statfile, int ngrps, int isize[], int* index[], char* grpnames[]);
 /* Assume the group file is generated, so the
@@ -77,35 +86,34 @@ void get_index(const t_atoms* atoms, const char* fnm, int ngrps, int isize[], in
 
 struct t_cluster_ndx
 {
-    int              maxframe = -1;
-    char**           grpname  = nullptr;
-    struct t_blocka* clust    = nullptr;
-    std::vector<int> inv_clust;
+    int                     maxframe = -1;
+    std::vector<IndexGroup> clusters;
+    std::vector<int>        inv_clust;
 };
 
 t_cluster_ndx cluster_index(FILE* fplog, const char* ndx);
 
 
-void write_index(const char* outf, struct t_blocka* b, char** gnames, gmx_bool bDuplicate, int natoms);
-/* Writes index blocks to outf (writes an indexfile) */
-
-/*! \brief
- * Add a new group with \p name to \p b.
+/*! \brief Writes index groups to outf (writes an indexfile)
  *
- * \param[in] b Block struct to add group to.
- * \param[in] gnames Names of groups.
- * \param[in] a Group to add to Block.
- * \param[in] name Group name.
+ * \param[in] outf         Name of file to write to
+ * \param[in] indexGroups  The index groups to write
+ * \param[in] duplicate    Whether to write a duplicate of the groups after the normal groups, with
+ * indices offset by \p numAtoms \param[in] numAtoms     The offset used with \p duplicate == true
  */
-void add_grp(struct t_blocka* b, char*** gnames, gmx::ArrayRef<const int> a, const std::string& name);
-/* Ads group a with name name to block b and namelist gnames */
+void write_index(const char* outf, gmx::ArrayRef<const IndexGroup> indexGroups, bool duplicate, int numAtoms);
 
-void analyse(const t_atoms* atoms, struct t_blocka* gb, char*** gn, gmx_bool bASK, gmx_bool bVerb);
-/* Makes index groups gb with names gn for atoms in atoms.
- * bASK=FALSE gives default groups.
+//! Generates and returns standard index groups, bASK=FALSE gives default groups.
+std::vector<IndexGroup> analyse(const t_atoms* atoms, gmx_bool bASK, gmx_bool bVerb);
+
+/*! \brief Look up a group in a list of index groups.
+ *
+ * \param[inout] s         The string to look up
+ * \param[in] indexGroups  The index groups
  */
+int find_group(const char* s, gmx::ArrayRef<const IndexGroup> indexGroups);
 
-/*! \brief Look up a group in a list.
+/*! \brief Look up a group in a legacy list of index groups.
  *
  * \param[inout] s    The string to look up
  * \param[in] ngrps   The number of groups
@@ -113,6 +121,5 @@ void analyse(const t_atoms* atoms, struct t_blocka* gb, char*** gn, gmx_bool bAS
  * \return the group number or -1 if not found.
  */
 int find_group(const char* s, int ngrps, char** grpname);
-
 
 #endif

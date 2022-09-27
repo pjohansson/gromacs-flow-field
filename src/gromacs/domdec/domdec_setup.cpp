@@ -61,6 +61,7 @@
 #include "gromacs/math/utilities.h"
 #include "gromacs/math/vec.h"
 #include "gromacs/mdlib/perf_est.h"
+#include "gromacs/mdrunutility/mdmodulesnotifiers.h"
 #include "gromacs/mdtypes/commrec.h"
 #include "gromacs/mdtypes/inputrec.h"
 #include "gromacs/mdtypes/md_enums.h"
@@ -68,7 +69,6 @@
 #include "gromacs/topology/topology.h"
 #include "gromacs/utility/fatalerror.h"
 #include "gromacs/utility/logger.h"
-#include "gromacs/utility/mdmodulesnotifiers.h"
 #include "gromacs/utility/stringutil.h"
 
 #include "box.h"
@@ -981,14 +981,14 @@ DDGridSetup getDDGridSetup(const gmx::MDLogger&                  mdlog,
     {
         set_ddbox_cr(ddRole, communicator, nullptr, ir, box, xGlobal, ddbox);
 
-        if (ddRole == DDRole::Master)
+        if (ddRole == DDRole::Main)
         {
             numDomains = optimizeDDCells(
                     mdlog, numRanksRequested, numPmeOnlyRanks, cellSizeLimit, mtop, box, *ddbox, ir, systemInfo);
         }
     }
 
-    /* Communicate the information set by the master to all ranks */
+    /* Communicate the information set by the coordinator to all ranks */
     gmx_bcast(sizeof(numDomains), numDomains, communicator);
     if (usingPme(ir.coulombtype))
     {

@@ -62,15 +62,15 @@
 #    include "gromacs/gpu_utils/gpuregiontimer_sycl.h"
 #endif
 
-/*! \brief Macro definining default for the prune kernel's j4 processing concurrency.
+/*! \brief Macro definining default for the prune kernel's jPacked processing concurrency.
  *
- *  The GMX_NBNXN_PRUNE_KERNEL_J4_CONCURRENCY macro allows compile-time override with the default value of 4.
+ *  The GMX_NBNXN_PRUNE_KERNEL_JPACKED_CONCURRENCY macro allows compile-time override with the default value of 4.
  */
-#ifndef GMX_NBNXN_PRUNE_KERNEL_J4_CONCURRENCY
-#    define GMX_NBNXN_PRUNE_KERNEL_J4_CONCURRENCY 4
+#ifndef GMX_NBNXN_PRUNE_KERNEL_JPACKED_CONCURRENCY
+#    define GMX_NBNXN_PRUNE_KERNEL_JPACKED_CONCURRENCY 4
 #endif
-//! Default for the prune kernel's j4 processing concurrency.
-static constexpr int c_pruneKernelJ4Concurrency = GMX_NBNXN_PRUNE_KERNEL_J4_CONCURRENCY;
+//! Default for the prune kernel's jPacked processing concurrency.
+static constexpr int c_pruneKernelJPackedConcurrency = GMX_NBNXN_PRUNE_KERNEL_JPACKED_CONCURRENCY;
 
 /*! \internal
  * \brief Staging area for temporary data downloaded from the GPU.
@@ -260,13 +260,13 @@ struct gpu_plist
     //! list of i-cluster ("super-clusters")
     DeviceBuffer<nbnxn_sci_t> sci;
 
-    //! total # of 4*j clusters
-    int ncj4;
-    //! allocation size of cj4
-    int cj4_nalloc;
-    //! 4*j cluster list, contains j cluster number and index into the i cluster list
-    DeviceBuffer<nbnxn_cj4_t> cj4;
-    //! # of 4*j clusters * # of warps
+    //! total # of packed j clusters
+    int ncjPacked;
+    //! allocation size of cjPacked
+    int cjPacked_nalloc;
+    //! Packed j cluster list, contains j cluster number and index into the i cluster list
+    DeviceBuffer<nbnxn_cj_packed_t> cjPacked;
+    //! # of packed j clusters * # of warps
     int nimask;
     //! allocation size of imask
     int imask_nalloc;

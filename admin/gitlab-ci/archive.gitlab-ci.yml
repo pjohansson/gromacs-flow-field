@@ -8,7 +8,7 @@ prepare-release-version:
     - .variables:default
     - .rules:nightly-only-for-release
   cache: {}
-  image: ${CI_REGISTRY}/gromacs/gromacs/ci-ubuntu-20.04-llvm-7-docs
+  image: ${CI_REGISTRY}/gromacs/gromacs/ci-ubuntu-20.04-llvm-9-docs
   stage: configure-build
   variables:
     KUBERNETES_CPU_LIMIT: 1
@@ -28,7 +28,7 @@ regressiontests:prepare:
     - .variables:default
     - .rules:merge-and-post-merge-acceptance
   cache: {}
-  image: ${CI_REGISTRY}/gromacs/gromacs/ci-ubuntu-20.04-llvm-7-docs
+  image: ${CI_REGISTRY}/gromacs/gromacs/ci-ubuntu-20.04-llvm-9-docs
   stage: configure-build
   variables:
     KUBERNETES_CPU_LIMIT: 1
@@ -37,12 +37,12 @@ regressiontests:prepare:
   # Always clone the default version for this branch, main in this case
   script:
     - export REGTESTBRANCH=main
-    - if [[ ! -z $REGRESSIONTESTBRANCH ]] ; then
+    - if [[ ! -z "$REGRESSIONTESTBRANCH" ]] ; then
       export REGTESTBRANCH=$REGRESSIONTESTBRANCH ;
       echo "Using $REGTESTBRANCH instead of default" ;
       fi
     - export CHECKOUTCOMMIT=FETCH_HEAD
-    - if [[ ! -z $REGRESSIONTESTCOMMIT ]] ; then
+    - if [[ ! -z "$REGRESSIONTESTCOMMIT" ]] ; then
       export CHECKOUTCOMMIT=$REGRESSIONTESTCOMMIT ;
       echo "Using $CHECKOUTCOMMIT instead of head of $REGTESTBRANCH" ;
       fi
@@ -72,7 +72,7 @@ regressiontests:package:
   cache: {}
   # Docker image uploaded to dockerhub by user eriklindahl
   # TODO: Get DockerFile for admin/dockerfiles
-  image: ${CI_REGISTRY}/gromacs/gromacs/ci-ubuntu-20.04-llvm-7-docs
+  image: ${CI_REGISTRY}/gromacs/gromacs/ci-ubuntu-20.04-llvm-9-docs
   stage: release-package
   variables:
     KUBERNETES_CPU_LIMIT: 1
@@ -145,7 +145,7 @@ archive:configure:release:
     - .use-ccache
     - .before_script:default
     - .docs:build
-  image: ${CI_REGISTRY}/gromacs/gromacs/ci-ubuntu-20.04-llvm-7-docs
+  image: ${CI_REGISTRY}/gromacs/gromacs/ci-ubuntu-20.04-llvm-9-docs
   variables:
     KUBERNETES_CPU_LIMIT: 4
     KUBERNETES_CPU_REQUEST: 2
@@ -209,7 +209,7 @@ archive:package:
     BUILD_DIR: build-package
 
 checksum-verify:
-  image: ${CI_REGISTRY}/gromacs/gromacs/ci-ubuntu-20.04-llvm-7-docs
+  image: ${CI_REGISTRY}/gromacs/gromacs/ci-ubuntu-20.04-llvm-9-docs
   stage: release-verify
   extends:
     - .variables:default
@@ -250,7 +250,7 @@ checksum-verify:
     - prepare-release-version
 
 version-verify:
-  image: ${CI_REGISTRY}/gromacs/gromacs/ci-ubuntu-20.04-llvm-7-docs
+  image: ${CI_REGISTRY}/gromacs/gromacs/ci-ubuntu-20.04-llvm-9-docs
   stage: release-verify
   extends:
     - .variables:default
@@ -335,10 +335,10 @@ archive:full-release:
     # but helps to find and cache self-consistent Python and Sphinx details
     # without additional hinting. Once CMakeCache.txt exists, the later stages
     # should work fine without reactivating the venv.
-    - source /root/venv/py3.7/bin/activate
+    - source /root/venv/py3.9/bin/activate
     - tar czf webpage.tar.gz $BUILD_DIR/docs/html/
     - export VERSION=`sed -n -e '/GMX_VERSION_STRING\b/ s/.*"\(.*\)")/\1/p' VersionInfo-partial.cmake.cmakein`
-    - python admin/ci-scripts/make-release-build.py --server
+    - python admin/make-release-build.py --server
   artifacts:
     when: always
     paths:
