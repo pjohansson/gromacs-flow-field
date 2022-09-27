@@ -318,7 +318,9 @@ static void einstein_visco(const char*             fn,
                            const char*             fni,
                            int                     nsets,
                            int                     nint,
-                           real**                  eneint,
+                           // MICHELE: The integral needs to be a double
+                           // real**               eneint,
+                           double**                eneint,
                            real                    V,
                            real                    T,
                            double                  dt,
@@ -331,6 +333,11 @@ static void einstein_visco(const char*             fn,
 
     nf4 = nint / 4 + 1;
 
+    // MICHELE: No need to output that much
+    // c_targetStartPoints is completely arbitrary and should be chosen by the user, in principle
+    const int c_targetStartPoints = 100;
+    const int stepSize = std::max(nf4/c_targetStartPoints, 1);
+
     for (i = 0; i <= nsets; i++)
     {
         avold[i] = 0;
@@ -338,15 +345,17 @@ static void einstein_visco(const char*             fn,
     fp0 = xvgropen(fni, "Shear viscosity integral", "Time (ps)", "(kg m\\S-1\\N s\\S-1\\N ps)", oenv);
     fp1 = xvgropen(
             fn, "Shear viscosity using Einstein relation", "Time (ps)", "(kg m\\S-1\\N s\\S-1\\N)", oenv);
-    for (i = 0; i < nf4; i++)
+    
+    // MICHELE: Increase the increment to stepSize
+    for (i = 0; i < nf4; i += stepSize)
     {
         for (m = 0; m <= nsets; m++)
         {
             av[m] = 0;
         }
-        for (j = 0; j < nint - i; j++)
+        for (m = 0; m < nsets; m++)
         {
-            for (m = 0; m < nsets; m++)
+            for (j = 0; j < nint - i; j++)
             {
                 di = gmx::square(eneint[m][j + i] - eneint[m][j]);
 
@@ -367,7 +376,7 @@ static void einstein_visco(const char*             fn,
         fprintf(fp1, "%10g", (i + 0.5) * dt);
         for (m = 0; (m <= nsets); m++)
         {
-            fprintf(fp1, "  %10g", (av[m] - avold[m]) / dt);
+            fprintf(fp1, "  %10g", (av[m] - avold[m]) / (stepSize*dt));
             avold[m] = av[m];
         }
         fprintf(fp1, "\n");
@@ -375,6 +384,26 @@ static void einstein_visco(const char*             fn,
     xvgrclose(fp0);
     xvgrclose(fp1);
 }
+
+// MICHELE: just give me the whole integral and I will see what to do with it
+static void output_eneint_to_xvg(int nint, double** eneint, double dt, const gmx_output_env_t* oenv)
+{
+
+    FILE* fp0;
+    fp0 = xvgropen("integral.xvg", "Einstein integral", "Time (ps)", "(kg m\\S-1\\N s\\S-1\\N ps)", oenv);
+
+    for (int i = 0; i<nint; i++) 
+    {
+        fprintf(fp0, "%10g", i * dt);
+        fprintf(fp0, "\n");
+        double av = (gmx::square(eneint[0][i])+gmx::square(eneint[1][i])+gmx::square(eneint[2][i]))/3.0;
+        fprintf(fp0, "  %10g", av);
+    }
+
+    xvgrclose(fp0);
+
+}
+/* ****************************************************************************** */
 
 typedef struct
 {
@@ -874,6 +903,7 @@ static void analyse_ener(gmx_bool                bCorr,
                          gmx_bool                bSum,
                          gmx_bool                bFluct,
                          gmx_bool                bVisco,
+                         gmx_bool                bEinstein,
                          const char*             visfn,
                          int                     nmol,
                          int64_t                 start_step,
@@ -1112,7 +1142,9 @@ static void analyse_ener(gmx_bool                bCorr,
             const char* leg[] = { "Shear", "Bulk" };
             real        factor;
             real**      eneset;
-            real**      eneint;
+            // MICHELE: the integral should be in double precision
+            // real**   eneint;
+            double**    eneint;
 
             /* Assume pressure tensor is in Pxx Pxy Pxz Pyx Pyy Pyz Pzx Pzy Pzz */
 
@@ -1160,11 +1192,20 @@ static void analyse_ener(gmx_bool                bCorr,
 
             einstein_visco(eviscofn, eviscoifn, 3, edat->nframes + 1, eneint, Vaver, Temp, Dt, oenv);
 
+            // MICHELE
+            output_eneint_to_xvg(edat->nframes + 1, eneint, Dt, oenv);
+            /* ********************************************** */
+
             for (i = 0; i < 3; i++)
             {
                 sfree(eneint[i]);
             }
             sfree(eneint);
+
+            // MICHLE: If viscosity is computed using Einstein's formula, don't bother computing the autocorrelation formula
+            if(!bEinstein)
+            {
+
 
             /*do_autocorr(corrfn,buf,nenergy,3,eneset,Dt,eacNormal,TRUE);*/
             /* Do it for shear viscosity */
@@ -1224,6 +1265,8 @@ static void analyse_ener(gmx_bool                bCorr,
                 fprintf(fp, "%10g  %10g  %10g\n", (i * Dt), integral, intBulk);
             }
             xvgrclose(fp);
+
+            }
 
             for (i = 0; i < 12; i++)
             {
@@ -1410,7 +1453,7 @@ static void do_dhdl(t_enxframe*             fr,
     const char *dhdl = "dH/d\\lambda", *deltag = "\\DeltaH", *lambda = "\\lambda";
     char        title[STRLEN], label_x[STRLEN], label_y[STRLEN], legend[STRLEN];
     char        buf[STRLEN];
-    int         nblock_hist = 0, nblock_dh = 0;
+    int         nblock_hist = 0, nblock_dh = 0, nblock_dhcoll = 0;
     int         i, j, k;
     /* coll data */
     double       temp = 0, start_time = 0, delta_time = 0, start_lambda = 0;
@@ -1433,6 +1476,7 @@ static void do_dhdl(t_enxframe*             fr,
         }
         else if (fr->block[i].id == enxDHCOLL)
         {
+            nblock_dhcoll++;
             if ((fr->block[i].nsub < 1) || (fr->block[i].sub[0].type != XdrDataType::Double)
                 || (fr->block[i].sub[0].nr < 5))
             {
@@ -1797,7 +1841,7 @@ int gmx_energy(int argc, char* argv[])
     int64_t           start_step;
     real              start_t;
     gmx_bool          bDHDL;
-    gmx_bool          bFoundStart, bCont, bVisco;
+    gmx_bool          bFoundStart, bCont, bVisco, bEinstein;
     double            sum, dbl;
     double*           time = nullptr;
     real              Vaver;
@@ -1840,6 +1884,12 @@ int gmx_energy(int argc, char* argv[])
     Vaver = -1;
 
     bVisco = opt2bSet("-vis", NFILE, fnm);
+
+    /* 
+        MICHELE: assign 'true' if either -evisco or -eviscoi flags are specified
+        If viscosity is computed using Einstein's formula, don't bother computing the autocorrelation formula
+    */
+    bEinstein = opt2bSet("-evisco", NFILE, fnm) || opt2bSet("-eviscoi", NFILE, fnm);
 
     t_inputrec  irInstance;
     t_inputrec* ir = &irInstance;
@@ -2177,6 +2227,7 @@ int gmx_energy(int argc, char* argv[])
                      bSum,
                      bFluct,
                      bVisco,
+                     bEinstein,
                      opt2fn("-vis", NFILE, fnm),
                      nmol,
                      start_step,
