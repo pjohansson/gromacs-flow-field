@@ -912,25 +912,44 @@ static void cont_status(const char*             slog,
     }
 }
 
+/* MICHELE: Here we need to collect the center of mass for each COM group (and the total mass?)
+            Storing them in .tpr is a problem for the Michele of the future
+ */
 static void read_posres(gmx_mtop_t*                              mtop,
                         gmx::ArrayRef<const MoleculeInformation> molinfo,
                         gmx_bool                                 bTopB,
                         const char*                              fn,
                         RefCoordScaling                          rc_scaling,
                         PbcType                                  pbcType,
-                        rvec                                     com,
+                        /* MICHELE: Change to a reference to a vector of COMs;
+                         *          ArrayRef takes as template parameter the type of the contained data,
+                                    NOT the container!
+                         */
+                        // rvec                                  com,       
+                        gmx::ArrayRef<gmx::RVec>                 com,
+                        int                                      ngcom,
                         WarningHandler*                          wi,
                         const gmx::MDLogger&                     logger)
 {
     gmx_bool*   hadAtom;
     rvec *      x, *v;
-    dvec        sum;
-    double      totmass;
+    /* MICHELE: The number of com groups (ngcom) needs to be passed
+                The sum now is performed for each COM group
+     */
+    std::vector<gmx::DVec> sum(ngcom, {0.0, 0.0, 0.0});
+    // dvec     sum;
+    std::vector<double> totalmass(ngcom, 0.0);
+    // double   totmass;
+    // MICHELE : To store the COM group index of atom ai
+    int icg_ai;
     t_topology* top;
     matrix      box, invbox;
     int         natoms, npbcdim = 0;
     int         a, nat_molb;
     t_atom*     atom;
+
+    // MICHELE: Lookup list for the COM group indices (is it already initialized???)
+    gmx::ArrayRef<const unsigned short> lookup_com(groups.groupNumbers[SimulationAtomGroupType::MassCenterVelocityRemoval]);
 
     snew(top, 1);
     read_tps_conf(fn, top, nullptr, &x, &v, box, FALSE);
@@ -952,7 +971,9 @@ static void read_posres(gmx_mtop_t*                              mtop,
 
     npbcdim = numPbcDimensions(pbcType);
     GMX_RELEASE_ASSERT(npbcdim <= DIM, "Invalid npbcdim");
-    clear_rvec(com);
+    // MICHELE: Clear the com vector from the ArrayRef (?)
+    // clear_rvec(com);
+    std::fill(com.begin(), com.end(), {0.0, 0.0, 0.0})
     if (rc_scaling != RefCoordScaling::No)
     {
         copy_mat(box, invbox);
@@ -965,8 +986,9 @@ static void read_posres(gmx_mtop_t*                              mtop,
     }
 
     /* Copy the reference coordinates to mtop */
-    clear_dvec(sum);
-    totmass = 0;
+    // MICHELE: No need to clear, already initialized as 'empty'
+    // clear_dvec(sum);
+    // totmass = 0;
     a       = 0;
     snew(hadAtom, natoms);
     for (gmx_molblock_t& molb : mtop->molblock)
@@ -994,6 +1016,7 @@ static void read_posres(gmx_mtop_t*                              mtop,
                 if (rc_scaling == RefCoordScaling::Com)
                 {
                     /* Determine the center of mass of the posres reference coordinates */
+                    // MICHELE: This operation now needs to be done for each COM group (TODO)
                     for (int j = 0; j < npbcdim; j++)
                     {
                         sum[j] += atom[ai].m * x[a + ai][j];
@@ -1018,11 +1041,15 @@ static void read_posres(gmx_mtop_t*                              mtop,
                 if (rc_scaling == RefCoordScaling::Com && !hadAtom[ai])
                 {
                     /* Determine the center of mass of the posres reference coordinates */
+                    // MICHELE: This operation now needs to be done for each COM group (TODO)
+                    icg_ai = lookup_com[ai];
                     for (int j = 0; j < npbcdim; j++)
                     {
-                        sum[j] += atom[ai].m * x[a + ai][j];
+                        // sum[j] += atom[ai].m * x[a + ai][j];
+                        sum[icg_ai][j] += atom[ai].m * x[a + ai][j];
                     }
-                    totmass += atom[ai].m;
+                    // totmass += atom[ai].m;
+                    totmass[icg_ai] += atom[ai].m;
                 }
             }
             if (!bTopB)
@@ -1046,14 +1073,31 @@ static void read_posres(gmx_mtop_t*                              mtop,
     }
     if (rc_scaling == RefCoordScaling::Com)
     {
+        // MICHELE: Throw the fatal error if ANY of the COM groups have zero mass
+        for (auto mcg = totalmass.begin(); mcg!=totalmass.end(); ++mcg)
+        {
+            if(&mcg==0.0)
+            {   
+                gmx_fatal(FARGS, "The total mass of position restraint atoms in one or more COM groups is 0",);
+            }
+        }
+        /*
         if (totmass == 0)
         {
             gmx_fatal(FARGS, "The total mass of the position restraint atoms is 0");
         }
+        */
         for (int j = 0; j < npbcdim; j++)
         {
-            com[j] = sum[j] / totmass;
+            for (int icg = 0; icg < ngcom; ++icg)
+            {
+                // MICHELE: This operation now needs to be done for each COM group (TODO)
+                // com[j] = sum[j] / totmass;
+                com[icg][j] = sum[icg][j] / totmass[icg];
+            }
         }
+        // MICHELE: How should I deal with this?
+        /*
         GMX_LOG(logger.info)
                 .asParagraph()
                 .appendTextFormatted(
@@ -1061,6 +1105,18 @@ static void read_posres(gmx_mtop_t*                              mtop,
                         com[XX],
                         com[YY],
                         com[ZZ]);
+        */
+        for (int icg = 0; icg < ngcom; ++icg)
+        {
+            GMX_LOG(logger.info)
+                .asParagraph()
+                .appendTextFormatted(
+                        "The center of mass of the position restraint coord's in COM groups %d is %6.3f %6.3f %6.3f",
+                        icg,
+                        com[icg][XX],
+                        com[icg][YY],
+                        com[icg][ZZ]);
+        }
     }
 
     if (rc_scaling != RefCoordScaling::No)
@@ -1089,7 +1145,9 @@ static void read_posres(gmx_mtop_t*                              mtop,
                         else if (rc_scaling == RefCoordScaling::Com)
                         {
                             /* Subtract the center of mass */
-                            xp[i][j] -= com[j];
+                            // MICHELE: Not sure if 'i' corresponds to the atom index we want here (TODO check)
+                            icg_ai = lookup_com[i];
+                            xp[i][j] -= com[icg_ai][j];
                         }
                     }
                 }
@@ -1099,12 +1157,16 @@ static void read_posres(gmx_mtop_t*                              mtop,
         if (rc_scaling == RefCoordScaling::Com)
         {
             /* Convert the COM from Cartesian to crystal coordinates */
-            for (int j = 0; j < npbcdim; j++)
+            // MICHELE: For each COM group
+            for (int icg = 0; icg < ngcom; ++icg)
             {
-                com[j] *= invbox[j][j];
-                for (int k = j + 1; k < npbcdim; k++)
+                for (int j = 0; j < npbcdim; j++)
                 {
-                    com[j] += invbox[k][j] * com[k];
+                    com[icg][j] *= invbox[j][j];
+                    for (int k = j + 1; k < npbcdim; k++)
+                    {
+                        com[icg][j] += invbox[k][j] * com[icg][k];
+                    }
                 }
             }
         }
@@ -1121,16 +1183,20 @@ static void gen_posres(gmx_mtop_t*                              mtop,
                        const char*                              fnB,
                        RefCoordScaling                          rc_scaling,
                        PbcType                                  pbcType,
-                       rvec                                     com,
-                       rvec                                     comB,
+                       // MICHELE
+                       // rvec                                  com,
+                       // rvec                                  comB,
+                       gmx::ArrayRef<gmx::RVec>                 com,
+                       gmx::ArrayRef<gmx::RVec>                 comB,
+                       int                                      ngcom,
                        WarningHandler*                          wi,
                        const gmx::MDLogger&                     logger)
 {
-    read_posres(mtop, mi, FALSE, fnA, rc_scaling, pbcType, com, wi, logger);
+    read_posres(mtop, mi, FALSE, fnA, rc_scaling, pbcType, com, ngcom, wi, logger);
     /* It is safer to simply read the b-state posres rather than trying
      * to be smart and copy the positions.
      */
-    read_posres(mtop, mi, TRUE, fnB, rc_scaling, pbcType, comB, wi, logger);
+    read_posres(mtop, mi, TRUE, fnB, rc_scaling, pbcType, comB, ngcom, wi, logger);
 }
 
 static void set_wall_atomtype(PreprocessingAtomTypes* at,
@@ -2244,8 +2310,10 @@ int gmx_grompp(int argc, char* argv[])
                    fnB,
                    ir->pressureCouplingOptions.refcoord_scaling,
                    ir->pbcType,
+                   // MICHELE
                    ir->posres_com,
                    ir->posres_comB,
+                   ir->opts.ngcom,
                    &wi,
                    logger);
     }

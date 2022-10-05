@@ -421,6 +421,10 @@ void atoms2md(const gmx_mtop_t&  mtop,
             }
             if (!md->cVCM.empty())
             {
+                /* MICHELE: Here is where the index list of COM groups is defined.
+                            An ugly solution to an ugly problem: have something similar in the pre-processing
+                            step, only for COM groups.
+                 */
                 md->cVCM[i] = groups.groupNumbers[SimulationAtomGroupType::MassCenterVelocityRemoval][ag];
             }
             if (!md->cORF.empty())

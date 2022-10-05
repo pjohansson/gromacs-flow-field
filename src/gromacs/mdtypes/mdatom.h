@@ -119,6 +119,9 @@ typedef struct t_mdatoms
     std::vector<unsigned short> cACC;
     //! Group index for freezing
     std::vector<unsigned short> cFREEZE;
+    /* MICHELE: We are going to use cVCM to do perform refcoord-scale
+                with respect to multiple centers of mass, too.
+     */
     //! Group index for center of mass motion removal
     std::vector<unsigned short> cVCM;
     //! Group index for user 1

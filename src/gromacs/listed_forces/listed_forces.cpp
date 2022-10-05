@@ -140,7 +140,8 @@ static void selectInteractions(InteractionDefinitions*                  idef,
     }
 }
 
-void ListedForces::setup(const InteractionDefinitions& domainIdef, const int numAtomsForce, const bool useGpu)
+// MICHELE
+void ListedForces::setup(const InteractionDefinitions& domainIdef, const int numAtomsForce, const bool useGpu, gmx::ArrayRef<const unsigned short> restraintComIndex)
 {
     if (interactionSelection_.all())
     {
@@ -174,6 +175,9 @@ void ListedForces::setup(const InteractionDefinitions& domainIdef, const int num
         forceBufferLambda_.resize(numAtomsForce * sizeof(rvec4) / sizeof(real));
         shiftForceBufferLambda_.resize(gmx::c_numShiftVectors);
     }
+
+    // MICHELE
+    restraintComIndex_ = restraintComIndex
 }
 
 namespace
@@ -694,7 +698,8 @@ void ListedForces::calculate(struct gmx_wallcycle*                     wcycle,
 
         if (!idef.il[F_POSRES].empty())
         {
-            posres_wrapper(nrnb, idef, &pbc_full, x, enerd, lambda, fr, &forceOutputs->forceWithVirial());
+            // MICHELE
+            posres_wrapper(nrnb, idef, &pbc_full, x, enerd, lambda, fr, restraintComIndex_, &forceOutputs->forceWithVirial());
         }
 
         if (!idef.il[F_FBPOSRES].empty())

@@ -141,6 +141,9 @@ enum tpxv
     tpxv_ReaddedConstantAcceleration, /**< Re-added support for constant acceleration NEMD. */
     tpxv_RemoveTholeRfac,             /**< Remove unused rfac parameter from thole listed force */
     tpxv_RemoveAtomtypes,             /**< Remove unused atomtypes parameter from mtop */
+    // MICHELE
+    tpxv_RefScaleMultipleCOMs,          /**< Add multiple COM groups for refcoord-scale */
+    /* ****** */
     tpxv_Count                        /**< the total number of tpxv versions */
 };
 
@@ -1366,8 +1369,31 @@ static void do_inputrec(gmx::ISerializer* serializer, t_inputrec* ir, int file_v
     doRvec(serializer, &ir->pressureCouplingOptions.compress[YY]);
     doRvec(serializer, &ir->pressureCouplingOptions.compress[ZZ]);
     serializer->doEnumAsInt(&ir->pressureCouplingOptions.refcoord_scaling);
-    doRvec(serializer, &ir->posres_com);
-    doRvec(serializer, &ir->posres_comB);
+    // MICHELE: check the version of tpx and in case it's len-1 do a RVec array instead of rvec
+    int count = ir->posres_com.size();
+    if (file_version >= tpxv_RefScaleMultipleCOMs)
+    {
+        doInt(count);
+    }
+    else
+    {
+        count = 1;
+    }
+    if (serializer->reading())
+    {
+        ir->posres_com.resize(count);
+        ir->posres_comB.resize(count);
+    }
+    doRvecArray(serializer, ir->posres_com.data(), ir->posres_com.size());
+    doRvecArray(serializer, ir->posres_comB.data(), ir->posres_comB.size());
+    /*
+    else
+    {
+        doRvec(serializer, &ir->posres_com);
+        doRvec(serializer, &ir->posres_comB);
+    }
+    */
+    /* ***** */
 
     if (file_version < 79)
     {

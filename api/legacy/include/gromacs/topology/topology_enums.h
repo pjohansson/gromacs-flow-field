@@ -42,6 +42,9 @@ enum class SimulationAtomGroupType : int
     Freeze,
     User1,
     User2,
+    /* MICHELE: Use MassCenterVelocityRemoval to perform
+                refcoord-scale w.r.t. to severl COM(s), too.
+     */
     MassCenterVelocityRemoval,
     CompressedPositionOutput,
     OrientationRestraintsFit,

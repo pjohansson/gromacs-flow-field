@@ -143,8 +143,17 @@ struct t_forcerec
     //  This determines whether PBC must be considered for e.g. bonded interactions.
     bool            bMolPBC     = false;
     RefCoordScaling rc_scaling  = RefCoordScaling::No;
-    gmx::RVec       posres_com  = { 0, 0, 0 };
-    gmx::RVec       posres_comB = { 0, 0, 0 };
+    /* MICHELE: With multiple COMs to rescale over, we need a list of COMs
+                rather that just one gmx::RVec
+                PROBLEM: I don't know how to initialize this vector.
+                        In principle, initialization is not needed here, 
+                        since the vectors are taken from inputrec.
+                        Should the number of COM groups be stored in forcerec?
+     */
+    // gmx::RVec    posres_com  = { 0, 0, 0 };
+    // gmx::RVec    posres_comB = { 0, 0, 0 };
+    std::vector<gmx::RVec>    posres_com;
+    std::vector<gmx::RVec>    posres_comB;
 
     bool use_simd_kernels = false;
 

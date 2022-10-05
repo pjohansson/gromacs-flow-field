@@ -2295,7 +2295,7 @@ void get_ir(const char*     mdparin,
     ir->nstfout = get_eint(&inp, "nstfout", 0, wi);
     printStringNoNewline(&inp, "Output frequency for energies to log file and energy file");
     ir->nstlog        = get_eint(&inp, "nstlog", 1000, wi);
-    ir->nstcalcenergy = get_eint(&inp, "nstcalcenergy", 100, wi);
+    ir->nstcalcenergy = get_eint(&inp, "nstcalcenergy", 100, wi);grpopts
     ir->nstenergy     = get_eint(&inp, "nstenergy", 1000, wi);
     printStringNoNewline(&inp, "Output frequency and precision for .xtc file");
     ir->nstxout_compressed      = get_eint(&inp, "nstxout-compressed", 0, wi);

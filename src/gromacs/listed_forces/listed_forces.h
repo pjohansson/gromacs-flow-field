@@ -147,13 +147,14 @@ public:
     //! Destructor which is actually default but in the source file to hide implementation classes
     ~ListedForces();
 
+    // MICHELE: add the ArrayRef at the end as input to ListedForces::setup
     /*! \brief Copy the listed interactions from \p idef and set up the thread parallelization
      *
      * \param[in] domainIdef     Interaction definitions for all listed interactions to be computed on this domain/rank
      * \param[in] numAtomsForce  Force are, potentially, computed for atoms 0 to \p numAtomsForce
      * \param[in] useGpu         Whether a GPU is used to compute (part of) the listed interactions
      */
-    void setup(const InteractionDefinitions& domainIdef, int numAtomsForce, bool useGpu);
+    void setup(const InteractionDefinitions& domainIdef, int numAtomsForce, bool useGpu, gmx::ArrayRef<const unsigned short>);
 
     /*! \brief Do all aspects of energy and force calculations for mdrun
      * on the set of listed interactions
@@ -212,6 +213,10 @@ private:
     std::vector<gmx::RVec> shiftForceBufferLambda_;
     //! Temporary array for storing foreign lambda group pair energies
     std::unique_ptr<gmx_grppairener_t> foreignEnergyGroups_;
+
+    // MICHELE
+    //! Pointer to the vector of indices needed to loop over the molecules in each COM group
+    gmx::ArrayRef<const unsigned short> restraintComIndex_;
 
     GMX_DISALLOW_COPY_AND_ASSIGN(ListedForces);
 };

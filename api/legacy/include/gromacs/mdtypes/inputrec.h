@@ -74,6 +74,9 @@ struct t_grpopts
     int ngfrz = 0;
     //! Number of Energy groups
     int ngener = 0;
+    // MICHELE
+    //! Nuber of COM removal groups
+    int ngcom = 0;
     //! Number of degrees of freedom in a temperature-coupling group
     real* nrdf = nullptr;
     //! Coupling temperature	per group
@@ -414,10 +417,19 @@ struct t_inputrec // NOLINT (clang-analyzer-optin.performance.Padding)
     bool bPrintNHChains = false;
     //! Pressure coupling
     PressureCouplingOptions pressureCouplingOptions;
+    /* MICHELE: Now we have a std::vector of COMs for doing refcoord-scale.
+                PROBLEM: Here a default initialization should be needed.
+                         E.g. posres_com(count, {0.0, 0.0, 0.0})
+                         The problem is that the number of COM groups is not stored here!
+     */
     //! The COM of the posres atoms
-    rvec posres_com = { 0, 0, 0 };
+    // rvec posres_com = { 0, 0, 0 };
     //! The B-state COM of the posres atoms
-    rvec posres_comB = { 0, 0, 0 };
+    // rvec posres_comB = { 0, 0, 0 };
+    //! The COM of the posres atoms
+    std::vector<gmx::RVec> posres_com;
+    //! The B-state COM of the posres atoms
+    std::vector<gmx::RVec> posres_comB;
     //! Random seed for Andersen thermostat (obsolete)
     int andersen_seed = 0;
     //! Per atom pair energy drift tolerance (kJ/mol/ps/atom) for list buffer
