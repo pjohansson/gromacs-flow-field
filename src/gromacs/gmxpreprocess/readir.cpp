@@ -2214,10 +2214,10 @@ void get_ir(const char*     mdparin,
 
     // [FLOW_FIELD]
     // We take control over `user1-grps` for our flow field collection,
-    // since creating new group types in Gromacs seems to be a pain. 
+    // since creating new group types in Gromacs seems to be a pain.
     // This leaves `user2-grps` for further development.
     replace_inp_entry(inp, "user1-grps", "flow-field-grps");
-    // Also, temporarily add "deprecation warnings" for now-unused 
+    // Also, temporarily add "deprecation warnings" for now-unused
     // userint1, etc.
     replace_inp_entry(inp, "userint1", "flow-nstsample");
     replace_inp_entry(inp, "userint2", "flow-nstoutput");
@@ -2295,7 +2295,7 @@ void get_ir(const char*     mdparin,
     ir->nstfout = get_eint(&inp, "nstfout", 0, wi);
     printStringNoNewline(&inp, "Output frequency for energies to log file and energy file");
     ir->nstlog        = get_eint(&inp, "nstlog", 1000, wi);
-    ir->nstcalcenergy = get_eint(&inp, "nstcalcenergy", 100, wi);grpopts
+    ir->nstcalcenergy = get_eint(&inp, "nstcalcenergy", 100, wi);
     ir->nstenergy     = get_eint(&inp, "nstenergy", 1000, wi);
     printStringNoNewline(&inp, "Output frequency and precision for .xtc file");
     ir->nstxout_compressed      = get_eint(&inp, "nstxout-compressed", 0, wi);

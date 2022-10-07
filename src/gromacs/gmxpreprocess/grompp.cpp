@@ -912,42 +912,20 @@ static void cont_status(const char*             slog,
     }
 }
 
-/* MICHELE: Here we need to collect the center of mass for each COM group (and the total mass?)
-            Storing them in .tpr is a problem for the Michele of the future
- */
 static void read_posres(gmx_mtop_t*                              mtop,
                         gmx::ArrayRef<const MoleculeInformation> molinfo,
                         gmx_bool                                 bTopB,
                         const char*                              fn,
                         RefCoordScaling                          rc_scaling,
                         PbcType                                  pbcType,
-                        /* MICHELE: Change to a reference to a vector of COMs;
-                         *          ArrayRef takes as template parameter the type of the contained data,
-                                    NOT the container!
-                         */
-                        // rvec                                  com,       
-                        gmx::ArrayRef<gmx::RVec>                 com,
-                        int                                      ngcom,
-                        WarningHandler*                          wi,
-                        const gmx::MDLogger&                     logger)
+                        WarningHandler*                          wi)
 {
     gmx_bool*   hadAtom;
     rvec *      x, *v;
-    /* MICHELE: The number of com groups (ngcom) needs to be passed
-                The sum now is performed for each COM group
-     */
-    std::vector<gmx::DVec> sum(ngcom, {0.0, 0.0, 0.0});
-    // dvec     sum;
-    std::vector<double> totalmass(ngcom, 0.0);
-    // double   totmass;
     t_topology* top;
     matrix      box, invbox;
     int         natoms, npbcdim = 0;
     int         a, nat_molb;
-    t_atom*     atom;
-
-    // MICHELE: Lookup list for the COM group indices (is it already initialized???)
-    gmx::ArrayRef<const unsigned short> lookup_com(mtop->groups.groupNumbers[SimulationAtomGroupType::MassCenterVelocityRemoval]);
 
     snew(top, 1);
     read_tps_conf(fn, top, nullptr, &x, &v, box, FALSE);
@@ -969,9 +947,6 @@ static void read_posres(gmx_mtop_t*                              mtop,
 
     npbcdim = numPbcDimensions(pbcType);
     GMX_RELEASE_ASSERT(npbcdim <= DIM, "Invalid npbcdim");
-    // MICHELE: Clear the com vector from the ArrayRef (?)
-    // clear_rvec(com);
-    std::fill(com.begin(), com.end(), {0.0, 0.0, 0.0})
     if (rc_scaling != RefCoordScaling::No)
     {
         copy_mat(box, invbox);
@@ -984,9 +959,6 @@ static void read_posres(gmx_mtop_t*                              mtop,
     }
 
     /* Copy the reference coordinates to mtop */
-    // MICHELE: No need to clear, already initialized as 'empty'
-    // clear_dvec(sum);
-    // totmass = 0;
     a       = 0;
     snew(hadAtom, natoms);
     for (gmx_molblock_t& molb : mtop->molblock)
@@ -996,7 +968,6 @@ static void read_posres(gmx_mtop_t*                              mtop,
         const InteractionsOfType* prfb = &(molinfo[molb.type].interactions[F_FBPOSRES]);
         if (pr->size() > 0 || prfb->size() > 0)
         {
-            atom = mtop->moltype[molb.type].atoms.atom;
             for (const auto& restraint : pr->interactionTypes)
             {
                 int ai = restraint.ai();
@@ -1011,16 +982,6 @@ static void read_posres(gmx_mtop_t*                              mtop,
                               natoms);
                 }
                 hadAtom[ai] = TRUE;
-                if (rc_scaling == RefCoordScaling::Com)
-                {
-                    /* Determine the center of mass of the posres reference coordinates */
-                    // MICHELE: This operation now needs to be done for each COM group (TODO)
-                    for (int j = 0; j < npbcdim; j++)
-                    {
-                        sum[j] += atom[ai].m * x[a + ai][j];
-                    }
-                    totmass += atom[ai].m;
-                }
             }
             /* Same for flat-bottomed posres, but do not count an atom twice for COM */
             for (const auto& restraint : prfb->interactionTypes)
@@ -1035,19 +996,6 @@ static void read_posres(gmx_mtop_t*                              mtop,
                               *molinfo[molb.type].name,
                               fn,
                               natoms);
-                }
-                if (rc_scaling == RefCoordScaling::Com && !hadAtom[ai])
-                {
-                    /* Determine the center of mass of the posres reference coordinates */
-                    // MICHELE: This operation now needs to be done for each COM group (TODO)
-                    const int icgAi = lookup_com[ai];
-                    for (int j = 0; j < npbcdim; j++)
-                    {
-                        // sum[j] += atom[ai].m * x[a + ai][j];
-                        sum[icgAi][j] += atom[ai].m * x[a + ai][j];
-                    }
-                    // totmass += atom[ai].m;
-                    totmass[icgAi] += atom[ai].m;
                 }
             }
             if (!bTopB)
@@ -1069,59 +1017,11 @@ static void read_posres(gmx_mtop_t*                              mtop,
         }
         a += nat_molb;
     }
-    if (rc_scaling == RefCoordScaling::Com)
-    {
-        // MICHELE: Throw the fatal error if ANY of the COM groups have zero mass
-        for (auto mcg = totalmass.begin(); mcg!=totalmass.end(); ++mcg)
-        {
-            if(&mcg==0.0)
-            {   
-                gmx_fatal(FARGS, "The total mass of position restraint atoms in one or more COM groups is 0",);
-            }
-        }
-        /*
-        if (totmass == 0)
-        {
-            gmx_fatal(FARGS, "The total mass of the position restraint atoms is 0");
-        }
-        */
-        for (int j = 0; j < npbcdim; j++)
-        {
-            for (int icg = 0; icg < ngcom; ++icg)
-            {
-                // MICHELE: This operation now needs to be done for each COM group (TODO)
-                // com[j] = sum[j] / totmass;
-                com[icg][j] = sum[icg][j] / totmass[icg];
-            }
-        }
-        // MICHELE: How should I deal with this?
-        /*
-        GMX_LOG(logger.info)
-                .asParagraph()
-                .appendTextFormatted(
-                        "The center of mass of the position restraint coord's is %6.3f %6.3f %6.3f",
-                        com[XX],
-                        com[YY],
-                        com[ZZ]);
-        */
-        for (int icg = 0; icg < ngcom; ++icg)
-        {
-            GMX_LOG(logger.info)
-                .asParagraph()
-                .appendTextFormatted(
-                        "The center of mass of the position restraint coord's in COM groups %d is %6.3f %6.3f %6.3f",
-                        icg,
-                        com[icg][XX],
-                        com[icg][YY],
-                        com[icg][ZZ]);
-        }
-    }
 
     if (rc_scaling != RefCoordScaling::No)
     {
         GMX_ASSERT(npbcdim <= DIM, "Only DIM dimensions can have PBC");
 
-        int offset = 0;
         for (gmx_molblock_t& molb : mtop->molblock)
         {
             nat_molb = molb.nmol * mtop->moltype[molb.type].atoms.nr;
@@ -1141,31 +1041,6 @@ static void read_posres(gmx_mtop_t*                              mtop,
                                 xp[i][j] += invbox[k][j] * xp[i][k];
                             }
                         }
-                        else if (rc_scaling == RefCoordScaling::Com)
-                        {
-                            /* Subtract the center of mass */
-                            // MICHELE: Not sure if 'i' corresponds to the atom index we want here (TODO check)
-                            const int icgAi = lookup_com[offset + i];
-                            xp[i][j] -= com[icgAi][j];
-                        }
-                    }
-                }
-            }
-            offset+=nat_molb;
-        }
-
-        if (rc_scaling == RefCoordScaling::Com)
-        {
-            /* Convert the COM from Cartesian to crystal coordinates */
-            // MICHELE: For each COM group
-            for (int icg = 0; icg < ngcom; ++icg)
-            {
-                for (int j = 0; j < npbcdim; j++)
-                {
-                    com[icg][j] *= invbox[j][j];
-                    for (int k = j + 1; k < npbcdim; k++)
-                    {
-                        com[icg][j] += invbox[k][j] * com[icg][k];
                     }
                 }
             }
@@ -1177,26 +1052,341 @@ static void read_posres(gmx_mtop_t*                              mtop,
     sfree(hadAtom);
 }
 
+static size_t sum_com_for_restraints(const std::vector<gmx::RVec>     &posres_xs,
+                                     const MoleculeBlockIndices       &inds,
+                                     const t_atoms                    *atoms,
+                                     const std::vector<unsigned char> &group_inds,
+                                     const bool                        bOnlySystem,
+                                     std::vector<gmx::DVec>           &sum_com,
+                                     std::vector<double>              &sum_mass,
+                                     gmx::DVec                        &sum_com_rest,
+                                     double                           &sum_mass_rest)
+{
+    // fprintf(stderr, "%s:%s [%d]\n", __FILE__, __FUNCTION__, __LINE__);
+    // fflush(stderr);
+    size_t num_atoms_nogroup = 0;
+
+    for (size_t i = 0; i < posres_xs.size(); ++i)
+    {
+        const auto atom_mol_index = i % inds.numAtomsPerMolecule;
+        // fprintf(stderr, "atom_mol_index = %lu\n", atom_mol_index);
+        // fflush(stderr);
+        const auto global_index = i + inds.globalAtomStart;
+        // fprintf(stderr, "global_index = %lu\n", global_index);
+        // fflush(stderr);
+
+        // If the specified group is System (i.e. all atoms), group_inds
+        // is empty so we set it manually to the rest group (0)
+        const auto group_index =
+            bOnlySystem ? 0 : static_cast<size_t>(group_inds.at(global_index));
+        // const auto group_index = group_inds.at(global_index);
+        // fprintf(stderr, "group_index = %lu\n", group_index);
+        // fflush(stderr);
+
+        const auto mass = static_cast<double>(atoms->atom[atom_mol_index].m);
+        const auto x = posres_xs.at(i).toDVec();
+
+        if (group_index < sum_com.size())
+        {
+            sum_com.at(group_index) += mass * x;
+            sum_mass.at(group_index) += mass;
+        }
+        else if (group_index == sum_com.size())
+        {
+            sum_com_rest += mass * x;
+            sum_mass_rest += mass;
+            num_atoms_nogroup++;
+        }
+        else
+        {
+            gmx_fatal(
+                FARGS,
+                "restrained atom's group index is invalid"
+            );
+        }
+
+        fflush(stderr);
+    }
+
+    // fprintf(stderr, "%s:%s [%d]\n", __FILE__, __FUNCTION__, __LINE__);
+    // fflush(stderr);
+
+    return num_atoms_nogroup;
+}
+
+static void sub_com_from_restraints(const std::vector<gmx::RVec>     &com_per_group,
+                                    const MoleculeBlockIndices       &inds,
+                                    const std::vector<unsigned char> &group_inds,
+                                    const bool                        bOnlySystem,
+                                    std::vector<gmx::RVec>           &posres_xs)
+{
+    // fprintf(stderr, "%s:%s [%d]\n", __FILE__, __FUNCTION__, __LINE__);
+    // fflush(stderr);
+
+    for (size_t i = 0; i < posres_xs.size(); ++i)
+    {
+        const auto global_index = i + inds.globalAtomStart;
+
+        // If the specified group is System (i.e. all atoms), group_inds
+        // is empty so we set it manually to the rest group (0)
+        const auto group_index =
+            bOnlySystem ? 0 : static_cast<size_t>(group_inds.at(global_index));
+
+        if (group_index < com_per_group.size())
+        {
+            const auto& com = com_per_group.at(group_index);
+            posres_xs.at(i) -= com;
+        }
+    }
+    // fprintf(stderr, "%s:%s [%d]\n", __FILE__, __FUNCTION__, __LINE__);
+    // fflush(stderr);
+}
+
+// PETTER: Must be called after groups are set and checked
+static void calc_posres_com(gmx_mtop_t             *mtop,
+                            t_inputrec             *ir,
+                            const matrix            box,
+                            const bool              do_state_A,
+                            WarningHandler         *wi,
+                            const gmx::MDLogger    &logger)
+{
+    // fprintf(stderr, "%s:%s [%d]\n", __FILE__, __FUNCTION__, __LINE__);
+    // fflush(stderr);
+
+    // RefCoordScaling::All and No are still treated in read_posres
+    // (should All be moved here for shifting the coords?)
+    if (ir->pressureCouplingOptions.refcoord_scaling != RefCoordScaling::Com)
+    {
+        return;
+    }
+
+    constexpr auto group_type = SimulationAtomGroupType::MassCenterVelocityRemoval;
+    const auto& group_inds = mtop->groups.groupNumbers[group_type];
+    const bool bOnlySystem = group_inds.empty();
+
+    // Number of specified groups for independent COM scaling.
+    //
+    // If the specified group is System (i.e. all atoms), group_inds
+    // is empty so we set the number of specified groups to 0 (the full
+    // system group will still be dealt with as an unspecified "rest" group).
+    const auto num_groups = bOnlySystem ? 0 : mtop->groups.groups[group_type].size();
+
+    // fprintf(stderr, "num_groups = %lu\n", num_groups);
+    // fflush(stderr);
+
+    // Per-group sums of COM and mass for specified groups only
+    std::vector<gmx::DVec> sum_com(num_groups, {0.0, 0.0, 0.0});
+    std::vector<double> sum_mass(num_groups, 0.0);
+
+    // We don't know a priori if there are position restrained atoms that
+    // are not part of a specified COM group. Thus we will track their COM
+    // separately and, if any are found, add to the full COM groups afterwards.
+    //
+    // NOTE: If only the System group is specified this is where the COM of all
+    // atoms will be added.
+    gmx::DVec sum_com_rest = {0.0, 0.0, 0.0};
+    double sum_mass_rest = 0.0;
+
+    // fprintf(stderr, "%s:%s [%d]\n", __FILE__, __FUNCTION__, __LINE__);
+    // fflush(stderr);
+
+    // Select comA or comB vector to add values for
+    auto& com_per_group = do_state_A ? ir->posres_com : ir->posres_comB;
+
+    // fprintf(stderr, "%s:%s [%d]\n", __FILE__, __FUNCTION__, __LINE__);
+    // fflush(stderr);
+
+    size_t num_atoms_nogroup = 0;
+
+    for (size_t i = 0; i < mtop->molblock.size(); ++i)
+    {
+        const auto& molb = mtop->molblock.at(i);
+        const auto& inds = mtop->moleculeBlockIndices.at(i);
+        const auto atoms = &mtop->moltype.at(molb.type).atoms;
+
+        const auto& posres_xs = do_state_A ? molb.posres_xA : molb.posres_xB;
+        num_atoms_nogroup += sum_com_for_restraints(
+            posres_xs,
+            inds,
+            atoms,
+            group_inds,
+            bOnlySystem,
+            sum_com,
+            sum_mass,
+            sum_com_rest,
+            sum_mass_rest
+        );
+    }
+
+    // fprintf(stderr, "%s:%s [%d]\n", __FILE__, __FUNCTION__, __LINE__);
+    // fflush(stderr);
+
+    for (size_t i = 0; i < num_groups; ++i)
+    {
+        if (sum_mass.at(i) == 0.0)
+        {
+            gmx_fatal(FARGS, "The total mass of the position restraint atoms in group %lu is 0", i);
+        }
+
+        com_per_group.push_back(
+            sum_com.at(i).toRVec() / static_cast<double>(sum_mass.at(i))
+        );
+    }
+
+    // If there are atoms outside of specified COM groups present, their
+    // group index = num_groups. Thus we can add the final COM as the last
+    // element of the com_per_group vector, which their index will lead to.
+    if (num_atoms_nogroup > 0)
+    {
+        if (sum_mass_rest == 0.0)
+        {
+            gmx_fatal(FARGS, "The total mass of the position restraint atoms in rest group lu is 0");
+        }
+
+        com_per_group.push_back(
+            sum_com_rest.toRVec() / static_cast<double>(sum_mass_rest)
+        );
+    }
+
+    // fprintf(stderr, "%s:%s [%d]\n", __FILE__, __FUNCTION__, __LINE__);
+    // fflush(stderr);
+
+    // Subtract COM from posres positions
+    // TODO: write regression test to ensure that this is consistent with previous implementation?
+    for (size_t i = 0; i < mtop->molblock.size(); ++i)
+    {
+        auto& molb = mtop->molblock.at(i);
+        const auto& inds = mtop->moleculeBlockIndices.at(i);
+
+        auto& posres_xs = do_state_A ? molb.posres_xA : molb.posres_xB;
+        sub_com_from_restraints(com_per_group, inds, group_inds, bOnlySystem, posres_xs);
+    }
+
+    // fprintf(stderr, "%s:%s [%d]\n", __FILE__, __FUNCTION__, __LINE__);
+    // fflush(stderr);
+
+    GMX_LOG(logger.info)
+        .asParagraph()
+        .appendTextFormatted(
+            "The per-group center of masses for position restrains in state %c are:",
+            do_state_A ? 'A' : 'B'
+        );
+
+    for (size_t i = 0; i < com_per_group.size(); i++)
+    {
+        char group_name[STRLEN];
+
+        if (bOnlySystem)
+        {
+            snprintf(group_name, STRLEN, "system:");
+        }
+        else if (i < num_groups)
+        {
+            const auto global_group_index = mtop->groups.groups[group_type].at(i);
+            snprintf(group_name, STRLEN, "%s:", *mtop->groups.groupNames[global_group_index]);
+        }
+        else
+        {
+            snprintf(group_name, STRLEN, "rest (%lu):", num_atoms_nogroup);
+        }
+
+        const auto& com = com_per_group.at(i);
+
+        GMX_LOG(logger.info)
+            .appendTextFormatted(
+            "  %-12s\t%6.3f %6.3f %6.3f",
+                group_name,
+                com[XX],
+                com[YY],
+                com[ZZ]
+            );
+    }
+
+    if ((num_atoms_nogroup > 0) && do_state_A)
+    {
+        std::string msg = gmx::formatString(
+            "%lu atoms with position restraints were not part of specified COM groups",
+            num_atoms_nogroup
+        );
+
+        wi->addWarning(msg);
+    }
+
+    // Convert to crystal coordinates
+    matrix inv_box;
+    gmx::invertBoxMatrix(box, inv_box);
+    const auto npbcdim = static_cast<size_t>(inputrec2nboundeddim(ir));
+
+    for (size_t i = 0; i < com_per_group.size(); ++i)
+    {
+        auto& com = com_per_group.at(i);
+
+        for (size_t j = 0; j < npbcdim; j++)
+        {
+            com[j] *= inv_box[j][j];
+
+            for (size_t k = j + 1; k < npbcdim; k++)
+            {
+                com[j] += inv_box[k][j] * com[k];
+            }
+        }
+    }
+
+    // fprintf(stderr, "%s:%s [%d]\n", __FILE__, __FUNCTION__, __LINE__);
+    // fflush(stderr);
+
+    fprintf(stderr, "After scaling (remove in finished code):\n");
+    for (size_t i = 0; i < com_per_group.size(); ++i)
+    {
+        if (bOnlySystem)
+        {
+            fprintf(
+                stderr,
+                "  %-12s:\t%6.3f %6.3f %6.3f\n",
+                "system",
+                com_per_group.at(i)[XX],
+                com_per_group.at(i)[YY],
+                com_per_group.at(i)[ZZ]);
+
+        }
+        else if (i < num_groups)
+        {
+            const auto global_group_index = mtop->groups.groups[group_type].at(i);
+            fprintf(
+                stderr,
+                "  %-12s:\t%6.3f %6.3f %6.3f\n",
+                *mtop->groups.groupNames[global_group_index],
+                com_per_group.at(i)[XX],
+                com_per_group.at(i)[YY],
+                com_per_group.at(i)[ZZ]);
+        }
+        else
+        {
+            fprintf(
+                stderr,
+                "  %-12s:\t%6.3f %6.3f %6.3f\n",
+                "rest",
+                com_per_group.at(i)[XX],
+                com_per_group.at(i)[YY],
+                com_per_group.at(i)[ZZ]);
+
+        }
+    }
+}
+
 static void gen_posres(gmx_mtop_t*                              mtop,
                        gmx::ArrayRef<const MoleculeInformation> mi,
                        const char*                              fnA,
                        const char*                              fnB,
                        RefCoordScaling                          rc_scaling,
                        PbcType                                  pbcType,
-                       // MICHELE
-                       // rvec                                  com,
-                       // rvec                                  comB,
-                       gmx::ArrayRef<gmx::RVec>                 com,
-                       gmx::ArrayRef<gmx::RVec>                 comB,
-                       int                                      ngcom,
-                       WarningHandler*                          wi,
-                       const gmx::MDLogger&                     logger)
+                       WarningHandler*                          wi)
 {
-    read_posres(mtop, mi, FALSE, fnA, rc_scaling, pbcType, com, ngcom, wi, logger);
+    read_posres(mtop, mi, FALSE, fnA, rc_scaling, pbcType, wi);
     /* It is safer to simply read the b-state posres rather than trying
      * to be smart and copy the positions.
      */
-    read_posres(mtop, mi, TRUE, fnB, rc_scaling, pbcType, comB, ngcom, wi, logger);
+    read_posres(mtop, mi, TRUE, fnB, rc_scaling, pbcType, wi);
 }
 
 static void set_wall_atomtype(PreprocessingAtomTypes* at,
@@ -2310,12 +2500,7 @@ int gmx_grompp(int argc, char* argv[])
                    fnB,
                    ir->pressureCouplingOptions.refcoord_scaling,
                    ir->pbcType,
-                   // MICHELE
-                   ir->posres_com,
-                   ir->posres_comB,
-                   ir->opts.ngcom,
-                   &wi,
-                   logger);
+                   &wi);
     }
 
     /* If we are using CMAP, setup the pre-interpolation grid */
@@ -2514,6 +2699,15 @@ int gmx_grompp(int argc, char* argv[])
     {
         pr_symtab(debug, 0, "After index", &sys.symtab);
     }
+
+    // PETTER: Calculate position restraint group center-of-mass
+    // Must be done after do_index, so we do it here before the triple check
+    // fprintf(stderr, "%s:%s [%d]\n", __FILE__, __FUNCTION__, __LINE__);
+    // fflush(stderr);
+    calc_posres_com(&sys, ir, state.box, true, &wi, logger);
+    calc_posres_com(&sys, ir, state.box, false, &wi, logger);
+    // fprintf(stderr, "%s:%s [%d]\n", __FILE__, __FUNCTION__, __LINE__);
+    // fflush(stderr);
 
     triple_check(mdparin, ir, &sys, &wi);
     close_symtab(&sys.symtab);
@@ -2744,6 +2938,7 @@ int gmx_grompp(int argc, char* argv[])
     }
 
     done_warning(wi, FARGS);
+
     write_tpx_state(ftp2fn(efTPR, NFILE, fnm), ir, &state, sys);
 
     /* Output IMD group, if bIMD is TRUE */

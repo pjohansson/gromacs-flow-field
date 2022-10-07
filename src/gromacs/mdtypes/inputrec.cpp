@@ -925,16 +925,10 @@ void pr_inputrec(FILE* fp, int indent, const char* title, const t_inputrec* ir, 
         pr_matrix(fp, indent, "ref-p", ir->pressureCouplingOptions.ref_p, bMDPformat);
         PS("refcoord-scaling", enumValueToString(ir->pressureCouplingOptions.refcoord_scaling));
 
-        // MICHELE: Now posres_com is a vector! (TO-DO)
-        if (bMDPformat)
+        if (!bMDPformat)
         {
-            fprintf(fp, "posres-com  = %g %g %g\n", ir->posres_com[XX], ir->posres_com[YY], ir->posres_com[ZZ]);
-            fprintf(fp, "posres-comB = %g %g %g\n", ir->posres_comB[XX], ir->posres_comB[YY], ir->posres_comB[ZZ]);
-        }
-        else
-        {
-            pr_rvec(fp, indent, "posres-com", ir->posres_com, DIM, TRUE);
-            pr_rvec(fp, indent, "posres-comB", ir->posres_comB, DIM, TRUE);
+            pr_rvecs(fp, indent, "posres-com", as_vec_array(ir->posres_com.data()), ir->posres_com.size());
+            pr_rvecs(fp, indent, "posres-comB", as_vec_array(ir->posres_comB.data()), ir->posres_comB.size());
         }
         /* ***** */
 
@@ -1499,8 +1493,8 @@ void cmp_inputrec(FILE* fp, const t_inputrec* ir1, const t_inputrec* ir2, real f
             ir1->pressureCouplingOptions.refcoord_scaling,
             ir2->pressureCouplingOptions.refcoord_scaling);
     // MICHELE: Now posres_com is a vector! (TODO)
-    cmp_rvec(fp, "inputrec->posres_com", -1, ir1->posres_com, ir2->posres_com, ftol, abstol);
-    cmp_rvec(fp, "inputrec->posres_comB", -1, ir1->posres_comB, ir2->posres_comB, ftol, abstol);
+    // cmp_rvec(fp, "inputrec->posres_com", -1, ir1->posres_com, ir2->posres_com, ftol, abstol);
+    // cmp_rvec(fp, "inputrec->posres_comB", -1, ir1->posres_comB, ir2->posres_comB, ftol, abstol);
     /* ***** */
     cmp_real(fp, "inputrec->verletbuf_tol", -1, ir1->verletbuf_tol, ir2->verletbuf_tol, ftol, abstol);
     cmp_real(fp, "inputrec->rlist", -1, ir1->rlist, ir2->rlist, ftol, abstol);

@@ -1369,31 +1369,24 @@ static void do_inputrec(gmx::ISerializer* serializer, t_inputrec* ir, int file_v
     doRvec(serializer, &ir->pressureCouplingOptions.compress[YY]);
     doRvec(serializer, &ir->pressureCouplingOptions.compress[ZZ]);
     serializer->doEnumAsInt(&ir->pressureCouplingOptions.refcoord_scaling);
-    // MICHELE: check the version of tpx and in case it's len-1 do a RVec array instead of rvec
-    int count = ir->posres_com.size();
+
+    auto num_posres_com_groups = static_cast<int>(ir->posres_com.size());
     if (file_version >= tpxv_RefScaleMultipleCOMs)
     {
-        doInt(count);
+        serializer->doInt(&num_posres_com_groups);
     }
     else
     {
-        count = 1;
+        num_posres_com_groups = 1;
     }
+
     if (serializer->reading())
     {
-        ir->posres_com.resize(count);
-        ir->posres_comB.resize(count);
+        ir->posres_com.resize(num_posres_com_groups);
+        ir->posres_comB.resize(num_posres_com_groups);
     }
-    doRvecArray(serializer, ir->posres_com.data(), ir->posres_com.size());
-    doRvecArray(serializer, ir->posres_comB.data(), ir->posres_comB.size());
-    /*
-    else
-    {
-        doRvec(serializer, &ir->posres_com);
-        doRvec(serializer, &ir->posres_comB);
-    }
-    */
-    /* ***** */
+    doRvecArray(serializer, as_rvec_array(ir->posres_com.data()), num_posres_com_groups);
+    doRvecArray(serializer, as_rvec_array(ir->posres_comB.data()), num_posres_com_groups);
 
     if (file_version < 79)
     {
