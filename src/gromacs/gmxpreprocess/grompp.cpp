@@ -940,8 +940,6 @@ static void read_posres(gmx_mtop_t*                              mtop,
     // dvec     sum;
     std::vector<double> totalmass(ngcom, 0.0);
     // double   totmass;
-    // MICHELE : To store the COM group index of atom ai
-    int icg_ai;
     t_topology* top;
     matrix      box, invbox;
     int         natoms, npbcdim = 0;
@@ -949,7 +947,7 @@ static void read_posres(gmx_mtop_t*                              mtop,
     t_atom*     atom;
 
     // MICHELE: Lookup list for the COM group indices (is it already initialized???)
-    gmx::ArrayRef<const unsigned short> lookup_com(groups.groupNumbers[SimulationAtomGroupType::MassCenterVelocityRemoval]);
+    gmx::ArrayRef<const unsigned short> lookup_com(mtop->groups.groupNumbers[SimulationAtomGroupType::MassCenterVelocityRemoval]);
 
     snew(top, 1);
     read_tps_conf(fn, top, nullptr, &x, &v, box, FALSE);
@@ -1042,14 +1040,14 @@ static void read_posres(gmx_mtop_t*                              mtop,
                 {
                     /* Determine the center of mass of the posres reference coordinates */
                     // MICHELE: This operation now needs to be done for each COM group (TODO)
-                    icg_ai = lookup_com[ai];
+                    const int icgAi = lookup_com[ai];
                     for (int j = 0; j < npbcdim; j++)
                     {
                         // sum[j] += atom[ai].m * x[a + ai][j];
-                        sum[icg_ai][j] += atom[ai].m * x[a + ai][j];
+                        sum[icgAi][j] += atom[ai].m * x[a + ai][j];
                     }
                     // totmass += atom[ai].m;
-                    totmass[icg_ai] += atom[ai].m;
+                    totmass[icgAi] += atom[ai].m;
                 }
             }
             if (!bTopB)
@@ -1123,6 +1121,7 @@ static void read_posres(gmx_mtop_t*                              mtop,
     {
         GMX_ASSERT(npbcdim <= DIM, "Only DIM dimensions can have PBC");
 
+        int offset = 0;
         for (gmx_molblock_t& molb : mtop->molblock)
         {
             nat_molb = molb.nmol * mtop->moltype[molb.type].atoms.nr;
@@ -1146,12 +1145,13 @@ static void read_posres(gmx_mtop_t*                              mtop,
                         {
                             /* Subtract the center of mass */
                             // MICHELE: Not sure if 'i' corresponds to the atom index we want here (TODO check)
-                            icg_ai = lookup_com[i];
-                            xp[i][j] -= com[icg_ai][j];
+                            const int icgAi = lookup_com[offset + i];
+                            xp[i][j] -= com[icgAi][j];
                         }
                     }
                 }
             }
+            offset+=nat_molb;
         }
 
         if (rc_scaling == RefCoordScaling::Com)
