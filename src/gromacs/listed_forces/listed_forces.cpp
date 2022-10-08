@@ -140,8 +140,10 @@ static void selectInteractions(InteractionDefinitions*                  idef,
     }
 }
 
-// MICHELE
-void ListedForces::setup(const InteractionDefinitions& domainIdef, const int numAtomsForce, const bool useGpu, gmx::ArrayRef<const unsigned short> restraintComIndex)
+void ListedForces::setup(const InteractionDefinitions& domainIdef,
+                         const int numAtomsForce,
+                         const bool useGpu,
+                         const gmx::ArrayRef<const unsigned short> restraintComIndex)
 {
     if (interactionSelection_.all())
     {
@@ -176,8 +178,7 @@ void ListedForces::setup(const InteractionDefinitions& domainIdef, const int num
         shiftForceBufferLambda_.resize(gmx::c_numShiftVectors);
     }
 
-    // MICHELE
-    restraintComIndex_ = restraintComIndex
+    restraintComIndex_ = restraintComIndex;
 }
 
 namespace
@@ -648,6 +649,7 @@ void ListedForces::calculate(struct gmx_wallcycle*                     wcycle,
                              const matrix                              box,
                              const t_lambda*                           fepvals,
                              const t_commrec*                          cr,
+                             const t_inputrec*                         ir,
                              const gmx_multisim_t*                     ms,
                              gmx::ArrayRefWithPadding<const gmx::RVec> coordinates,
                              gmx::ArrayRef<const gmx::RVec>            xWholeMolecules,
@@ -698,8 +700,18 @@ void ListedForces::calculate(struct gmx_wallcycle*                     wcycle,
 
         if (!idef.il[F_POSRES].empty())
         {
-            // MICHELE
-            posres_wrapper(nrnb, idef, &pbc_full, x, enerd, lambda, fr, restraintComIndex_, &forceOutputs->forceWithVirial());
+            posres_wrapper(
+                nrnb,
+                idef,
+                &pbc_full,
+                x,
+                enerd,
+                lambda,
+                fr,
+                restraintComIndex_,
+                inputrec2nboundeddim(ir),
+                &forceOutputs->forceWithVirial()
+            );
         }
 
         if (!idef.il[F_FBPOSRES].empty())
@@ -762,7 +774,18 @@ void ListedForces::calculate(struct gmx_wallcycle*                     wcycle,
         gmx::EnumerationArray<FreeEnergyPerturbationCouplingType, real> dvdl = { 0 };
         if (!idef.il[F_POSRES].empty())
         {
-            posres_wrapper_lambda(wcycle, fepvals, idef, &pbc_full, x, enerd, lambda, fr);
+            posres_wrapper_lambda(
+                wcycle,
+                fepvals,
+                idef,
+                &pbc_full,
+                x,
+                enerd,
+                lambda,
+                fr,
+                restraintComIndex_,
+                inputrec2nboundeddim(ir)
+            );
         }
         if (idef.ilsort != ilsortNO_FE)
         {

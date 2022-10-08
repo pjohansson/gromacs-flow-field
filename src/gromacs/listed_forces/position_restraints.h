@@ -72,6 +72,8 @@ void posres_wrapper(t_nrnb*                       nrnb,
                     gmx_enerdata_t*               enerd,
                     gmx::ArrayRef<const real>     lambda,
                     const t_forcerec*             fr,
+                    const gmx::ArrayRef<const unsigned short> refScaleComInds,
+                    const size_t                  npbcdim,
                     gmx::ForceWithVirial*         forceWithVirial);
 
 /*! \brief Helper function that wraps calls to posres for free-energy
@@ -83,7 +85,9 @@ void posres_wrapper_lambda(struct gmx_wallcycle*         wcycle,
                            const rvec                    x[],
                            gmx_enerdata_t*               enerd,
                            gmx::ArrayRef<const real>     lambda,
-                           const t_forcerec*             fr);
+                           const t_forcerec*             fr,
+                           const gmx::ArrayRef<const unsigned short> refScaleComIdx,
+                           const size_t                  npbcdim);
 
 /*! \brief Helper function that wraps calls to fbposres for
     free-energy perturbation */

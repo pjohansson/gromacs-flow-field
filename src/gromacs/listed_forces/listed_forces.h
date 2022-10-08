@@ -71,9 +71,11 @@
 #include <memory>
 #include <vector>
 
+#include "gromacs/mdtypes/inputrec.h"
 #include "gromacs/math/vectypes.h"
 #include "gromacs/topology/idef.h"
 #include "gromacs/topology/ifunc.h"
+#include "gromacs/utility/arrayref.h"
 #include "gromacs/utility/classhelpers.h"
 
 struct bonded_threading_t;
@@ -154,7 +156,10 @@ public:
      * \param[in] numAtomsForce  Force are, potentially, computed for atoms 0 to \p numAtomsForce
      * \param[in] useGpu         Whether a GPU is used to compute (part of) the listed interactions
      */
-    void setup(const InteractionDefinitions& domainIdef, int numAtomsForce, bool useGpu, gmx::ArrayRef<const unsigned short>);
+    void setup(const InteractionDefinitions& domainIdef,
+               const int numAtomsForce,
+               const bool useGpu,
+               const gmx::ArrayRef<const unsigned short> restraintComIndex);
 
     /*! \brief Do all aspects of energy and force calculations for mdrun
      * on the set of listed interactions
@@ -166,6 +171,7 @@ public:
                    const matrix                              box,
                    const t_lambda*                           fepvals,
                    const t_commrec*                          cr,
+                   const t_inputrec*                         ir,
                    const gmx_multisim_t*                     ms,
                    gmx::ArrayRefWithPadding<const gmx::RVec> coordinates,
                    gmx::ArrayRef<const gmx::RVec>            xWholeMolecules,
@@ -213,9 +219,8 @@ private:
     std::vector<gmx::RVec> shiftForceBufferLambda_;
     //! Temporary array for storing foreign lambda group pair energies
     std::unique_ptr<gmx_grppairener_t> foreignEnergyGroups_;
-
-    // MICHELE
-    //! Pointer to the vector of indices needed to loop over the molecules in each COM group
+    //! Reference to the vector of indices needed to loop over the molecules in each COM group
+    //! NOTE: Currently a reference to t_mdatoms.cVCM, to be changed if a new group type is created for this
     gmx::ArrayRef<const unsigned short> restraintComIndex_;
 
     GMX_DISALLOW_COPY_AND_ASSIGN(ListedForces);
