@@ -97,6 +97,8 @@ void fbposres_wrapper(t_nrnb*                       nrnb,
                       const rvec*                   x,
                       gmx_enerdata_t*               enerd,
                       const t_forcerec*             fr,
+                      const gmx::ArrayRef<const unsigned short> refScaleComInds,
+                      const size_t                  npbcdim,
                       gmx::ForceWithVirial*         forceWithVirial);
 
 #endif

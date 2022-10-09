@@ -135,7 +135,6 @@ void mdAlgorithmsSetupAtomData(const t_commrec*     cr,
 
     for (auto& listedForces : fr->listedForces)
     {
-        // MICHELE: pass mdatoms->cVCM as the ArrayRef input parameter of ListedForces::setup
         listedForces.setup(top->idef, fr->natoms_force, fr->listedForcesGpu != nullptr, mdatoms->cVCM);
     }
 

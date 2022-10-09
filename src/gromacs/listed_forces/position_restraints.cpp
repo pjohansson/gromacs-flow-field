@@ -199,28 +199,31 @@ real fbposres(int                   nbonds,
               gmx::ForceWithVirial* forceWithVirial,
               const t_pbc*          pbc,
               RefCoordScaling       refcoord_scaling,
-              PbcType               pbcType,
-              const rvec            com)
+              const std::vector<gmx::RVec>& com,
+              const gmx::ArrayRef<const unsigned short> refScaleComIdx,
+              const size_t          npbcdim)
 /* compute flat-bottomed positions restraints */
 {
-    int              i, ai, m, d, type, npbcdim = 0, fbdim;
-    const t_iparams* pr;
+    int              fbdim;
     real             kk, v;
     real             dr, dr2, rfb, rfb2, fact;
-    rvec             com_sc, rdist, dx, dpdl, fm;
+    rvec             rdist, dx, dpdl, fm;
     gmx_bool         bInvert;
 
-    npbcdim = numPbcDimensions(pbcType);
+    std::vector<gmx::RVec> com_sc(com.size(), {0.0, 0.0, 0.0});
+
     GMX_ASSERT((pbcType == PbcType::No) == (npbcdim == 0), "");
     if (refcoord_scaling == RefCoordScaling::Com)
     {
-        clear_rvec(com_sc);
-        for (m = 0; m < npbcdim; m++)
+        for (size_t icg = 0; icg < com.size(); ++icg)
         {
-            assert(npbcdim <= DIM);
-            for (d = m; d < npbcdim; d++)
+            for (size_t m = 0; m < npbcdim; m++)
             {
-                com_sc[m] += com[d] * pbc->box[d][m];
+                assert(npbcdim <= DIM);
+                for (size_t d = m; d < npbcdim; d++)
+                {
+                    com_sc[icg][m] += com[icg][d] * pbc->box[d][m];
+                }
             }
         }
     }
@@ -228,18 +231,20 @@ real fbposres(int                   nbonds,
     rvec* f      = as_rvec_array(forceWithVirial->force_.data());
     real  vtot   = 0.0;
     rvec  virial = { 0 };
-    for (i = 0; (i < nbonds);)
+    for (int i = 0; (i < nbonds);)
     {
-        type = forceatoms[i++];
-        ai   = forceatoms[i++];
-        pr   = &forceparams[type];
+        const int type  = forceatoms[i++];
+        const int ai    = forceatoms[i++];
+        const auto pr   = &forceparams[type];
+
+        const auto icg_ai = refScaleComIdx[ai];
 
         /* same calculation as for normal posres, but with identical A and B states, and lambda==0 */
         posres_dx(x[ai],
                   forceparams[type].fbposres.pos0,
                   forceparams[type].fbposres.pos0,
-                  com_sc,
-                  com_sc,
+                  com_sc[icg_ai],
+                  com_sc[icg_ai],
                   0.0,
                   pbc,
                   refcoord_scaling,
@@ -314,7 +319,7 @@ real fbposres(int                   nbonds,
 
         vtot += v;
 
-        for (m = 0; (m < DIM); m++)
+        for (size_t m = 0; (m < DIM); m++)
         {
             f[ai][m] += fm[m];
             /* Here we correct for the pbc_dx which included rdist */
@@ -327,10 +332,6 @@ real fbposres(int                   nbonds,
     return vtot;
 }
 
-/* MICHELE: Now the center(s) of mass are stored in a vector (std::vector<gmx::RVec>),
-            and here they are accessed by an ArrayRef (constant: we don't change the content of the vector).
-            Input refScaleComIdx serves to extract the indices of the center of mass group for each atom.
- */
 /*! \brief Compute energies and forces, when requested, for position restraints
  *
  * Note that position restraints require a different pbc treatment
@@ -345,13 +346,11 @@ real posres(int                   nbonds,
             real                  lambda,
             real*                 dvdlambda,
             RefCoordScaling       refcoord_scaling,
-            const std::vector<gmx::RVec>&       comA,
-            const std::vector<gmx::RVec>&       comB,
+            const std::vector<gmx::RVec>& comA,
+            const std::vector<gmx::RVec>& comB,
             const gmx::ArrayRef<const unsigned short> refScaleComIdx,
             const size_t          npbcdim)
 {
-    // int              ai, type;
-    // const t_iparams* pr;
     real             kk, fm;
 
     rvec                    rdist, dpdl, dx;
@@ -393,7 +392,6 @@ real posres(int                   nbonds,
         const int ai   = forceatoms[i++];
         const auto pr  = &forceparams[type];
 
-        // MICHELE: getting the index from refScaleComIdx
         const auto icg_ai = refScaleComIdx[ai];
 
         /* return dx, rdist, and dpdl */
@@ -522,6 +520,8 @@ void fbposres_wrapper(t_nrnb*                       nrnb,
                       const rvec*                   x,
                       gmx_enerdata_t*               enerd,
                       const t_forcerec*             fr,
+                      const gmx::ArrayRef<const unsigned short> refScaleComInds,
+                      const size_t                  npbcdim,
                       gmx::ForceWithVirial*         forceWithVirial)
 {
     real v;
@@ -533,9 +533,9 @@ void fbposres_wrapper(t_nrnb*                       nrnb,
                  forceWithVirial,
                  fr->pbcType == PbcType::No ? nullptr : pbc,
                  fr->rc_scaling,
-                 fr->pbcType,
-                 // TODO: This should also use to COM group stuff
-                 fr->posres_com.at(0));
+                 fr->posres_com,
+                 refScaleComInds,
+                 npbcdim);
     enerd->term[F_FBPOSRES] += v;
     inc_nrnb(nrnb, eNR_FBPOSRES, gmx::exactDiv(idef.il[F_FBPOSRES].size(), 2));
 }

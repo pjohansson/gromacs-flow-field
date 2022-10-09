@@ -716,7 +716,17 @@ void ListedForces::calculate(struct gmx_wallcycle*                     wcycle,
 
         if (!idef.il[F_FBPOSRES].empty())
         {
-            fbposres_wrapper(nrnb, idef, &pbc_full, x, enerd, fr, &forceOutputs->forceWithVirial());
+            fbposres_wrapper(
+                nrnb,
+                idef,
+                &pbc_full,
+                x,
+                enerd,
+                fr,
+                restraintComIndex_,
+                inputrec2nboundeddim(ir),
+                &forceOutputs->forceWithVirial()
+            );
         }
 
         /* Do pre force calculation stuff which might require communication */
