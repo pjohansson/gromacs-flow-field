@@ -1229,7 +1229,7 @@ static void calc_posres_com(gmx_mtop_t             *mtop,
         }
 
         com_per_group.push_back(
-            sum_com.at(i).toRVec() / static_cast<double>(sum_mass.at(i))
+            (sum_com.at(i) / sum_mass.at(i)).toRVec()
         );
     }
 
@@ -1240,7 +1240,7 @@ static void calc_posres_com(gmx_mtop_t             *mtop,
     {
         if (sum_mass_rest == 0.0)
         {
-            gmx_fatal(FARGS, "The total mass of the position restraint atoms in rest group lu is 0");
+            gmx_fatal(FARGS, "The total mass of the position restraint atoms in rest group is 0");
         }
 
         com_per_group.push_back(
