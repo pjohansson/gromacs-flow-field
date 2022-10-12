@@ -116,7 +116,8 @@ protected:
 
         fr_.rc_scaling    = refCoordScaling_;
         fr_.pbcType       = pbcType_;
-        fr_.posres_com[1] = 0.5;
+        fr_.posres_com = {{0.0, 0.5, 0.0}};
+        fr_.posres_comB = {{0.0, 0.0, 0.0}};
     }
 
     //! Prepares the test with the coordinate and force constant input.
@@ -155,6 +156,7 @@ TEST_P(PositionRestraintsTest, BasicPosResNoFreeEnergy)
     const std::vector<RVec> positions          = { { 0.0, 0.0, 0.0 }, { 0.4, 0.5, 0.6 } };
     const std::vector<RVec> referencePositions = { { 0.0, 0.0, 0.0 }, { 0.5, 0.6, 0.0 } };
     const std::vector<RVec> forceConstants     = { { 1000, 500, 250 }, { 0, 200, 400 } };
+    const std::vector<unsigned short> refScaleComInds(positions.size(), 0);
     setValues(positions, referencePositions, forceConstants);
     posres_wrapper(&nrnb_,
                    idef_,
@@ -163,6 +165,8 @@ TEST_P(PositionRestraintsTest, BasicPosResNoFreeEnergy)
                    &enerd_,
                    c_emptyLambdas,
                    &fr_,
+                   refScaleComInds,
+                   numPbcDimensions(pbcType_),
                    forceWithVirial_.get());
     checker_.checkSequence(
             std::begin(forceWithVirial_->force_), std::end(forceWithVirial_->force_), "Forces");
