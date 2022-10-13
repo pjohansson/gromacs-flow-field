@@ -36,6 +36,7 @@ gmx_add_unit_test(ListedForcesTest listed_forces-test
         bonded.cpp
         pairs.cpp
         position_restraints.cpp
+        position_restraints_refcoord_scaling.cpp
         )
 target_link_libraries(listed_forces-test PRIVATE
         math
