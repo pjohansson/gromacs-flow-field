@@ -82,7 +82,7 @@ constexpr float c_precisionTolerance = 1e-6;
 
 class RefCoordScalingTest : public ::testing::TestWithParam<std::tuple<RefCoordScaling, PbcType>>
 {
-protected:
+public:
     std::vector<RVec> x_;
     std::vector<RVec> f_;
 
@@ -97,10 +97,66 @@ protected:
     std::unique_ptr<ForceWithVirial> forceWithVirial_;
     RefCoordScaling                  refCoordScaling_;
 
+    RefCoordScalingTest() : idef_({}), enerd_(1, 0)
+    {
+        refCoordScaling_ = std::get<0>(GetParam());
+        pbcType_         = std::get<1>(GetParam());
+
+        clear_mat(box_);
+        box_[0][0] = 0.9;
+        box_[1][1] = 1.0;
+        box_[2][2] = 1.1;
+        set_pbc(&pbc_, pbcType_, box_);
+
+        // FloatingPointTolerance tolerance = relativeToleranceAsFloatingPoint(1.0, c_precisionTolerance);
+        // checker_.setDefaultTolerance(tolerance);
+
+        fr_.rc_scaling    = refCoordScaling_;
+        fr_.pbcType       = pbcType_;
+    }
+
+    //! Prepares the test with the coordinate and force constant input.
+    void setValues(gmx::ArrayRef<const RVec> positions,
+                   gmx::ArrayRef<const RVec> referencePositions,
+                   gmx::ArrayRef<const RVec> forceConstants,
+                   const std::vector<RVec>&  posres_com)
+    {
+    SCOPED_TRACE(formatString("Setting values!"));
+        x_.resize(positions.size());
+        std::copy(positions.begin(), positions.end(), x_.begin());
+
+        for (size_t i = 0; i < positions.size(); i++)
+        {
+            // First item is "type" - each atom will have a different forceparam type
+            // Second item is index - we'll just go from 0.
+            idef_.il[F_POSRES].iatoms.push_back(i);
+            idef_.il[F_POSRES].iatoms.push_back(i);
+
+            auto& entry = idef_.iparams_posres.emplace_back();
+            copy_rvec(referencePositions[i], entry.posres.pos0A);
+            copy_rvec(forceConstants[i], entry.posres.fcA);
+            clear_rvec(entry.posres.pos0B);
+            clear_rvec(entry.posres.fcB);
+        }
+        f_.resize(x_.size(), { 0, 0, 0 });
+        forceWithVirial_ = std::make_unique<ForceWithVirial>(f_, /*computeVirial=*/true);
+
+        fr_.posres_com = posres_com;
+        fr_.posres_comB = posres_com;
+    }
+};
+
+// Test setup which mimics the test in position_restraints.cpp for refcoord-scaling = None, All
+// Difference is that 
+class RefCoordScalingNoneAllTest : public RefCoordScalingTest 
+{
+public:
+    InteractionDefinitions           idef_;
+    gmx_enerdata_t                   enerd_;
     TestReferenceData    refData_;
     TestReferenceChecker checker_;
 
-    RefCoordScalingTest() : idef_({}), enerd_(1, 0), checker_(refData_.rootChecker())
+    RefCoordScalingNoneAllTest() : idef_({}), enerd_(1, 0), checker_(refData_.rootChecker())
     {
         refCoordScaling_ = std::get<0>(GetParam());
         pbcType_         = std::get<1>(GetParam());
@@ -124,6 +180,7 @@ protected:
                    gmx::ArrayRef<const RVec> forceConstants,
                    const std::vector<RVec>&  posres_com)
     {
+    SCOPED_TRACE(formatString("Setting values!"));
         x_.resize(positions.size());
         std::copy(positions.begin(), positions.end(), x_.begin());
 
@@ -150,7 +207,7 @@ protected:
 
 std::array<real, static_cast<size_t>(FreeEnergyPerturbationCouplingType::Count)> c_emptyLambdas = { { 0 } };
 
-TEST_P(RefCoordScalingTest, ModeNoneOrAllDoesNotUseComGroupInds)
+TEST_P(RefCoordScalingNoneAllTest, ModeNoneOrAllDoesNotUseComGroupInds)
 {
     SCOPED_TRACE(formatString("Testing PBC type: %s, refcoord type: %s",
                               c_pbcTypeNames[pbcType_].c_str(),
@@ -181,19 +238,22 @@ TEST_P(RefCoordScalingTest, ModeNoneOrAllDoesNotUseComGroupInds)
     checker_.checkReal(enerd_.term[F_POSRES], "Potential energy");
 }
 
-TEST_P(RefCoordScalingTest, ComModeUsesCOMForScaling)
+TEST_P(RefCoordScalingTest, ComModeUsesComGroupForScaling)
 {
     SCOPED_TRACE(formatString("Testing PBC type: %s, refcoord type: %s",
                               c_pbcTypeNames[pbcType_].c_str(),
                               enumValueToString(refCoordScaling_)));
-    const std::vector<RVec> positions          = { { 0.0, 0.0, 0.0 }, { 0.4, 0.5, 0.6 } };
-    const std::vector<RVec> referencePositions = { { 0.0, 0.0, 0.0 }, { 0.5, 0.6, 0.0 } };
+    const std::vector<RVec> positions          = { { 0.1, 0.2, 0.3 }, { 0.4, 0.5, 0.6 } };
+    const std::vector<RVec> referencePositions = { { 0.1, 0.0, 0.4 }, { 0.5, 0.6, 0.7 } };
     const std::vector<RVec> forceConstants     = { { 1000, 500, 250 }, { 0, 200, 400 } };
 
     const std::vector<RVec> posres_com {{0.0, 0.5, 0.0}, {0.0, 1.0, 0.0}};
+    // reverse order for atom COM groups to check that the correct one is selected
     const std::vector<unsigned short> refScaleComInds { 1, 0 };
 
     setValues(positions, referencePositions, forceConstants, posres_com);
+
+    const auto nBoundedDim = numPbcDimensions(pbcType_);
     posres_wrapper(&nrnb_,
                    idef_,
                    &pbc_,
@@ -202,12 +262,38 @@ TEST_P(RefCoordScalingTest, ComModeUsesCOMForScaling)
                    c_emptyLambdas,
                    &fr_,
                    refScaleComInds,
-                   numPbcDimensions(pbcType_),
+                   nBoundedDim,
                    forceWithVirial_.get());
-    // checker_.checkSequence(
-    //         std::begin(forceWithVirial_->force_), std::end(forceWithVirial_->force_), "Forces");
-    // checker_.checkSequenceArray(3, forceWithVirial_->getVirial(), "Virial contribution");
-    // checker_.checkReal(enerd_.term[F_POSRES], "Potential energy");
+
+    for (size_t i = 0; i < positions.size(); ++i)
+    {
+        const auto& xs = positions.at(i);
+        const auto& ref = referencePositions.at(i);
+        const auto& ks = forceConstants.at(i);
+        const auto& coms = posres_com.at(refScaleComInds.at(i));
+
+        const auto& fs = forceWithVirial_->force_.at(i);
+
+        for (size_t d = 0; d < DIM; ++d)
+        {
+            const auto com_sc = coms[d] * box_[d][d];
+            float ref_com;
+
+            if (d < nBoundedDim)
+            {
+                ref_com = fmod(ref[d] + com_sc, box_[d][d]);
+            }
+            else
+            {
+                ref_com = ref[d];
+            }
+
+            const auto dx = xs[d] - ref_com;
+
+            const auto force = -ks[d] * dx;
+            EXPECT_FLOAT_EQ(fs[d], force);
+        }
+    }
 }
 
 //! PBC values for testing
@@ -217,8 +303,12 @@ std::vector<RefCoordScaling> c_refCoordScalingModesAllNone = { RefCoordScaling::
                                                                RefCoordScaling::All };
 
 INSTANTIATE_TEST_SUITE_P(PosResRefScaleTest,
-                         RefCoordScalingTest,
+                         RefCoordScalingNoneAllTest,
                          ::testing::Combine(::testing::ValuesIn(c_refCoordScalingModesAllNone),
+                                            ::testing::ValuesIn(c_pbcForTests)));
+INSTANTIATE_TEST_SUITE_P(PosResRefScaleTest,
+                         RefCoordScalingTest,
+                         ::testing::Combine(::testing::ValuesIn(std::vector<RefCoordScaling>{RefCoordScaling::Com}),
                                             ::testing::ValuesIn(c_pbcForTests)));
 
 } // namespace
