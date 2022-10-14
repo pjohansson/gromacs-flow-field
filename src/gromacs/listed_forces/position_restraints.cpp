@@ -237,7 +237,7 @@ real fbposres(int                   nbonds,
         const int ai    = forceatoms[i++];
         const auto pr   = &forceparams[type];
 
-        const auto icg_ai = refScaleComIdx[ai];
+        const auto icg_ai = refScaleComIdx.empty() ? 0 : refScaleComIdx[ai];
 
         /* same calculation as for normal posres, but with identical A and B states, and lambda==0 */
         posres_dx(x[ai],
@@ -392,7 +392,7 @@ real posres(int                   nbonds,
         const int ai   = forceatoms[i++];
         const auto pr  = &forceparams[type];
 
-        const auto icg_ai = refScaleComIdx[ai];
+        const auto icg_ai = refScaleComIdx.empty() ? 0 : refScaleComIdx[ai];
 
         /* return dx, rdist, and dpdl */
         posres_dx(x[ai],

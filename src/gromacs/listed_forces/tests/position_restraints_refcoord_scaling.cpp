@@ -274,7 +274,64 @@ TEST_P(RefCoordScalingTest, ComModeUsesComGroupForScaling)
 
         const auto& fs = forceWithVirial_->force_.at(i);
 
-        for (size_t d = 0; d < DIM; ++d)
+        for (int d = 0; d < DIM; ++d)
+        {
+            const auto com_sc = coms[d] * box_[d][d];
+            float ref_com;
+
+            if (d < nBoundedDim)
+            {
+                ref_com = fmod(ref[d] + com_sc, box_[d][d]);
+            }
+            else
+            {
+                ref_com = ref[d];
+            }
+
+            const auto dx = xs[d] - ref_com;
+
+            const auto force = -ks[d] * dx;
+            EXPECT_FLOAT_EQ(fs[d], force);
+        }
+    }
+}
+
+TEST_P(RefCoordScalingTest, RefScaleComGroupIndsEmptyDefaultsToGroup0)
+{
+    SCOPED_TRACE(formatString("Testing PBC type: %s, refcoord type: %s",
+                              c_pbcTypeNames[pbcType_].c_str(),
+                              enumValueToString(refCoordScaling_)));
+    const std::vector<RVec> positions          = { { 0.1, 0.2, 0.3 }, { 0.4, 0.5, 0.6 } };
+    const std::vector<RVec> referencePositions = { { 0.1, 0.0, 0.4 }, { 0.5, 0.6, 0.7 } };
+    const std::vector<RVec> forceConstants     = { { 1000, 500, 250 }, { 0, 200, 400 } };
+
+    const std::vector<RVec> posres_com {{0.0, 0.5, 0.0}};
+    const std::vector<unsigned short> refScaleComInds;
+
+    setValues(positions, referencePositions, forceConstants, posres_com);
+
+    const auto nBoundedDim = numPbcDimensions(pbcType_);
+    posres_wrapper(&nrnb_,
+                   idef_,
+                   &pbc_,
+                   as_rvec_array(x_.data()),
+                   &enerd_,
+                   c_emptyLambdas,
+                   &fr_,
+                   refScaleComInds,
+                   nBoundedDim,
+                   forceWithVirial_.get());
+
+    for (size_t i = 0; i < positions.size(); ++i)
+    {
+        const auto& xs = positions.at(i);
+        const auto& ref = referencePositions.at(i);
+        const auto& ks = forceConstants.at(i);
+        const auto& coms = posres_com.at(0);
+
+        const auto& fs = forceWithVirial_->force_.at(i);
+
+        for (int d = 0; d < DIM; ++d)
         {
             const auto com_sc = coms[d] * box_[d][d];
             float ref_com;
