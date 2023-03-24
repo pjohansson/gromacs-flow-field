@@ -79,7 +79,7 @@
 #include "gromacs/flow/accelerate.h"
 
 #ifdef NDEBUG
-#include "gromacs/flow/flow_field.cpp"
+// #include "gromacs/flow/flow_field.cpp"
 #endif
 
 using namespace gmx; // TODO: Remove when this file is moved into gmx namespace
@@ -608,9 +608,9 @@ static void updateMDLeapfrogGeneral(int                                 start,
     // [FLOW_FIELD]
     // For debugging, create a grid to collect pressure in
 #ifdef NDEBUG
-    auto pressure_result_grid = acc_flow.pressure;
-    pressure_result_grid.reset();
-    static int step = 0;
+    // auto pressure_result_grid = acc_flow.pressure;
+    // pressure_result_grid.reset();
+    // static int step = 0;
 #endif
 
     for (int n = start; n < nrend; n++)
@@ -672,7 +672,7 @@ static void updateMDLeapfrogGeneral(int                                 start,
         }
 
 #ifdef NDEBUG
-        pressure_result_grid.at_pos_pbc(x[n], box) += inv_num_area_density;
+        // pressure_result_grid.at_pos_pbc(x[n], box) += inv_num_area_density;
 #endif
 
         const RVec parrinelloRahmanScaledVelocity =
@@ -727,42 +727,42 @@ static void updateMDLeapfrogGeneral(int                                 start,
 
     // [FLOW]
 #ifdef NDEBUG
-    static size_t i = 1;
-    constexpr size_t step_output = 5000;
+    // static size_t i = 1;
+    // constexpr size_t step_output = 5000;
 
-    if ((step > 0) && (step % step_output == 0))
-    {
-        const auto& grid = acc_flow.pressure;
+    // if ((step > 0) && (step % step_output == 0))
+    // {
+    //     const auto& grid = acc_flow.pressure;
 
-        flow::FlowField flow_field("local", grid.shape[XX], grid.shape[ZZ], box);
+    //     flow::FlowField flow_field("local", grid.shape[XX], grid.shape[ZZ], box);
 
-        for (int ix = 0; ix < grid.shape[XX]; ++ix)
-        {
-            for (int iz = 0; iz < grid.shape[ZZ]; ++iz)
-            {
-                float sum_density = 0.0;
-                float sum_pressure = 0.0;
-                for (int iy = 0; iy < grid.shape[YY]; ++iy)
-                {
-                    sum_density += grid.at(ix, iy, iz);
-                    sum_pressure += pressure_result_grid.at(ix, iy, iz);
-                }
-                sum_density /= static_cast<float>(grid.shape[YY]);
-                sum_pressure /= static_cast<float>(grid.shape[YY]);
+    //     for (int ix = 0; ix < grid.shape[XX]; ++ix)
+    //     {
+    //         for (int iz = 0; iz < grid.shape[ZZ]; ++iz)
+    //         {
+    //             float sum_density = 0.0;
+    //             float sum_pressure = 0.0;
+    //             for (int iy = 0; iy < grid.shape[YY]; ++iy)
+    //             {
+    //                 sum_density += grid.at(ix, iy, iz);
+    //                 sum_pressure += pressure_result_grid.at(ix, iy, iz);
+    //             }
+    //             sum_density /= static_cast<float>(grid.shape[YY]);
+    //             sum_pressure /= static_cast<float>(grid.shape[YY]);
 
-                flow_field.at(ix, 0, iz)[flow::FlowVar::Mass] = sum_density;
-                flow_field.at(ix, 0, iz)[flow::FlowVar::U] = 1.0 / sum_density;
-                flow_field.at(ix, 0, iz)[flow::FlowVar::V] = sum_pressure;
-            }
-        }
+    //             flow_field.at(ix, 0, iz)[flow::FlowVar::Mass] = sum_density;
+    //             flow_field.at(ix, 0, iz)[flow::FlowVar::U] = 1.0 / sum_density;
+    //             flow_field.at(ix, 0, iz)[flow::FlowVar::V] = sum_pressure;
+    //         }
+    //     }
 
-        const auto output = flow::get_single_output_flow_field(flow_field);
-        flow::write_flow_field_to_disk(output, i);
+    //     const auto output = flow::get_single_output_flow_field(flow_field);
+    //     flow::write_flow_field_to_disk(output, i);
 
-        ++i;
-    }
+    //     ++i;
+    // }
 
-    step++;
+    // step++;
 #endif // NDEBUG
 }
 
