@@ -35,11 +35,12 @@ public:
                  const matrix               box);
 
     //! Get the scaling factor for the acceleration at the given position
-    float& get_factor_at_pos(const gmx::RVec r);
-    const float& get_factor_at_pos(const gmx::RVec r) const;
+    //!
+    //! The returned factor is equal to the total mass in the bin / bin volume.
+    float get_factor_at_pos(const gmx::RVec r) const;
 
-    //! Divide the value of all bins by their area transverse to the pressure axis
-    void div_bins_by_area();
+    //! Divide all values by the bin volume, then invert it to get 1/density
+    void div_bins_by_volume_and_invert();
 
     //! Set all values in the grid to 0
     void reset();
@@ -56,8 +57,6 @@ public:
 
 private:
     void _make_axis_1d(const size_t axis, const matrix box_matrix);
-
-    float _bin_area() const;
 
     size_t _get_index_unchecked(const gmx::RVec r) const;
 

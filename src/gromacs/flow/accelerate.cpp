@@ -49,12 +49,7 @@ ForceDensity::ForceDensity(
     reset();
 };
 
-float& ForceDensity::get_factor_at_pos(const gmx::RVec r)
-{
-    return values.at(_get_index_unchecked(r));
-}
-
-const float& ForceDensity::get_factor_at_pos(const gmx::RVec r) const
+float ForceDensity::get_factor_at_pos(const gmx::RVec r) const
 {
     return values.at(_get_index_unchecked(r));
 }
@@ -107,24 +102,16 @@ size_t ForceDensity::_get_index_along_axis(const gmx::RVec r, const size_t axis)
     return index;
 }
 
-float ForceDensity::_bin_area() const
+void ForceDensity::div_bins_by_volume_and_invert()
 {
-    switch (axis_force_density)
-    {
-        case XX: return spacing[YY] * spacing[ZZ];
-        case YY: return spacing[XX] * spacing[ZZ];
-        case ZZ: return spacing[XX] * spacing[YY];
-        default: return 1.0;
-    }
-}
-
-void ForceDensity::div_bins_by_area()
-{
-    const auto area = _bin_area();
+    const auto volume = bin_volume();
 
     for (auto& v : values)
     {
-        v /= area;
+        if (v != 0.0)
+        {
+            v = (volume / v);
+        }
     }
 }
 
@@ -215,7 +202,7 @@ static void collect_grid_data(ForceDensity           &grid,
                 }
             }
 
-            grid.at_pos(r) += 1.0;
+            grid.at_pos(r) += mdatoms->massT[i];
         }
     }
 }
@@ -383,10 +370,14 @@ void update_local_acceleration_grid(ForceDensity           &grid,
 {
     grid.reset();
 
+    // we add the bin masses locally for each MPI rank using only their "owned" atoms,
+    // then collect the complete grid on all ranks by adding all bin values.
     collect_grid_data(grid, cr, mdatoms, state, groups);
     mpi_collect_grid(grid, cr);
 
-    grid.div_bins_by_area();
+    // at this point the grid contains masses, but we want it to contain
+    // bin volume / bin mass so we finalize this here once per grid update
+    grid.div_bins_by_volume_and_invert();
 
     smooth_gaussian_kernel(grid);
 }

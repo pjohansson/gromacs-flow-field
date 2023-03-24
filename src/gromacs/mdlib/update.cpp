@@ -664,11 +664,10 @@ static void updateMDLeapfrogGeneral(int                                 start,
             || atomInLocalBox
         );
 
-        real inv_num_area_density = 1.0;
-
+        real force_density_multiplier = 0.0;
         if (acc_flow.force_density.doForceDensity)
         {
-            inv_num_area_density = acc_flow.force_density.get_factor_at_pos(x[n]);
+            force_density_multiplier = acc_flow.force_density.get_factor_at_pos(x[n]);
         }
 
 #ifdef NDEBUG
@@ -706,15 +705,15 @@ static void updateMDLeapfrogGeneral(int                                 start,
                     break;
                 // [FLOW_FIELD]
                 case AccelerationType::ForceDensity:
+                    // For force density, acceleration[ga][d] is the force density,
+                    // with units of force per volume: kJ/mol/nm / nm^3 = u nm / ps^2 / nm^3
+                    // The multiplier has units of nm^3 / u
                     if (addGroupAcceleration)
                     {
-                        // Pressure is force per area, so divide acceleration
-                        // by mass and number density per area
                         vNew += (
-                            inv_num_area_density
-                            * acc_tau
+                            force_density_multiplier
                             * acceleration[ga][d]
-                            * invMassPerDim[n][d]
+                            * acc_tau
                             * dt
                         );
                     }
