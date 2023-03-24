@@ -48,10 +48,10 @@ enum class GridAxes : int {
 };
 
 
-struct AccelerationPressureOptions {
-    bool doPressure = false;
+struct ForceDensityOptions {
+    bool doForceDensity = false;
 
-    int axis_pressure = XX;
+    int axis_force_density = XX;
 
     GridAxes grid_axes;
 

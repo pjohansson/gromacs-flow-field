@@ -1055,7 +1055,7 @@ void pr_inputrec(FILE* fp, int indent, const char* title, const t_inputrec* ir, 
         /* [FLOW_FIELD] */
         flow::pr_flow_field(fp, indent, ir->flowFieldOptions);
         flow::pr_acceleration(fp, indent, ir->localAccelerationOptions);
-        flow::pr_pressure(fp, indent, ir->accelerationPressureOptions);
+        flow::pr_force_density(fp, indent, ir->forceDensityOptions);
 
         /* USER-DEFINED THINGIES */
         PI("userint1", ir->userint1);

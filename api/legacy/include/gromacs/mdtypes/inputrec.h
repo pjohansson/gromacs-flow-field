@@ -591,9 +591,9 @@ struct t_inputrec // NOLINT (clang-analyzer-optin.performance.Padding)
 
     //! Local acceleration in system options
     flow::LocalAccelerationOptions localAccelerationOptions;
-    
+
     //! Pressure acceleration in system options
-    flow::AccelerationPressureOptions accelerationPressureOptions;
+    flow::ForceDensityOptions forceDensityOptions;
 };
 
 int ir_optimal_nstcalcenergy(const t_inputrec* ir);

@@ -19,7 +19,7 @@
 #define MD_FLOW_FIELD_ACCELERATE
 
 #ifndef NDEBUG
-#define NDEBUG
+// #define NDEBUG
 #endif
 
 namespace flow
@@ -28,11 +28,11 @@ namespace flow
 //! Container for a density grid used for pressure acceleration
 //!
 //! NOTE: Grid is always the same size as the input system.
-class AccelerationPressure : public Grid3d<float> {
+class ForceDensity : public Grid3d<float> {
 public:
     //! Constructor using the set .mdp options and box size
-    AccelerationPressure(const AccelerationPressureOptions &opts,
-                         const matrix                       box);
+    ForceDensity(const ForceDensityOptions &opts,
+                 const matrix               box);
 
     //! Get the scaling factor for the acceleration at the given position
     float& get_factor_at_pos(const gmx::RVec r);
@@ -44,9 +44,9 @@ public:
     //! Set all values in the grid to 0
     void reset();
 
-    bool doPressure = false;
+    bool doForceDensity = false;
 
-    int axis_pressure = XX;
+    int axis_force_density = XX;
 
     real sigma = 0.0;
 
@@ -161,11 +161,11 @@ struct LocalAcceleration {
 //! Container for acceleration modifications done by the Flow Field module
 struct AccelerationFlowField {
     AccelerationFlowField(const t_inputrec *ir, const matrix box)
-    :pressure{AccelerationPressure{ir->accelerationPressureOptions, box}},
+    :force_density{ForceDensity{ir->forceDensityOptions, box}},
      local{LocalAcceleration{ir->localAccelerationOptions, ir->delta_t, box}} {}
 
     //! Configuration for adding an external pressure for acceleration
-    AccelerationPressure pressure;
+    ForceDensity force_density;
 
     //! Configuration for using an acceleration zone instead of the entire system
     LocalAcceleration local;
@@ -182,7 +182,7 @@ real calc_acceleration_multiplier(const int64_t step,
 void print_local_acceleration_info(const LocalAcceleration &opts,
                                    const gmx::MDLogger     &mdlog);
 
-void update_local_acceleration_grid(AccelerationPressure   &pressure_grid,
+void update_local_acceleration_grid(ForceDensity   &pressure_grid,
                                     const t_commrec        *cr,
                                     const t_mdatoms        *mdatoms,
                                     const t_state          *state,

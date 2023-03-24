@@ -60,31 +60,31 @@ void pr_acceleration(FILE*                           fp,
                      const LocalAccelerationOptions &opts);
 
 
-/********************
- * PRESSURE OPTIONS *
- ********************/
+/*************************
+ * FORCE DENSITY OPTIONS *
+ *************************/
 
 //! Read pressure acceleration options from the parameter file
-void read_pressure_opts(std::vector<t_inpfile>      &inp,
-                        AccelerationPressureOptions &opts,
-                        WarningHandler              *wi);
+void read_force_density_opts(std::vector<t_inpfile> &inp,
+                             ForceDensityOptions    &opts,
+                             WarningHandler         *wi);
 
 //! Verify that pressure options are correctly set
-void check_pressure_opts(const t_inputrec *ir,
-                         WarningHandler   *wi);
+void check_force_density_opts(const t_inputrec *ir,
+                              WarningHandler   *wi);
 
 //! Verify that pressure group options are correctly set (called after indexing is done)
-void triple_check_pressure_opts(t_inputrec     *ir,
-                                WarningHandler *wi);
+void triple_check_force_density_opts(t_inputrec     *ir,
+                                     WarningHandler *wi);
 
 //! Do .tpx input/output for pressure acceleration options
-void do_tpx_pressure(gmx::ISerializer            *serializer,
-                     AccelerationPressureOptions &opts);
+void do_tpx_force_density(gmx::ISerializer    *serializer,
+                          ForceDensityOptions &opts);
 
 //! Print pressure acceleration options to log
-void pr_pressure(FILE*                              fp,
-                 int                                indent,
-                 const AccelerationPressureOptions &opts);
+void pr_force_density(FILE                      *fp,
+                      int                        indent,
+                      const ForceDensityOptions &opts);
 
 } // namespace flow
 

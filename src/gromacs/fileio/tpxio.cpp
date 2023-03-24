@@ -1429,7 +1429,7 @@ static void do_inputrec(gmx::ISerializer* serializer, t_inputrec* ir, int file_v
 
     // [FLOW_FIELD]
     flow::do_tpx_flow_field(serializer, ir->flowFieldOptions);
-    flow::do_tpx_pressure(serializer, ir->accelerationPressureOptions);
+    flow::do_tpx_force_density(serializer, ir->forceDensityOptions);
     flow::do_tpx_acceleration(serializer, ir->localAccelerationOptions);
 
     serializer->doInt(&ir->userint1);

@@ -1248,12 +1248,12 @@ void gmx::LegacySimulator::do_md()
         // Before any update starts (velocity-verlet begins right below),
         // update the density grid which is used for pressure calculation
         if (
-            acc_flow.pressure.doPressure
-            && do_per_step(step, acc_flow.pressure.step_update)
+            acc_flow.force_density.doForceDensity
+            && do_per_step(step, acc_flow.force_density.step_update)
         )
         {
             flow::update_local_acceleration_grid(
-                acc_flow.pressure,
+                acc_flow.force_density,
                 cr,
                 md,
                 state,

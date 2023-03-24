@@ -10,12 +10,12 @@
 namespace flow
 {
 
-AccelerationPressure::AccelerationPressure(
-    const AccelerationPressureOptions &opts,
-    const matrix                       box_matrix
+ForceDensity::ForceDensity(
+    const ForceDensityOptions &opts,
+    const matrix               box_matrix
 )
-:doPressure{opts.doPressure},
- axis_pressure{opts.axis_pressure},
+:doForceDensity{opts.doForceDensity},
+ axis_force_density{opts.axis_force_density},
  sigma{opts.density_grid_smoothing},
  target_resolution{opts.density_grid_resolution},
  step_update{opts.step_update}
@@ -41,7 +41,7 @@ AccelerationPressure::AccelerationPressure(
         default:
             gmx_fatal(
                 FARGS,
-                "AccelerationPressure::AccelerationPressure got an invalid GridAxis value"
+                "ForceDensity::ForceDensity got an invalid GridAxis value"
             );
     }
 
@@ -49,12 +49,12 @@ AccelerationPressure::AccelerationPressure(
     reset();
 };
 
-float& AccelerationPressure::get_factor_at_pos(const gmx::RVec r)
+float& ForceDensity::get_factor_at_pos(const gmx::RVec r)
 {
     return values.at(_get_index_unchecked(r));
 }
 
-const float& AccelerationPressure::get_factor_at_pos(const gmx::RVec r) const
+const float& ForceDensity::get_factor_at_pos(const gmx::RVec r) const
 {
     return values.at(_get_index_unchecked(r));
 }
@@ -82,7 +82,7 @@ const float& AccelerationPressure::get_factor_at_pos(const gmx::RVec r) const
 //! relatively easy to check.
 //!
 //! TODO: Write tests.
-size_t AccelerationPressure::_get_index_unchecked(const gmx::RVec r) const
+size_t ForceDensity::_get_index_unchecked(const gmx::RVec r) const
 {
     const auto ix = _get_index_along_axis(r, XX);
     const auto iy = _get_index_along_axis(r, YY);
@@ -95,7 +95,7 @@ size_t AccelerationPressure::_get_index_unchecked(const gmx::RVec r) const
     );
 }
 
-size_t AccelerationPressure::_get_index_along_axis(const gmx::RVec r, const size_t axis) const
+size_t ForceDensity::_get_index_along_axis(const gmx::RVec r, const size_t axis) const
 {
     auto index = static_cast<int>(floor(r[axis] * inv_spacing[axis])) % shape[axis];
 
@@ -107,9 +107,9 @@ size_t AccelerationPressure::_get_index_along_axis(const gmx::RVec r, const size
     return index;
 }
 
-float AccelerationPressure::_bin_area() const
+float ForceDensity::_bin_area() const
 {
-    switch (axis_pressure)
+    switch (axis_force_density)
     {
         case XX: return spacing[YY] * spacing[ZZ];
         case YY: return spacing[XX] * spacing[ZZ];
@@ -118,7 +118,7 @@ float AccelerationPressure::_bin_area() const
     }
 }
 
-void AccelerationPressure::div_bins_by_area()
+void ForceDensity::div_bins_by_area()
 {
     const auto area = _bin_area();
 
@@ -128,7 +128,7 @@ void AccelerationPressure::div_bins_by_area()
     }
 }
 
-void AccelerationPressure::reset()
+void ForceDensity::reset()
 {
     for (auto& v : values)
     {
@@ -136,7 +136,7 @@ void AccelerationPressure::reset()
     }
 }
 
-void AccelerationPressure::_make_axis_1d(const size_t axis,
+void ForceDensity::_make_axis_1d(const size_t axis,
                                          const matrix box_matrix)
 {
     shape[axis] = 1;
@@ -162,7 +162,7 @@ real calc_acceleration_multiplier(const int64_t step,
 
 
 //! Sum the number of atoms on grid and send to all ranks
-static void mpi_collect_grid(AccelerationPressure &grid, const t_commrec *cr)
+static void mpi_collect_grid(ForceDensity &grid, const t_commrec *cr)
 {
     if (PAR(cr))
     {
@@ -178,7 +178,7 @@ static void mpi_collect_grid(AccelerationPressure &grid, const t_commrec *cr)
 }
 
 
-static void collect_grid_data(AccelerationPressure   &grid,
+static void collect_grid_data(ForceDensity           &grid,
                               const t_commrec        *cr,
                               const t_mdatoms        *mdatoms,
                               const t_state          *state,
@@ -276,7 +276,7 @@ public:
         return weights.at(ix_adjusted).at(iy_adjusted).at(iz_adjusted);
     }
 
-    void add_weights(const AccelerationPressure &grid,
+    void add_weights(const ForceDensity &grid,
                      std::vector<float> &result,
                      std::vector<float> &weights,
                      const int           ix0,
@@ -338,7 +338,7 @@ private:
 //! This is likely a very expensive operation, but we shouldn't be
 //! updating the local density grid very often which means that it
 //! should be negligible compared to the force calculation.
-static void smooth_gaussian_kernel(AccelerationPressure &grid)
+static void smooth_gaussian_kernel(ForceDensity &grid)
 {
     if (grid.sigma <= 0.0)
     {
@@ -375,20 +375,20 @@ static void smooth_gaussian_kernel(AccelerationPressure &grid)
 }
 
 
-void update_local_acceleration_grid(AccelerationPressure  &pressure_grid,
+void update_local_acceleration_grid(ForceDensity           &grid,
                                     const t_commrec        *cr,
                                     const t_mdatoms        *mdatoms,
                                     const t_state          *state,
                                     const SimulationGroups *groups)
 {
-    pressure_grid.reset();
+    grid.reset();
 
-    collect_grid_data(pressure_grid, cr, mdatoms, state, groups);
-    mpi_collect_grid(pressure_grid, cr);
+    collect_grid_data(grid, cr, mdatoms, state, groups);
+    mpi_collect_grid(grid, cr);
 
-    pressure_grid.div_bins_by_area();
+    grid.div_bins_by_area();
 
-    smooth_gaussian_kernel(pressure_grid);
+    smooth_gaussian_kernel(grid);
 }
 
 void print_local_acceleration_info(const flow::LocalAcceleration &opts,

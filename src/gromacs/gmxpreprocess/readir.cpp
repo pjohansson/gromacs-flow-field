@@ -1756,9 +1756,9 @@ void check_ir(const char*                    mdparin,
     {
         flow::check_acceleration_opts(ir, wi);
     }
-    if (ir->accelerationPressureOptions.doPressure)
+    if (ir->forceDensityOptions.doForceDensity)
     {
-        flow::check_pressure_opts(ir, wi);
+        flow::check_force_density_opts(ir, wi);
     }
 }
 
@@ -2618,7 +2618,7 @@ void get_ir(const char*     mdparin,
     // [FLOW_FIELD] Local and pressure acceleration
     // We put these acceleration options right where the standard
     // acceleration options are defined
-    flow::read_pressure_opts(inp, ir->accelerationPressureOptions, wi);
+    flow::read_force_density_opts(inp, ir->forceDensityOptions, wi);
     flow::read_acceleration_opts(inp, ir->localAccelerationOptions, wi);
 
     setStringEntry(&inp, "freezegrps", inputrecStrings->freeze, nullptr);
@@ -5099,9 +5099,9 @@ void triple_check(const char* mdparin, t_inputrec* ir, gmx_mtop_t* sys, WarningH
     check_disre(*sys);
 
     // [FLOW_FIELD]
-    if (ir->accelerationPressureOptions.doPressure)
+    if (ir->forceDensityOptions.doForceDensity)
     {
-        flow::triple_check_pressure_opts(ir, wi);
+        flow::triple_check_force_density_opts(ir, wi);
     }
 }
 

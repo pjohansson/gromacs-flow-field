@@ -542,7 +542,7 @@ enum class AccelerationType
     None,
     Group,
     Cosine,
-    Pressure, // [FLOW_FIELD]
+    ForceDensity, // [FLOW_FIELD]
     Count
 };
 
@@ -627,7 +627,7 @@ static void updateMDLeapfrogGeneral(int                                 start,
         {
             case AccelerationType::None: copy_rvec(v[n], vRel); break;
             case AccelerationType::Group:
-            case AccelerationType::Pressure: // [FLOW_FIELD] use same initialization as the constant group scheme
+            case AccelerationType::ForceDensity: // [FLOW_FIELD] use same initialization as the constant group scheme
                 if (!cAcceleration.empty())
                 {
                     ga = cAcceleration[n];
@@ -666,9 +666,9 @@ static void updateMDLeapfrogGeneral(int                                 start,
 
         real inv_num_area_density = 1.0;
 
-        if (acc_flow.pressure.doPressure)
+        if (acc_flow.force_density.doForceDensity)
         {
-            inv_num_area_density = acc_flow.pressure.get_factor_at_pos(x[n]);
+            inv_num_area_density = acc_flow.force_density.get_factor_at_pos(x[n]);
         }
 
 #ifdef NDEBUG
@@ -705,7 +705,7 @@ static void updateMDLeapfrogGeneral(int                                 start,
                     }
                     break;
                 // [FLOW_FIELD]
-                case AccelerationType::Pressure:
+                case AccelerationType::ForceDensity:
                     if (addGroupAcceleration)
                     {
                         // Pressure is force per area, so divide acceleration
@@ -816,9 +816,9 @@ static void do_update_md(int                                  start,
     if (useConstantAcceleration)
     {
         // [FLOW_FIELD]
-        if (acc_flow.pressure.doPressure)
+        if (acc_flow.force_density.doForceDensity)
         {
-            accelerationType = AccelerationType::Pressure;
+            accelerationType = AccelerationType::ForceDensity;
         }
         else
         {
