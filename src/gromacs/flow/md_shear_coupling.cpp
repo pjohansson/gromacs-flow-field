@@ -1122,8 +1122,8 @@ ShearVelOpts init_shear_velocity_coupling_opts(const t_inputrec       *ir,
             tcoupl, ir->delta_t, static_cast<double>(nstcoupl) * ir->delta_t);
     }
 
-    const auto axis = get_axis(static_cast<ShearAxis_axis>(ir->shear_axis));
-    const auto direction = get_direction(static_cast<ShearAxis_direction>(ir->shear_direction));
+    const auto axis = get_axis(ir->shear_axis);
+    const auto direction = get_direction(ir->shear_direction);
 
     FILE *fp = nullptr;
     if (bShearCoupl)
@@ -1153,7 +1153,7 @@ ShearVelOpts init_shear_velocity_coupling_opts(const t_inputrec       *ir,
         fp,
         axis,
         direction,
-        static_cast<ShearCouplStrategy>(ir->shear_strategy),
+        ir->shear_strategy,
         get_num_groups(groups),
         nstcoupl,
         ir->shear_area_size,

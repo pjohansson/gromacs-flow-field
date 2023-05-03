@@ -1409,7 +1409,7 @@ void gmx::LegacySimulator::do_md()
         /* #########   [PETTER] [REMD]   ######### */
         if (bShearCoupling && do_per_step(step, shear_velocity_coupling_opts.step))
         {
-            do_shear_velocity_coupling(state, mdatoms, step, t, shear_velocity_coupling_opts, groups, cr);
+            do_shear_velocity_coupling(state, mdAtoms->mdatoms(), step, t, shear_velocity_coupling_opts, groups, cr);
         }
 
         /* #########   START SECOND UPDATE STEP ################# */

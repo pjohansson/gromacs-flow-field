@@ -1431,9 +1431,9 @@ static void do_inputrec(gmx::ISerializer* serializer, t_inputrec* ir, int file_v
 
     /* [PETTER] Shear velocity coupling options */
     serializer->doBool(&ir->bShearCoupling);
-    serializer->doInt(&ir->shear_axis);
-    serializer->doInt(&ir->shear_direction);
-    serializer->doInt(&ir->shear_strategy);
+    serializer->doEnumAsInt(&ir->shear_axis);
+    serializer->doEnumAsInt(&ir->shear_direction);
+    serializer->doEnumAsInt(&ir->shear_strategy);
     serializer->doReal(&ir->shear_tcoupl);
     serializer->doReal(&ir->shear_area_size);
     serializer->doReal(&ir->shear_zadj);

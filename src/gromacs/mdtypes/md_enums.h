@@ -855,28 +855,31 @@ enum struct GmxQmmmMode
     GMX_QMMM_MIMIC
 };
 
-
-//! \brief [PETTER] Shear velocity coupling options
-enum class ShearCouplStrategy {
+// [PETTER] Shear velocity coupling options
+enum class ShearCouplStrategy : int {
     Edges,
     EdgeCenter,
-    NR
+    Count,
+    Default = Edges
 };
-extern const char* ShearCouplStrategy_names[static_cast<size_t>(ShearCouplStrategy::NR) + 1];
+const char* enumValueToString(ShearCouplStrategy enumValue);
 
-enum class ShearAxis_axis {
-    Z,
-    X,
-    Y,
-    NR
-};
-extern const char* ShearAxis_axis_names[static_cast<size_t>(ShearAxis_axis::NR) + 1];
-
-enum class ShearAxis_direction {
+enum class ShearAxis_axis : int {
     X,
     Y,
     Z,
-    NR
+    Count,
+    Default = Z
 };
-extern const char* ShearAxis_direction_names[static_cast<size_t>(ShearAxis_direction::NR) + 1];
+const char* enumValueToString(ShearAxis_axis enumValue);
+
+enum class ShearAxis_direction : int {
+    X,
+    Y,
+    Z,
+    Count,
+    Default = X
+};
+const char* enumValueToString(ShearAxis_direction enumValue);
+
 #endif /* GMX_MDTYPES_MD_ENUMS_H */

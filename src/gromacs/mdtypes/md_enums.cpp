@@ -408,9 +408,26 @@ const char* enumValueToString(NbkernelVdwType enumValue)
 }
 
 /* [PETTER] Shear velocity coupling options */
-const char* ShearCouplStrategy_names[static_cast<size_t>(ShearCouplStrategy::NR) + 1]
-    = { "Edges", "Edge-Center", nullptr };
-const char* ShearAxis_axis_names[static_cast<size_t>(ShearAxis_axis::NR) + 1]
-    = { "Z", "X", "Y", nullptr };
-const char* ShearAxis_direction_names[static_cast<size_t>(ShearAxis_direction::NR) + 1]
-    = { "X", "Y", "Z", nullptr };
+const char* enumValueToString(ShearAxis_axis enumValue)
+{
+    static constexpr gmx::EnumerationArray<ShearAxis_axis, const char*> shear_axis_axis_names = {
+        "X", "Y", "Z"
+    };
+    return shear_axis_axis_names[enumValue];
+}
+
+const char* enumValueToString(ShearAxis_direction enumValue)
+{
+    static constexpr gmx::EnumerationArray<ShearAxis_direction, const char*> shear_axis_direction_names = {
+        "X", "Y", "Z"
+    };
+    return shear_axis_direction_names[enumValue];
+}
+
+const char* enumValueToString(ShearCouplStrategy enumValue)
+{
+    static constexpr gmx::EnumerationArray<ShearCouplStrategy, const char*> shear_axis_strategy_names = {
+        "Edges", "Edge-Center"
+    };
+    return shear_axis_strategy_names[enumValue];
+}

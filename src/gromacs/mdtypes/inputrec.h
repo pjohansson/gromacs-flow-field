@@ -562,10 +562,10 @@ struct t_inputrec // NOLINT (clang-analyzer-optin.performance.Padding)
     /**@}*/
     /*! \brief [PETTER] Shear velocity coupling options */
     /**@{*/
-    gmx_bool bShearCoupling;
-    int      shear_axis;
-    int      shear_direction;
-    int      shear_strategy;
+    bool bShearCoupling;
+    ShearAxis_axis      shear_axis;
+    ShearAxis_direction      shear_direction;
+    ShearCouplStrategy      shear_strategy;
     real     shear_tcoupl;
     real     shear_area_size;
     real     shear_zadj;

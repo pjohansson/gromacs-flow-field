@@ -2746,17 +2746,17 @@ void get_ir(const char*     mdparin,
     /* [PETTER] Shear velocity coupling options */
     printStringNewline(&inp, "SHEAR VELOCITY COUPLING (UNOFFICIAL)");
     printStringNoNewline(&inp, "Do shear velocity coupling");
-    ir->bShearCoupling  = (get_eeenum(&inp, "shear-coupling", yesno_names, wi) != 0);
+    ir->bShearCoupling = (getEnum<Boolean>(&inp, "shear-coupling", wi) != Boolean::No);
     printStringNoNewline(&inp, "Axis along which to exchange the velocities and the direction");
     printStringNoNewline(&inp, "along which to shear: x, y or z");
-    ir->shear_axis      = get_eeenum(&inp, "shear-axis", ShearAxis_axis_names, wi);
-    ir->shear_direction = get_eeenum(&inp, "shear-direction", ShearAxis_direction_names, wi);
+    ir->shear_axis = getEnum<ShearAxis_axis>(&inp, "shear-axis", wi);
+    ir->shear_direction = getEnum<ShearAxis_direction>(&inp, "shear-direction", wi);
     printStringNoNewline(&inp, "Strategy for setting up exchange areas: Edges or Edge-Center");
     printStringNoNewline(&inp, "Edges: exchange area 0 and 1 are respectively at the bottom and top");
     printStringNoNewline(&inp, "  edges of the system, along the selected axis");
     printStringNoNewline(&inp, "Edge-Center: exchange area 0 is split into the bottom and top edges");
     printStringNoNewline(&inp, "  of the system, area 1 is at the center");
-    ir->shear_strategy  = get_eeenum(&inp, "shear-strategy", ShearCouplStrategy_names, wi);
+    ir->shear_strategy = getEnum<ShearCouplStrategy>(&inp, "shear-strategy", wi);
     printStringNoNewline(&inp, "How often to perform the coupling");
     ir->shear_tcoupl    = get_ereal(&inp, "shear-tcoupl", 0.0, wi);
     printStringNoNewline(&inp, "Size of exchange areas and adjustment from the edges");
@@ -5167,7 +5167,7 @@ void double_check(t_inputrec* ir, matrix box, bool bHasNormalConstraints, bool b
     /* [PETTER] Shear coupling checking */
     if (ir->bShearCoupling)
     {
-        if ((ir->shear_strategy == static_cast<int>(ShearCouplStrategy::Edges))
+        if ((ir->shear_strategy == ShearCouplStrategy::Edges)
             && (ir->pbcType != PbcType::XY))
         {
             sprintf(warn_buf, 
@@ -5175,7 +5175,7 @@ void double_check(t_inputrec* ir, matrix box, bool bHasNormalConstraints, bool b
                 "be periodic along the axis, since both edges will shear "
                 "against each other. Use pbc = %s unless you are sure. "
                 "(currently pbc = %s)",
-                ShearCouplStrategy_names[ir->shear_strategy], 
+                enumValueToString(ir->shear_strategy),
                 c_pbcTypeNames[PbcType::XY], 
                 c_pbcTypeNames[ir->pbcType]);
             warning(wi, warn_buf);
