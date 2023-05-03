@@ -561,16 +561,7 @@ struct t_inputrec // NOLINT (clang-analyzer-optin.performance.Padding)
     real userreal4 = 0;
     /**@}*/
     /*! \brief [PETTER] Shear velocity coupling options */
-    /**@{*/
-    bool bShearCoupling;
-    flow::ShearAxis_axis      shear_axis;
-    flow::ShearAxis_direction shear_direction;
-    flow::ShearCouplStrategy  shear_strategy;
-    real     shear_tcoupl;
-    real     shear_area_size;
-    real     shear_zadj;
-    real     shear_ref_velocity;
-    /**@}*/
+    flow::RNEMDOptions rnemd_opts;
     //! Group options
     t_grpopts opts;
     //! QM/MM calculation

@@ -90,7 +90,10 @@
 #include "gromacs/utility/stringcompare.h"
 #include "gromacs/utility/stringutil.h"
 #include "gromacs/utility/textwriter.h"
-#include "gromacs/flow/inputrec_types.h" // [FLOW]
+
+// [FLOW]
+#include "gromacs/flow/gmx_io.h"
+#include "gromacs/flow/inputrec_types.h"
 
 #define NOGID 255
 
@@ -2744,33 +2747,8 @@ void get_ir(const char*     mdparin,
     ir->userreal3 = get_ereal(&inp, "userreal3", 0, wi);
     ir->userreal4 = get_ereal(&inp, "userreal4", 0, wi);
 
-    /* [PETTER] Shear velocity coupling options */
-    printStringNewline(&inp, "SHEAR VELOCITY COUPLING (UNOFFICIAL)");
-    printStringNoNewline(&inp, "Do shear velocity coupling");
-    ir->bShearCoupling = (getEnum<Boolean>(&inp, "shear-coupling", wi) != Boolean::No);
-    printStringNoNewline(&inp, "Axis along which to exchange the velocities and the direction");
-    printStringNoNewline(&inp, "along which to shear: x, y or z");
-    ir->shear_axis = getEnum<flow::ShearAxis_axis>(&inp, "shear-axis", wi);
-    ir->shear_direction = getEnum<flow::ShearAxis_direction>(&inp, "shear-direction", wi);
-    printStringNoNewline(&inp, "Strategy for setting up exchange areas: Edges or Edge-Center");
-    printStringNoNewline(&inp, "Edges: exchange area 0 and 1 are respectively at the bottom and top");
-    printStringNoNewline(&inp, "  edges of the system, along the selected axis");
-    printStringNoNewline(&inp, "Edge-Center: exchange area 0 is split into the bottom and top edges");
-    printStringNoNewline(&inp, "  of the system, area 1 is at the center");
-    ir->shear_strategy = getEnum<flow::ShearCouplStrategy>(&inp, "shear-strategy", wi);
-    printStringNoNewline(&inp, "How often to perform the coupling");
-    ir->shear_tcoupl    = get_ereal(&inp, "shear-tcoupl", 0.0, wi);
-    printStringNoNewline(&inp, "Size of exchange areas and adjustment from the edges");
-    ir->shear_area_size = get_ereal(&inp, "shear-area-size", 0.0, wi);
-    ir->shear_zadj      = get_ereal(&inp, "shear-zadj", 0.0, wi);
-    printStringNoNewline(&inp, "Reference velocity: Targeted velocity for both areas");
-    printStringNoNewline(&inp, "  Area 0: -shear-ref-velocity");
-    printStringNoNewline(&inp, "  Area 1: +shear-ref-velocity");
-    ir->shear_ref_velocity = get_ereal(&inp, "shear-ref-velocity", 0.0, wi);
-    printStringNoNewline(&inp, "Groups to shear with: must be 1 or 2, in the latter case ");
-    printStringNoNewline(&inp, "for area 0 and 1 respectively");
-    printStringNoNewline(&inp, "Note: this replaces user2-grps");
-    setStringEntry(&inp, "shear-grps", inputrecStrings->user2, nullptr);
+    /* [FLOW] Shear velocity coupling options */
+    flow::read_rnemd_opts(inp, ir->rnemd_opts, inputrecStrings->user2, wi);
 #undef CTYPE
 
     if (mdparout)
@@ -4334,16 +4312,8 @@ void do_index(const char*                    mdparin,
                  bVerbose,
                  wi);
 
-    /* [PETTER] Assert that we have 1 or 2 groups for the shear coupling */
-    if (ir->bShearCoupling
-        && (user2GroupNames.empty() || user2GroupNames.size() > 2))
-    {
-        gmx_fatal(FARGS,
-                  "Invalid shear-grps input: must be 1 or 2 groups (is %d), "
-                  "in which case area 0 only couples to atoms in the first "
-                  "group and area 1 to atoms in the second.",
-                  user2GroupNames.size());
-    }
+    /* [FLOW] Assert that we have 1 or 2 groups for the shear coupling */
+    flow::check_rnemd_groups(ir, user2GroupNames, wi);
 
     /* MiMiC QMMM input processing */
     auto qmGroupNames = gmx::splitString(inputrecStrings->QMMM);
@@ -5165,21 +5135,6 @@ void double_check(t_inputrec* ir, matrix box, bool bHasNormalConstraints, bool b
         }
     }
 
-    /* [PETTER] Shear coupling checking */
-    if (ir->bShearCoupling)
-    {
-        if ((ir->shear_strategy == flow::ShearCouplStrategy::Edges)
-            && (ir->pbcType != PbcType::XY))
-        {
-            sprintf(warn_buf,
-                "With shear-strategy = %s the system should probably not "
-                "be periodic along the axis, since both edges will shear "
-                "against each other. Use pbc = %s unless you are sure. "
-                "(currently pbc = %s)",
-                enumValueToString(ir->shear_strategy),
-                c_pbcTypeNames[PbcType::XY],
-                c_pbcTypeNames[ir->pbcType]);
-            warning(wi, warn_buf);
-        }
-    }
+    // [FLOW]
+    flow::check_rnemd_opts(ir, wi, c_pbcTypeNames);
 }

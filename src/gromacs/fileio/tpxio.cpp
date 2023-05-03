@@ -78,7 +78,10 @@
 #include "gromacs/utility/smalloc.h"
 #include "gromacs/utility/snprintf.h"
 #include "gromacs/utility/txtdump.h"
-#include "gromacs/flow/inputrec_types.h" // [FLOW]
+
+// [FLOW]
+#include "gromacs/flow/gmx_io.h"
+#include "gromacs/flow/inputrec_types.h"
 
 #define TPX_TAG_RELEASE "release"
 
@@ -1430,15 +1433,8 @@ static void do_inputrec(gmx::ISerializer* serializer, t_inputrec* ir, int file_v
     serializer->doReal(&ir->userreal3);
     serializer->doReal(&ir->userreal4);
 
-    /* [PETTER] Shear velocity coupling options */
-    serializer->doBool(&ir->bShearCoupling);
-    serializer->doEnumAsInt(&ir->shear_axis);
-    serializer->doEnumAsInt(&ir->shear_direction);
-    serializer->doEnumAsInt(&ir->shear_strategy);
-    serializer->doReal(&ir->shear_tcoupl);
-    serializer->doReal(&ir->shear_area_size);
-    serializer->doReal(&ir->shear_zadj);
-    serializer->doReal(&ir->shear_ref_velocity);
+    /* [FLOW] Shear velocity coupling options */
+    flow::do_tpx_rnemd(serializer, ir->rnemd_opts);
 
     /* AdResS is removed, but we need to be able to read old files,
        and let mdrun refuse to run them */

@@ -735,8 +735,8 @@ void gmx::LegacySimulator::do_md()
        for non-trotter temperature control */
     auto trotter_seq = init_npt_vars(ir, state, &MassQ, bTrotter);
 
-    /* [PETTER] [REMD] SHEAR COUPLING SETUP */
-    const gmx_bool bShearCoupling = ir->bShearCoupling;
+    /* [FLOW] REVERSE NON-EQUILIBRIUM MD (RNEMD) SETUP */
+    const bool bShearCoupling = ir->rnemd_opts.bDoExchange;
     const auto shear_velocity_coupling_opts = init_shear_velocity_coupling_opts(
         ir, state->box, groups, cr, opt2fn("-pexchange", nfile, fnm), oenv, mdlog);
 

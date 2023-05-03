@@ -64,6 +64,8 @@
 #include "gromacs/utility/textwriter.h"
 #include "gromacs/utility/txtdump.h"
 
+#include "gromacs/flow/gmx_io.h" // [FLOW]
+
 //! Macro to select a bool name
 #define EBOOL(e) gmx::boolToString(e)
 
@@ -1065,15 +1067,8 @@ void pr_inputrec(FILE* fp, int indent, const char* title, const t_inputrec* ir, 
         PR("userreal3", ir->userreal3);
         PR("userreal4", ir->userreal4);
 
-        /* [PETTER] Shear coupling options */
-        PS("shear-coupling", EBOOL(ir->bShearCoupling));
-        PS("shear-axis", enumValueToString(ir->shear_axis));
-        PS("shear-direction", enumValueToString(ir->shear_direction));
-        PS("shear-strategy", enumValueToString(ir->shear_strategy));
-        PR("shear-tcoupl", ir->shear_tcoupl);
-        PR("shear-area-size", ir->shear_area_size);
-        PR("shear-zadj", ir->shear_zadj);
-        PR("shear-ref-velocity", ir->shear_ref_velocity);
+        /* [FLOW] Shear coupling options */
+        flow::pr_rnemd(fp, indent, ir->rnemd_opts);
 
         if (!bMDPformat)
         {

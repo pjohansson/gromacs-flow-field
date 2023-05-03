@@ -1112,8 +1112,9 @@ ShearVelOpts init_shear_velocity_coupling_opts(const t_inputrec       *ir,
                                                const struct gmx_output_env_t *oenv,
                                                const gmx::MDLogger    &mdlog)
 {
-    const gmx_bool bShearCoupl = ir->bShearCoupling;
-    const auto tcoupl = static_cast<double>(ir->shear_tcoupl);
+    const auto& input_opts = ir->rnemd_opts;
+    const auto bShearCoupl = input_opts.bDoExchange;
+    const auto tcoupl = static_cast<double>(input_opts.tau);
     const auto nstcoupl = static_cast<size_t>(tcoupl / ir->delta_t);
 
     if (bShearCoupl && (fabs(nstcoupl * ir->delta_t - tcoupl) > 0.000001))
@@ -1124,8 +1125,8 @@ ShearVelOpts init_shear_velocity_coupling_opts(const t_inputrec       *ir,
             tcoupl, ir->delta_t, static_cast<double>(nstcoupl) * ir->delta_t);
     }
 
-    const auto axis = get_axis(ir->shear_axis);
-    const auto direction = get_direction(ir->shear_direction);
+    const auto axis = get_axis(input_opts.axis);
+    const auto direction = get_direction(input_opts.direction);
 
     FILE *fp = nullptr;
     if (bShearCoupl)
@@ -1155,12 +1156,12 @@ ShearVelOpts init_shear_velocity_coupling_opts(const t_inputrec       *ir,
         fp,
         axis,
         direction,
-        ir->shear_strategy,
+        input_opts.strategy,
         get_num_groups(groups),
         nstcoupl,
-        ir->shear_area_size,
-        ir->shear_zadj,
-        ir->shear_ref_velocity
+        input_opts.area_size,
+        input_opts.zadj,
+        input_opts.ref_velocity
     };
 
     if (bShearCoupl)
