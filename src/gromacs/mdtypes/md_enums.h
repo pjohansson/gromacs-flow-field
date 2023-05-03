@@ -848,38 +848,4 @@ enum class PbcType : int
     Default = Xyz
 };
 
-//! \brief QM/MM mode
-enum struct GmxQmmmMode
-{
-    GMX_QMMM_ORIGINAL,
-    GMX_QMMM_MIMIC
-};
-
-// [PETTER] Shear velocity coupling options
-enum class ShearCouplStrategy : int {
-    Edges,
-    EdgeCenter,
-    Count,
-    Default = Edges
-};
-const char* enumValueToString(ShearCouplStrategy enumValue);
-
-enum class ShearAxis_axis : int {
-    X,
-    Y,
-    Z,
-    Count,
-    Default = Z
-};
-const char* enumValueToString(ShearAxis_axis enumValue);
-
-enum class ShearAxis_direction : int {
-    X,
-    Y,
-    Z,
-    Count,
-    Default = X
-};
-const char* enumValueToString(ShearAxis_direction enumValue);
-
 #endif /* GMX_MDTYPES_MD_ENUMS_H */

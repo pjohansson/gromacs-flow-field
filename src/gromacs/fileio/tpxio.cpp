@@ -78,6 +78,7 @@
 #include "gromacs/utility/smalloc.h"
 #include "gromacs/utility/snprintf.h"
 #include "gromacs/utility/txtdump.h"
+#include "gromacs/flow/inputrec_types.h" // [FLOW]
 
 #define TPX_TAG_RELEASE "release"
 

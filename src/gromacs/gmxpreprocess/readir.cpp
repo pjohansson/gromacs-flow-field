@@ -90,6 +90,7 @@
 #include "gromacs/utility/stringcompare.h"
 #include "gromacs/utility/stringutil.h"
 #include "gromacs/utility/textwriter.h"
+#include "gromacs/flow/inputrec_types.h" // [FLOW]
 
 #define NOGID 255
 
@@ -2749,14 +2750,14 @@ void get_ir(const char*     mdparin,
     ir->bShearCoupling = (getEnum<Boolean>(&inp, "shear-coupling", wi) != Boolean::No);
     printStringNoNewline(&inp, "Axis along which to exchange the velocities and the direction");
     printStringNoNewline(&inp, "along which to shear: x, y or z");
-    ir->shear_axis = getEnum<ShearAxis_axis>(&inp, "shear-axis", wi);
-    ir->shear_direction = getEnum<ShearAxis_direction>(&inp, "shear-direction", wi);
+    ir->shear_axis = getEnum<flow::ShearAxis_axis>(&inp, "shear-axis", wi);
+    ir->shear_direction = getEnum<flow::ShearAxis_direction>(&inp, "shear-direction", wi);
     printStringNoNewline(&inp, "Strategy for setting up exchange areas: Edges or Edge-Center");
     printStringNoNewline(&inp, "Edges: exchange area 0 and 1 are respectively at the bottom and top");
     printStringNoNewline(&inp, "  edges of the system, along the selected axis");
     printStringNoNewline(&inp, "Edge-Center: exchange area 0 is split into the bottom and top edges");
     printStringNoNewline(&inp, "  of the system, area 1 is at the center");
-    ir->shear_strategy = getEnum<ShearCouplStrategy>(&inp, "shear-strategy", wi);
+    ir->shear_strategy = getEnum<flow::ShearCouplStrategy>(&inp, "shear-strategy", wi);
     printStringNoNewline(&inp, "How often to perform the coupling");
     ir->shear_tcoupl    = get_ereal(&inp, "shear-tcoupl", 0.0, wi);
     printStringNoNewline(&inp, "Size of exchange areas and adjustment from the edges");
@@ -5167,7 +5168,7 @@ void double_check(t_inputrec* ir, matrix box, bool bHasNormalConstraints, bool b
     /* [PETTER] Shear coupling checking */
     if (ir->bShearCoupling)
     {
-        if ((ir->shear_strategy == ShearCouplStrategy::Edges)
+        if ((ir->shear_strategy == flow::ShearCouplStrategy::Edges)
             && (ir->pbcType != PbcType::XY))
         {
             sprintf(warn_buf,

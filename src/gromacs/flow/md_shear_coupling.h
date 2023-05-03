@@ -15,6 +15,8 @@
 #include "gromacs/utility/logger.h"
 #include "gromacs/utility/real.h"
 
+using namespace flow;
+
 enum class Axis {
     X,
     Y,

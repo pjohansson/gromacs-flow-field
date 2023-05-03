@@ -43,7 +43,7 @@
 #include "gromacs/mdtypes/md_enums.h"
 #include "gromacs/utility/enumerationhelpers.h"
 #include "gromacs/utility/real.h"
-#include "gromacs/flow/md_shear_coupling_enum.h" /* [PETTER] */
+#include "gromacs/flow/inputrec_types.h" // FLOW
 
 #define EGP_EXCL (1 << 0)
 #define EGP_TABLE (1 << 1)
@@ -563,9 +563,9 @@ struct t_inputrec // NOLINT (clang-analyzer-optin.performance.Padding)
     /*! \brief [PETTER] Shear velocity coupling options */
     /**@{*/
     bool bShearCoupling;
-    ShearAxis_axis      shear_axis;
-    ShearAxis_direction      shear_direction;
-    ShearCouplStrategy      shear_strategy;
+    flow::ShearAxis_axis      shear_axis;
+    flow::ShearAxis_direction shear_direction;
+    flow::ShearCouplStrategy  shear_strategy;
     real     shear_tcoupl;
     real     shear_area_size;
     real     shear_zadj;

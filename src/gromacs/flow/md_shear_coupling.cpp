@@ -90,6 +90,8 @@
  * Originally based on gromacs-2020.3                                          *
  *-----------------------------------------------------------------------------*/
 
+using namespace flow;
+
 // #define MPI_SHEAR_DEBUG
 
 /* These includes are used to sleep threads for small periods to print
