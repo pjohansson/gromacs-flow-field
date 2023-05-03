@@ -28,13 +28,13 @@ struct ShearVelOpts {
     FILE *log_pexchange;          /* Opened file to log momentum exchange into */
 
     Axis axis,                    /* Axis along which the areas that are coupled are defined */
-         direction;               /* Directional axis of the velocity */ 
-        
+         direction;               /* Directional axis of the velocity */
+
     ShearCouplStrategy strategy;  /* Strategy for determining the exchange areas */
 
     size_t num_groups,      /* Number of groups to include atoms from
                                Will be 1 or 2, if 1 both areas will include atoms from
-                               the group, but if 2, area 0 and 1 will include atoms only 
+                               the group, but if 2, area 0 and 1 will include atoms only
                                from groups 0 and 1, respectively                      */
 
            step;            /* Couple the velocities at multiples of this step */
