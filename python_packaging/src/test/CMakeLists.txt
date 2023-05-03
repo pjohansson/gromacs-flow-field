@@ -1,10 +1,9 @@
 #
 # This file is part of the GROMACS molecular simulation package.
 #
-# Copyright (c) 2019, by the GROMACS development team, led by
-# Mark Abraham, David van der Spoel, Berk Hess, and Erik Lindahl,
-# and including many others, as listed in the AUTHORS file in the
-# top-level source directory and at http://www.gromacs.org.
+# Copyright 2019- The GROMACS Authors
+# and the project initiators Erik Lindahl, Berk Hess and David van der Spoel.
+# Consult the AUTHORS/COPYING files and https://www.gromacs.org for details.
 #
 # GROMACS is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public License
@@ -18,7 +17,7 @@
 #
 # You should have received a copy of the GNU Lesser General Public
 # License along with GROMACS; if not, see
-# http://www.gnu.org/licenses, or write to the Free Software Foundation,
+# https://www.gnu.org/licenses, or write to the Free Software Foundation,
 # Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA.
 #
 # If you want to redistribute modifications to GROMACS, please
@@ -27,10 +26,10 @@
 # consider code for inclusion in the official distribution, but
 # derived work must not be called official GROMACS. Details are found
 # in the README & COPYING files - if they are missing, get the
-# official version at http://www.gromacs.org.
+# official version at https://www.gromacs.org.
 #
 # To help us fund GROMACS development, we humbly ask that you cite
-# the research papers on the package. Check out http://www.gromacs.org.
+# the research papers on the package. Check out https://www.gromacs.org.
 
 # Note that this file is heavily influenced by
 # https://github.com/pybind/pybind11/blob/master/tests/CMakeLists.txt
@@ -61,14 +60,45 @@ if(NOT GMXAPI_PYTEST_FOUND)
     set(GMXAPI_PYTEST_FOUND TRUE CACHE INTERNAL "Suppress checking for Python pytest module.")
 endif()
 
-# TODO: (#2961) Let the Python package discover required resources instead of passing GMXBIN
 get_target_property(GMXBIN gmx RUNTIME_OUTPUT_DIRECTORY)
 add_custom_target(gmxapi_pytest
-                  COMMAND ${CMAKE_COMMAND} -E env GMXBIN=${GMXBIN}
-                    ${PYTHON_EXECUTABLE} -m pytest --log-cli-level ERROR ${CMAKE_CURRENT_SOURCE_DIR}
+                  COMMAND ${PYTHON_EXECUTABLE} -m pytest --log-cli-level ERROR ${CMAKE_CURRENT_SOURCE_DIR}
                   DEPENDS _gmxapi
                   WORKING_DIRECTORY ${GMXAPI_PYTHON_STAGING_DIR})
 # The current test fixtures require the `gmx` tool-wrapper executable.
 add_dependencies(gmxapi_pytest gmx)
 
 add_dependencies(check gmxapi_pytest)
+
+if(MPIEXEC_EXECUTABLE)
+    if(NOT GMXAPI_MPI4PY_FOUND)
+        if (MPI_C_COMPILER)
+            set(_mpicc "MPICC=${MPI_C_COMPILER} ")
+        endif ()
+
+        execute_process(COMMAND ${PYTHON_EXECUTABLE} -c "import mpi4py; print(mpi4py.__version__)"
+                        RESULT_VARIABLE mpi4py_not_found OUTPUT_VARIABLE mpi4py_version ERROR_QUIET)
+        if(mpi4py_not_found)
+            message(STATUS "Running the MPI-enable tests requires mpi4py. Please install it manually. "
+                    "(Try: `${_mpicc}${PYTHON_EXECUTABLE} -m pip install mpi4py`, "
+                    "then clear the GMXAPI_MPI4PY_FOUND cache variable "
+                    "or remove the CMakeCache.txt, and configure again.)")
+        elseif(mpi4py_version VERSION_LESS 3.0.3)
+            message(STATUS "Running the MPI-enabled tests requires mpi4py >= 3.0.3. Found: ${mpi4py_version}"
+                    "Please update it (try: ${_mpicc}${PYTHON_EXECUTABLE} -m pip install -U mpi4py)")
+        endif()
+
+        unset(_mpicc)
+        set(GMXAPI_MPI4PY_FOUND TRUE CACHE INTERNAL "Suppress checking for Python mpi4py module.")
+    endif()
+
+    add_custom_target(gmxapi_pytest_mpi
+                      COMMAND ${MPIEXEC_EXECUTABLE} -n 1 ${PYTHON_EXECUTABLE} -m mpi4py -m pytest --log-cli-level
+                          ERROR ${CMAKE_CURRENT_SOURCE_DIR}
+                      DEPENDS _gmxapi
+                      WORKING_DIRECTORY ${GMXAPI_PYTHON_STAGING_DIR})
+    # The current test fixtures require the `gmx` tool-wrapper executable.
+    add_dependencies(gmxapi_pytest_mpi gmx)
+
+    add_dependencies(check gmxapi_pytest_mpi)
+endif()

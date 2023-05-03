@@ -226,7 +226,7 @@ collect_flow_data(FlowData           &flowcr,
     {
         // Check for match to the input group using the global atom index,
         // since groups contain these indices instead of MPI rank local indices
-        const auto index_global = DOMAINDECOMP(cr) 
+        const auto index_global = haveDDAtomOrdering(*cr) 
             ? cr->dd->globalAtomIndices[i] 
             : static_cast<int>(i);
 
@@ -241,7 +241,7 @@ collect_flow_data(FlowData           &flowcr,
             /* If we are using the leap-frog integrator, project the positions
                back in time one-half step so that both positions and velocities
                are at the same time. */
-            if (ir->eI == eiMD)
+            if (ir->eI == IntegrationAlgorithm::MD)
             {
                 x -= dt_half * state->v[i][XX];
                 z -= dt_half * state->v[i][ZZ];
@@ -345,7 +345,7 @@ calc_values_in_bin(const std::vector<double> &data,
     if (num_atoms > 0.0)
     {
         temperature = data[bin + static_cast<size_t>(FlowVariable::Temp)] 
-            / (2.0 * BOLTZ * num_atoms);
+            / (2.0 * gmx::c_boltz * num_atoms);
     }
 
     if (mass > 0.0)
