@@ -108,9 +108,6 @@ using namespace std::chrono_literals;
  * ENUMS AND COLLECTIONS *
  *************************/
 
-/*! Shorthand for an std rvec, since I prefer dealing with collections over pointers */
-using Vec3 = std::array<real, DIM>;
-
 /*! \brief Target direction for the flow in an exchange area */
 enum class Direction {
     Positive,    /* Along the specified direction */
@@ -147,7 +144,7 @@ struct ExchangeCounter {
                                            flow direction in this exchange area */
 
     /* Atom velocity corresponding to the \p index  */
-    Vec3 velocity_max_vector = { 0.0, 0.0, 0.0 };
+    gmx::RVec velocity_max_vector = { 0.0, 0.0, 0.0 };
 };
 
 struct ExchangeAreaCounter {
@@ -458,8 +455,8 @@ mpi_sync_counter_global_indices(const int        local_index,
         |< -------   num_nodes repeats  ------ >|
 
     This buffer can easily be transmitted to other nodes using MPI_Alltoall. */
-static std::vector<real> fill_send_velocity_buffer(const Vec3   &velocity,
-                                                   const size_t  num_nodes)
+static std::vector<real> fill_send_velocity_buffer(const gmx::RVec &velocity,
+                                                   const size_t     num_nodes)
 {
     std::vector<real> buffer (DIM * num_nodes, 0.0);
 
@@ -467,14 +464,14 @@ static std::vector<real> fill_send_velocity_buffer(const Vec3   &velocity,
     {
         for (size_t j = 0; j < DIM; ++j)
         {
-            buffer.at(i * DIM + j) = velocity.at(j);
+            buffer.at(i * DIM + j) = velocity[j];
         }
     }
 
     return buffer;
 }
 
-/*! \brief Restructure a single dimension buffer into Vec3 arrays and return
+/*! \brief Restructure a single dimension buffer into gmx::RVec arrays and return
 
     The input buffer of velocity values will have the same form as from
     fill_send_velocity_buffer, except with the velocity values from the
@@ -486,11 +483,11 @@ static std::vector<real> fill_send_velocity_buffer(const Vec3   &velocity,
         [[v0x, v0y, v0z], [v1x, v1y, v1z], ..., [vnx, vny, vnz]]
 
     */
-static std::vector<Vec3>
+static std::vector<gmx::RVec>
 construct_velocity_vectors_from_buffer(const std::vector<real> &buffer,
                                        const size_t             num_nodes)
 {
-    std::vector<Vec3> velocity_vectors;
+    std::vector<gmx::RVec> velocity_vectors;
 
     velocity_vectors.reserve(num_nodes);
 
@@ -499,7 +496,7 @@ construct_velocity_vectors_from_buffer(const std::vector<real> &buffer,
 
     for (size_t i = 0; i < num_nodes; ++i)
     {
-        velocity_vectors.push_back(Vec3 {
+        velocity_vectors.push_back(gmx::RVec {
             buffer.at(i * DIM + XX),
             buffer.at(i * DIM + YY),
             buffer.at(i * DIM + ZZ)
@@ -517,8 +514,8 @@ construct_velocity_vectors_from_buffer(const std::vector<real> &buffer,
         [[v0x, v0y, v0z], [v1x, v1y, v1z], ..., [vnx, vny, vnz]]
 
     where vij is the velocity vector value from node i. */
-static std::vector<Vec3>
-mpi_sync_counter_velocity_vectors(const Vec3      &local_velocity,
+static std::vector<gmx::RVec>
+mpi_sync_counter_velocity_vectors(const gmx::RVec &local_velocity,
                                   const t_commrec *cr)
 {
     auto send_buf = fill_send_velocity_buffer(
@@ -586,11 +583,11 @@ mpi_sync_counter_values(const double     value,
 
     where counter_i is the exchange counter originally from node i. */
 static std::vector<ExchangeCounter>
-construct_exchange_counters(const std::vector<int>    &global_inds,
-                            const std::vector<int>    &num_atoms,
-                            const std::vector<Vec3>   &velocity_vectors,
-                            const std::vector<double> &total_velocities,
-                            const std::vector<double> &atom_masses)
+construct_exchange_counters(const std::vector<int>       &global_inds,
+                            const std::vector<int>       &num_atoms,
+                            const std::vector<gmx::RVec> &velocity_vectors,
+                            const std::vector<double>    &total_velocities,
+                            const std::vector<double>    &atom_masses)
 {
     GMX_RELEASE_ASSERT(global_inds.size() == num_atoms.size(),
         "global_inds not same size as num_atoms after sync");
@@ -679,8 +676,8 @@ get_final_area_counter(const std::vector<ExchangeCounter> &counters,
 
     for (const auto& counter : counters)
     {
-        const auto velocity       = counter.velocity_max_vector.at(energy_exchange_axis);
-        const auto final_velocity = final_counter.velocity_max_vector.at(energy_exchange_axis);
+        const auto velocity       = counter.velocity_max_vector[energy_exchange_axis];
+        const auto final_velocity = final_counter.velocity_max_vector[energy_exchange_axis];
 
         switch (local_area_counter.area.direction)
         {
@@ -979,8 +976,8 @@ static void log_exchange(FILE                  *fp,
                          const Axis             direction)
 {
     const auto d = static_cast<size_t>(direction);
-    const auto p0 = counter0.atom_mass * counter0.velocity_max_vector.at(d);
-    const auto p1 = counter1.atom_mass * counter1.velocity_max_vector.at(d);
+    const auto p0 = counter0.atom_mass * counter0.velocity_max_vector[d];
+    const auto p1 = counter1.atom_mass * counter1.velocity_max_vector[d];
 
     fprintf(fp, "%12.5e %12.5e\n", time, p1 - p0);
 }
