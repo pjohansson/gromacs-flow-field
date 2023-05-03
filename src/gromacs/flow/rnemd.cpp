@@ -1,4 +1,4 @@
-#include "gromacs/flow/md_shear_coupling.h"
+#include "gromacs/flow/rnemd.h"
 
 #include "gromacs/fileio/oenv.h"
 #include "gromacs/fileio/xvgr.h"
@@ -175,25 +175,25 @@ constexpr static const char* get_axis_name(const Axis& axis)
 }
 
 /*! \brief Return the Axis enum corresponding to input \p axis from the mdp option */
-static Axis get_axis(const ShearAxis_axis axis)
+static Axis get_area_def_axis(const RnemdAreaDefAxis axis)
 {
     switch (axis)
     {
-        case ShearAxis_axis::X: return Axis::X;
-        case ShearAxis_axis::Y: return Axis::Y;
-        case ShearAxis_axis::Z: return Axis::Z;
+        case RnemdAreaDefAxis::X: return Axis::X;
+        case RnemdAreaDefAxis::Y: return Axis::Y;
+        case RnemdAreaDefAxis::Z: return Axis::Z;
         default: return Axis::NR;
     }
 }
 
 /*! \brief Return the Axis enum corresponding to input \p direction from the mdp option */
-static Axis get_direction(const ShearAxis_direction direction)
+static Axis get_energy_exchange_axis(const RnemdEnergyExchangeAxis direction)
 {
     switch (direction)
     {
-        case ShearAxis_direction::X: return Axis::X;
-        case ShearAxis_direction::Y: return Axis::Y;
-        case ShearAxis_direction::Z: return Axis::Z;
+        case RnemdEnergyExchangeAxis::X: return Axis::X;
+        case RnemdEnergyExchangeAxis::Y: return Axis::Y;
+        case RnemdEnergyExchangeAxis::Z: return Axis::Z;
         default: return Axis::NR;
     }
 }
@@ -348,7 +348,7 @@ static void set_atom_in_counter(ExchangeCounter &counter,
     *opposing* velocity */
 static void add_atom_velocity(ExchangeAreaCounter &area_counter,
                               const size_t         index,
-                              const ShearVelOpts  &opts,
+                              const RNEMD         &rnemd,
                               const t_state       *state,
                               const t_mdatoms     *mdatoms)
 {
@@ -357,10 +357,10 @@ static void add_atom_velocity(ExchangeAreaCounter &area_counter,
     const auto mass = mdatoms->massT[index];
     const auto velocity_vector = state->v[index];
 
-    const auto direction = static_cast<size_t>(opts.direction);
+    const auto energy_exchange_axis = static_cast<size_t>(rnemd.energy_exchange_axis);
 
-    const auto velocity             = velocity_vector[direction];
-    const auto current_max_velocity = counter.velocity_max_vector[direction];
+    const auto velocity             = velocity_vector[energy_exchange_axis];
+    const auto current_max_velocity = counter.velocity_max_vector[energy_exchange_axis];
 
     switch (area_counter.area.direction)
     {
@@ -672,15 +672,15 @@ static void copy_counter_atom_velocities(const ExchangeCounter &from,
 static ExchangeAreaCounter
 get_final_area_counter(const std::vector<ExchangeCounter> &counters,
                        const ExchangeAreaCounter          &local_area_counter,
-                       const ShearVelOpts                 &opts)
+                       const RNEMD                        &rnemd)
 {
     ExchangeCounter final_counter;
-    const auto direction = static_cast<size_t>(opts.direction);
+    const auto energy_exchange_axis = static_cast<size_t>(rnemd.energy_exchange_axis);
 
     for (const auto& counter : counters)
     {
-        const auto velocity       = counter.velocity_max_vector.at(direction);
-        const auto final_velocity = final_counter.velocity_max_vector.at(direction);
+        const auto velocity       = counter.velocity_max_vector.at(energy_exchange_axis);
+        const auto final_velocity = final_counter.velocity_max_vector.at(energy_exchange_axis);
 
         switch (local_area_counter.area.direction)
         {
@@ -820,57 +820,57 @@ static void exchange_velocities(t_state               *state,
 
     The areas are created depending on the selected strategy and the current
     box size. */
-static void set_exchange_areas(ExchangeArea       &area0,
-                               ExchangeArea       &area1,
-                               const ShearVelOpts &opts,
-                               const matrix        box,
-                               const t_commrec    *cr)
+static void set_exchange_areas(ExchangeArea    &area0,
+                               ExchangeArea    &area1,
+                               const RNEMD     &rnemd,
+                               const matrix     box,
+                               const t_commrec *cr)
 {
-    const auto axis = static_cast<size_t>(opts.axis);
+    const auto axis = static_cast<size_t>(rnemd.area_def_axis);
 
     const auto local_box_size = box[axis][axis];
     const auto box_size = mpi_sync_box_size(local_box_size, cr);
 
-    area0.target_velocity = -opts.ref_velocity;
-    area1.target_velocity = opts.ref_velocity;
+    area0.target_velocity = -rnemd.ref_velocity;
+    area1.target_velocity = rnemd.ref_velocity;
     area0.direction = Direction::Negative;
     area1.direction = Direction::Positive;
 
-    switch (opts.strategy) {
-        case ShearCouplStrategy::Edges:
-            area0.zmin = opts.zedge_adj;
-            area0.zmax = area0.zmin + opts.size;
+    switch (rnemd.strategy) {
+        case RnemdStrategy::Edges:
+            area0.zmin = rnemd.zedge_adj;
+            area0.zmax = area0.zmin + rnemd.size;
 
-            area1.zmax = box_size - opts.zedge_adj;
-            area1.zmin = area1.zmax - opts.size;
+            area1.zmax = box_size - rnemd.zedge_adj;
+            area1.zmin = area1.zmax - rnemd.size;
 
             break;
 
-        case ShearCouplStrategy::EdgeCenter:
+        case RnemdStrategy::EdgeCenter:
             area0.is_split = true;
-            area0.zmin = opts.zedge_adj;
-            area0.zmax = area0.zmin + opts.size / 2.0;
-            area0.zmax2 = box_size - opts.zedge_adj;
-            area0.zmin2 = area0.zmax2 - opts.size / 2.0;
+            area0.zmin = rnemd.zedge_adj;
+            area0.zmax = area0.zmin + rnemd.size / 2.0;
+            area0.zmax2 = box_size - rnemd.zedge_adj;
+            area0.zmin2 = area0.zmax2 - rnemd.size / 2.0;
 
             {
                 const auto zmid = box_size / 2.0;
-                area1.zmin = zmid - opts.size / 2.0;
-                area1.zmax = zmid + opts.size / 2.0;
+                area1.zmin = zmid - rnemd.size / 2.0;
+                area1.zmax = zmid + rnemd.size / 2.0;
             }
 
             break;
 
         default:
             gmx_fatal(FARGS,
-                      "Invalid ShearCouplStrategy selected. "
+                      "Invalid RnemdStrategy selected. "
                       "This should not be possible.");
             break;
     }
 
     area0.group = 0;
 
-    switch (opts.num_groups)
+    switch (rnemd.num_groups)
     {
         case 1:
             area1.group = 0;
@@ -882,7 +882,7 @@ static void set_exchange_areas(ExchangeArea       &area0,
             gmx_fatal(FARGS,
                     "Number of shear-grps was %d, not 1 or 2. "
                     "This should not be possible.",
-                    opts.num_groups);
+                    rnemd.num_groups);
     }
 }
 
@@ -893,7 +893,7 @@ static void set_exchange_areas(ExchangeArea       &area0,
 
 static void log_shear_area_info(const ExchangeArea     &area,
                                 const size_t            i,
-                                const ShearVelOpts     &opts,
+                                const RNEMD            &rnemd,
                                 const SimulationGroups *groups,
                                 const gmx::MDLogger    &mdlog)
 {
@@ -910,9 +910,9 @@ static void log_shear_area_info(const ExchangeArea     &area,
                 "    Target velocity (along %s): %g\n",
                 i,
                 *groups->groupNames[global_group_index],
-                get_axis_name(opts.axis),
+                get_axis_name(rnemd.area_def_axis),
                 area.zmin, area.zmax,
-                get_axis_name(opts.direction),
+                get_axis_name(rnemd.energy_exchange_axis),
                 area.target_velocity);
     }
     else
@@ -925,23 +925,23 @@ static void log_shear_area_info(const ExchangeArea     &area,
                 "    Target velocity (along %s): %g\n",
                 i,
                 *groups->groupNames[global_group_index],
-                get_axis_name(opts.axis),
+                get_axis_name(rnemd.area_def_axis),
                 area.zmin, area.zmax,
                 area.zmin2, area.zmax2,
-                get_axis_name(opts.direction),
+                get_axis_name(rnemd.energy_exchange_axis),
                 area.target_velocity);
     }
 }
 
-static void log_shear_coupling_info(const ShearVelOpts     &opts,
+static void log_shear_coupling_info(const RNEMD            &rnemd,
                                     const double            tcoupl,
                                     const matrix            box,
                                     const SimulationGroups *groups,
                                     const t_commrec        *cr,
                                     const gmx::MDLogger    &mdlog)
 {
-    const auto axis_name = get_axis_name(opts.axis);
-    const auto direction_name = get_axis_name(opts.direction);
+    const auto area_def_axis_name = get_axis_name(rnemd.area_def_axis);
+    const auto energy_exchange_axis_name = get_axis_name(rnemd.energy_exchange_axis);
 
     GMX_LOG(mdlog.info).appendText("");
 
@@ -955,18 +955,18 @@ static void log_shear_coupling_info(const ShearVelOpts     &opts,
             "  Edge adjustment: %g\n"
             "  ---\n"
             "  Shear creation zones at start (changes with box size):",
-            axis_name,
-            direction_name,
+            area_def_axis_name,
+            energy_exchange_axis_name,
             tcoupl,
-            opts.step,
-            opts.size,
-            opts.zedge_adj);
+            rnemd.step,
+            rnemd.size,
+            rnemd.zedge_adj);
 
     ExchangeArea area0, area1;
-    set_exchange_areas(area0, area1, opts, box, cr);
+    set_exchange_areas(area0, area1, rnemd, box, cr);
 
-    log_shear_area_info(area0, 0, opts, groups, mdlog);
-    log_shear_area_info(area1, 1, opts, groups, mdlog);
+    log_shear_area_info(area0, 0, rnemd, groups, mdlog);
+    log_shear_area_info(area1, 1, rnemd, groups, mdlog);
 
     GMX_LOG(mdlog.info).appendText("");
 }
@@ -988,7 +988,7 @@ static void log_exchange(FILE                  *fp,
 #ifdef MPI_SHEAR_DEBUG
 static void print_shear_area_info(const ExchangeArea     &area,
                                   const size_t            i,
-                                  const ShearVelOpts     &opts,
+                                  const RNEMD            &opts,
                                   const SimulationGroups *groups)
 {
     const auto global_group_index
@@ -1025,7 +1025,7 @@ static void print_shear_area_info(const ExchangeArea     &area,
     }
 }
 
-static void print_shear_coupling_info(const ShearVelOpts     &opts,
+static void print_shear_coupling_info(const RNEMD            &opts,
                                       const ExchangeArea     &area0,
                                       const ExchangeArea     &area1,
                                       const double            tcoupl,
@@ -1104,20 +1104,20 @@ print_counter_information(const ExchangeCounter              &local_counter,
  * PUBLIC FUNCTIONS WHICH SET UP AND PERFORM THE SHEAR VELOCITY COUPLING *
  *************************************************************************/
 
-ShearVelOpts init_shear_velocity_coupling_opts(const t_inputrec       *ir,
-                                               const matrix            box,
-                                               const SimulationGroups *groups,
-                                               const t_commrec        *cr,
-                                               const char             *fnlog,
-                                               const struct gmx_output_env_t *oenv,
-                                               const gmx::MDLogger    &mdlog)
+RNEMD init_rnemd(const t_inputrec       *ir,
+                 const matrix            box,
+                 const SimulationGroups *groups,
+                 const t_commrec        *cr,
+                 const char             *fnlog,
+                 const struct gmx_output_env_t *oenv,
+                 const gmx::MDLogger    &mdlog)
 {
     const auto& input_opts = ir->rnemd_opts;
-    const auto bShearCoupl = input_opts.bDoExchange;
+    const auto bRNEMD = input_opts.bDoExchange;
     const auto tcoupl = static_cast<double>(input_opts.tau);
     const auto nstcoupl = static_cast<size_t>(tcoupl / ir->delta_t);
 
-    if (bShearCoupl && (fabs(nstcoupl * ir->delta_t - tcoupl) > 0.000001))
+    if (bRNEMD && (fabs(nstcoupl * ir->delta_t - tcoupl) > 0.000001))
     {
         gmx_warning(
             "shear_tcoupl (%f) is not a multiple of the timestep (%f), "
@@ -1125,12 +1125,14 @@ ShearVelOpts init_shear_velocity_coupling_opts(const t_inputrec       *ir,
             tcoupl, ir->delta_t, static_cast<double>(nstcoupl) * ir->delta_t);
     }
 
-    const auto axis = get_axis(input_opts.axis);
-    const auto direction = get_direction(input_opts.direction);
+    const auto area_def_axis = get_area_def_axis(input_opts.area_def_axis);
+    const auto energy_exchange_axis = get_energy_exchange_axis(input_opts.energy_exchange_axis);
 
     FILE *fp = nullptr;
-    if (bShearCoupl)
+    if (bRNEMD)
     {
+        const auto energy_exchange_axis_name = get_axis_name(energy_exchange_axis);
+
         char xaxis[STRLEN],
              yaxis[STRLEN],
              subtitle[STRLEN];
@@ -1141,21 +1143,22 @@ ShearVelOpts init_shear_velocity_coupling_opts(const t_inputrec       *ir,
 
         snprintf(yaxis, STRLEN,
                  "\\Deltap\\s%s\\N (%s %s %s\\S-1\\N)",
-                 get_axis_name(direction),
+                 energy_exchange_axis_name,
                  unit_mass, unit_length, unit_time);
 
         fp = xvgropen_type(fnlog, "Momentum exchange", xaxis, yaxis, exvggtNONE, oenv);
 
         snprintf(subtitle, STRLEN,
                  "From area 1 to area 0 (p\\s%s,1\\N - p\\s%s,0\\N)",
-                 get_axis_name(direction), get_axis_name(direction));
+                 energy_exchange_axis_name,
+                 energy_exchange_axis_name);
         xvgr_subtitle(fp, subtitle, oenv);
     }
 
-    const ShearVelOpts opts {
+    const RNEMD rnemd {
         fp,
-        axis,
-        direction,
+        area_def_axis,
+        energy_exchange_axis,
         input_opts.strategy,
         get_num_groups(groups),
         nstcoupl,
@@ -1164,14 +1167,14 @@ ShearVelOpts init_shear_velocity_coupling_opts(const t_inputrec       *ir,
         input_opts.ref_velocity
     };
 
-    if (bShearCoupl)
+    if (bRNEMD)
     {
         if (MASTER(cr))
         {
             gmx_warning("Shear velocity coupling may not yet work with "
                         "dedicated PME nodes!");
         }
-        log_shear_coupling_info(opts, tcoupl, box, groups, cr, mdlog);
+        log_shear_coupling_info(rnemd, tcoupl, box, groups, cr, mdlog);
 
 #ifdef MPI_SHEAR_DEBUG
         if (MASTER(cr))
@@ -1181,14 +1184,14 @@ ShearVelOpts init_shear_velocity_coupling_opts(const t_inputrec       *ir,
         }
 
         ExchangeArea area0, area1;
-        set_exchange_areas(area0, area1, opts, box, cr);
+        set_exchange_areas(area0, area1, rnemd, box, cr);
 
         for (size_t nodeid = 0; nodeid < cr->nnodes; nodeid++)
         {
 
             if (cr->sim_nodeid == nodeid)
             {
-                print_shear_coupling_info(opts, area0, area1, tcoupl, box, groups, cr);
+                print_shear_coupling_info(rnemd, area0, area1, tcoupl, box, groups, cr);
             }
 
             std::this_thread::sleep_for(MPI_SHEAR_SLEEP_DURATION);
@@ -1197,34 +1200,34 @@ ShearVelOpts init_shear_velocity_coupling_opts(const t_inputrec       *ir,
 #endif
     }
 
-    return opts;
+    return rnemd;
 }
 
-void do_shear_velocity_coupling(t_state                *state,
-                                const t_mdatoms        *mdatoms,
-                                const int64_t           current_step,
-                                const double            current_time,
-                                const ShearVelOpts     &opts,
-                                const SimulationGroups *groups,
-                                const t_commrec        *cr)
+void do_rnemd_exchange(t_state                *state,
+                       const t_mdatoms        *mdatoms,
+                       const int64_t           current_step,
+                       const double            current_time,
+                       const RNEMD            &rnemd,
+                       const SimulationGroups *groups,
+                       const t_commrec        *cr)
 {
     ExchangeArea area0, area1;
-    set_exchange_areas(area0, area1, opts, state->box, cr);
+    set_exchange_areas(area0, area1, rnemd, state->box, cr);
 
     ExchangeAreaCounter area_counter0(area0),
                         area_counter1(area1);
 
     for (size_t i = 0; i < mdatoms->homenr; ++i)
     {
-        const auto z = get_position_in_box(state, i, opts.axis);
+        const auto z = get_position_in_box(state, i, rnemd.area_def_axis);
 
         if (in_counter_area(i, z, area_counter0, groups, cr))
         {
-            add_atom_velocity(area_counter0, i, opts, state, mdatoms);
+            add_atom_velocity(area_counter0, i, rnemd, state, mdatoms);
         }
         if (in_counter_area(i, z, area_counter1, groups, cr))
         {
-            add_atom_velocity(area_counter1, i, opts, state, mdatoms);
+            add_atom_velocity(area_counter1, i, rnemd, state, mdatoms);
         }
     }
 
@@ -1232,9 +1235,9 @@ void do_shear_velocity_coupling(t_state                *state,
     const auto all_rank_counters1 = mpi_sync_counters(area_counter1.counter, cr);
 
     const auto system_area_counter0 = get_final_area_counter(
-        all_rank_counters0, area_counter0.area, opts);
+        all_rank_counters0, area_counter0.area, rnemd);
     const auto system_area_counter1 = get_final_area_counter(
-        all_rank_counters1, area_counter1.area, opts);
+        all_rank_counters1, area_counter1.area, rnemd);
 
 #ifdef MPI_SHEAR_DEBUG
     for (size_t nodeid = 0; nodeid < cr->nnodes; ++nodeid)
@@ -1265,11 +1268,11 @@ void do_shear_velocity_coupling(t_state                *state,
         if (MASTER(cr))
         {
             log_exchange(
-                opts.log_pexchange,
+                rnemd.log_pexchange,
                 current_time,
                 system_area_counter0.counter,
                 system_area_counter1.counter,
-                opts.direction);
+                rnemd.energy_exchange_axis);
         }
     }
 }

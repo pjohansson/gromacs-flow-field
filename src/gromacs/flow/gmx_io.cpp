@@ -1,4 +1,5 @@
 #include "gromacs/mdtypes/md_enums.h"
+#include "gromacs/utility/arrayref.h"
 #include "gromacs/utility/txtdump.h"
 
 #include "gmx_io.h"
@@ -11,39 +12,50 @@ void read_rnemd_opts(std::vector<t_inpfile> &inp,
                      char                   *groups,
                      warninp                *wi)
 {
+    // Replace old "shear coupling" terminology with RNEMD
+    replace_inp_entry(inp, "shear-coupling", "rnemd");
+    replace_inp_entry(inp, "shear-axis", "rnemd-area-def-axis");
+    replace_inp_entry(inp, "shear-direction", "rnemd-exchange-axis");
+    replace_inp_entry(inp, "shear-strategy", "rnemd-strategy");
+    replace_inp_entry(inp, "shear-tcoupl", "rnemd-tcoupl");
+    replace_inp_entry(inp, "shear-area-size", "rnemd-area-size");
+    replace_inp_entry(inp, "shear-zadj", "rnemd-zadj");
+    replace_inp_entry(inp, "shear-ref-velocity", "rnemd-ref-velocity");
+    replace_inp_entry(inp, "shear-grps", "rnemd-grps");
+
     printStringNewline(&inp, "REVERSE NON-EQUILIBRIUM MOLECULAR DYNAMICS (UNOFFICIAL)");
 
     printStringNoNewline(&inp, "Do RNEMD exchange of kinetic energy between areas");
-    opts.bDoExchange = (getEnum<Boolean>(&inp, "shear-coupling", wi) != Boolean::No);
+    opts.bDoExchange = (getEnum<Boolean>(&inp, "rnemd", wi) != Boolean::No);
 
-    printStringNoNewline(&inp, "Axis along which to exchange the energies and the direction");
-    printStringNoNewline(&inp, "along which to shear: x, y or z");
-    opts.axis = getEnum<flow::ShearAxis_axis>(&inp, "shear-axis", wi);
-    opts.direction = getEnum<flow::ShearAxis_direction>(&inp, "shear-direction", wi);
+    printStringNoNewline(&inp, "Axis along which to create areas for the energy exchange ");
+    printStringNoNewline(&inp, "and along which velocity vector to exchange energies: x, y or z");
+    opts.area_def_axis = getEnum<flow::RnemdAreaDefAxis>(&inp, "rnemd-area-def-axis", wi);
+    opts.energy_exchange_axis = getEnum<flow::RnemdEnergyExchangeAxis>(&inp, "rnemd-exchange-axis", wi);
 
     printStringNoNewline(&inp, "Strategy for setting up exchange areas: Edges or Edge-Center");
     printStringNoNewline(&inp, "Edges: exchange area 0 and 1 are respectively at the bottom and top");
     printStringNoNewline(&inp, "  edges of the system, along the selected axis");
     printStringNoNewline(&inp, "Edge-Center: exchange area 0 is split into the bottom and top edges");
     printStringNoNewline(&inp, "  of the system, area 1 is at the center");
-    opts.strategy = getEnum<flow::ShearCouplStrategy>(&inp, "shear-strategy", wi);
+    opts.strategy = getEnum<flow::RnemdStrategy>(&inp, "rnemd-strategy", wi);
 
     printStringNoNewline(&inp, "How often to perform the coupling");
-    opts.tau    = get_ereal(&inp, "shear-tcoupl", 0.0, wi);
+    opts.tau    = get_ereal(&inp, "rnemd-tcoupl", 0.0, wi);
 
     printStringNoNewline(&inp, "Size of exchange areas and adjustment from the edges");
-    opts.area_size = get_ereal(&inp, "shear-area-size", 0.0, wi);
-    opts.zadj      = get_ereal(&inp, "shear-zadj", 0.0, wi);
+    opts.area_size = get_ereal(&inp, "rnemd-area-size", 0.0, wi);
+    opts.zadj      = get_ereal(&inp, "rnemd-zadj", 0.0, wi);
 
     printStringNoNewline(&inp, "Reference velocity: Targeted velocity for both areas");
-    printStringNoNewline(&inp, "  Area 0: -shear-ref-velocity");
-    printStringNoNewline(&inp, "  Area 1: +shear-ref-velocity");
-    opts.ref_velocity = get_ereal(&inp, "shear-ref-velocity", 0.0, wi);
+    printStringNoNewline(&inp, "  Area 0: -rnemd-ref-velocity");
+    printStringNoNewline(&inp, "  Area 1: +rnemd-ref-velocity");
+    opts.ref_velocity = get_ereal(&inp, "rnemd-ref-velocity", 0.0, wi);
 
-    printStringNoNewline(&inp, "Groups to shear with: must be 1 or 2, in the latter case ");
+    printStringNoNewline(&inp, "Groups to exchange for: must be 1 or 2, in the latter case ");
     printStringNoNewline(&inp, "for area 0 and 1 respectively");
     printStringNoNewline(&inp, "Note: this replaces user2-grps");
-    setStringEntry(&inp, "shear-grps", groups, nullptr);
+    setStringEntry(&inp, "rnemd-grps", groups, nullptr);
 }
 
 
@@ -55,7 +67,7 @@ void check_rnemd_opts(const t_inputrec *ir,
 
     if (opts.bDoExchange)
     {
-        if ((opts.strategy == flow::ShearCouplStrategy::Edges)
+        if ((opts.strategy == flow::RnemdStrategy::Edges)
             && (ir->pbcType != PbcType::XY))
         {
             char warn_buf[STRLEN];
@@ -101,8 +113,8 @@ void do_tpx_rnemd(gmx::ISerializer *serializer,
                   RNEMDOptions     &opts)
 {
     serializer->doBool(&opts.bDoExchange);
-    serializer->doEnumAsInt(&opts.axis);
-    serializer->doEnumAsInt(&opts.direction);
+    serializer->doEnumAsInt(&opts.area_def_axis);
+    serializer->doEnumAsInt(&opts.energy_exchange_axis);
     serializer->doEnumAsInt(&opts.strategy);
     serializer->doReal(&opts.tau);
     serializer->doReal(&opts.area_size);
@@ -110,17 +122,16 @@ void do_tpx_rnemd(gmx::ISerializer *serializer,
     serializer->doReal(&opts.ref_velocity);
 }
 
-
 void pr_rnemd(FILE* fp, int indent, const RNEMDOptions &opts)
 {
-    pr_str(fp, indent, "shear-coupling", booleanValueToString(opts.bDoExchange));
-    pr_str(fp, indent, "shear-axis", enumValueToString(opts.axis));
-    pr_str(fp, indent, "shear-direction", enumValueToString(opts.direction));
-    pr_str(fp, indent, "shear-strategy", enumValueToString(opts.strategy));
-    pr_real(fp, indent, "shear-tcoupl", opts.tau);
-    pr_real(fp, indent, "shear-area-size", opts.area_size);
-    pr_real(fp, indent, "shear-zadj", opts.zadj);
-    pr_real(fp, indent, "shear-ref-velocity", opts.ref_velocity);
+    pr_str(fp, indent, "rnemd", booleanValueToString(opts.bDoExchange));
+    pr_str(fp, indent, "rnemd-area-def-axis", enumValueToString(opts.area_def_axis));
+    pr_str(fp, indent, "rnemd-exchange-axis", enumValueToString(opts.energy_exchange_axis));
+    pr_str(fp, indent, "rnemd-strategy", enumValueToString(opts.strategy));
+    pr_real(fp, indent, "rnemd-tcoupl", opts.tau);
+    pr_real(fp, indent, "rnemd-area-size", opts.area_size);
+    pr_real(fp, indent, "rnemd-zadj", opts.zadj);
+    pr_real(fp, indent, "rnemd-ref-velocity", opts.ref_velocity);
 }
 
 } // namespace flow

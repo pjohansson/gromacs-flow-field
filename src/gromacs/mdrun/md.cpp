@@ -156,7 +156,7 @@
 // [FLOW_FIELD]
 #include "gromacs/utility/futil.h"
 #include "gromacs/flow/flow_field.h"
-#include "gromacs/flow/md_shear_coupling.h"
+#include "gromacs/flow/rnemd.h"
 
 using gmx::SimulationSignaller;
 
@@ -736,8 +736,8 @@ void gmx::LegacySimulator::do_md()
     auto trotter_seq = init_npt_vars(ir, state, &MassQ, bTrotter);
 
     /* [FLOW] REVERSE NON-EQUILIBRIUM MD (RNEMD) SETUP */
-    const bool bShearCoupling = ir->rnemd_opts.bDoExchange;
-    const auto shear_velocity_coupling_opts = init_shear_velocity_coupling_opts(
+    const bool bRNEMD = ir->rnemd_opts.bDoExchange;
+    const auto rnemd = init_rnemd(
         ir, state->box, groups, cr, opt2fn("-pexchange", nfile, fnm), oenv, mdlog);
 
     if (MASTER(cr))
@@ -1407,9 +1407,9 @@ void gmx::LegacySimulator::do_md()
         }
 
         /* #########   [PETTER] [REMD]   ######### */
-        if (bShearCoupling && do_per_step(step, shear_velocity_coupling_opts.step))
+        if (bRNEMD && do_per_step(step, rnemd.step))
         {
-            do_shear_velocity_coupling(state, mdAtoms->mdatoms(), step, t, shear_velocity_coupling_opts, groups, cr);
+            do_rnemd_exchange(state, mdAtoms->mdatoms(), step, t, rnemd, groups, cr);
         }
 
         /* #########   START SECOND UPDATE STEP ################# */
@@ -2084,9 +2084,9 @@ void gmx::LegacySimulator::do_md()
     /* End of main MD loop */
 
     // [PETTER] [REMD] Close open files
-    if (shear_velocity_coupling_opts.log_pexchange != nullptr)
+    if (rnemd.log_pexchange != nullptr)
     {
-        gmx_ffclose(shear_velocity_coupling_opts.log_pexchange);
+        gmx_ffclose(rnemd.log_pexchange);
     }
 
     /* Closing TNG files can include compressing data. Therefore it is good to do that

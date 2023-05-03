@@ -6,31 +6,31 @@
 namespace flow
 {
 
-enum class ShearCouplStrategy : int {
+enum class RnemdStrategy : int {
     Edges,
     EdgeCenter,
     Count,
     Default = Edges
 };
-const char* enumValueToString(ShearCouplStrategy enumValue);
+const char* enumValueToString(RnemdStrategy enumValue);
 
-enum class ShearAxis_axis : int {
+enum class RnemdAreaDefAxis : int {
     X,
     Y,
     Z,
     Count,
     Default = Z
 };
-const char* enumValueToString(ShearAxis_axis enumValue);
+const char* enumValueToString(RnemdAreaDefAxis enumValue);
 
-enum class ShearAxis_direction : int {
+enum class RnemdEnergyExchangeAxis : int {
     X,
     Y,
     Z,
     Count,
     Default = X
 };
-const char* enumValueToString(ShearAxis_direction enumValue);
+const char* enumValueToString(RnemdEnergyExchangeAxis enumValue);
 
 //! Reverse non-equilibrium molecular dynamics options
 struct RNEMDOptions {
@@ -38,13 +38,13 @@ struct RNEMDOptions {
     bool bDoExchange = false;
 
     //! Axis along which exchange groups are defined
-    ShearAxis_axis axis;
+    RnemdAreaDefAxis area_def_axis;
 
     //! Axis for which velocity is exchanged
-    ShearAxis_direction direction;
+    RnemdEnergyExchangeAxis energy_exchange_axis;
 
     //! Strategy for defining exchange areas
-    ShearCouplStrategy strategy;
+    RnemdStrategy strategy;
 
     //! How often to perform the exchange (in ps)
     real tau;

@@ -2213,7 +2213,7 @@ void get_ir(const char*     mdparin,
     replace_inp_entry(inp, "xtc-precision", "compressed-x-precision");
     replace_inp_entry(inp, "pull-print-com1", "pull-print-com");
 
-    /* [PETTER] Rebind user2-grps to use for shear coupling
+    /* [FLOW] Rebind user2-grps to use for RNEMD exchange
         This is likely easier than trying to create an entire new group */
     replace_inp_entry(inp, "user2-grps", "shear-grps");
 

@@ -7,28 +7,28 @@ using namespace flow;
 namespace flow {
 
 /* [PETTER] Shear velocity coupling options */
-const char* enumValueToString(ShearAxis_axis enumValue)
+const char* enumValueToString(RnemdAreaDefAxis enumValue)
 {
-    static constexpr gmx::EnumerationArray<ShearAxis_axis, const char*> shear_axis_axis_names = {
+    static constexpr gmx::EnumerationArray<RnemdAreaDefAxis, const char*> area_def_axis_names = {
         "X", "Y", "Z"
     };
-    return shear_axis_axis_names[enumValue];
+    return area_def_axis_names[enumValue];
 }
 
-const char* enumValueToString(ShearAxis_direction enumValue)
+const char* enumValueToString(RnemdEnergyExchangeAxis enumValue)
 {
-    static constexpr gmx::EnumerationArray<ShearAxis_direction, const char*> shear_axis_direction_names = {
+    static constexpr gmx::EnumerationArray<RnemdEnergyExchangeAxis, const char*> energy_exchange_axis_names = {
         "X", "Y", "Z"
     };
-    return shear_axis_direction_names[enumValue];
+    return energy_exchange_axis_names[enumValue];
 }
 
-const char* enumValueToString(ShearCouplStrategy enumValue)
+const char* enumValueToString(RnemdStrategy enumValue)
 {
-    static constexpr gmx::EnumerationArray<ShearCouplStrategy, const char*> shear_axis_strategy_names = {
+    static constexpr gmx::EnumerationArray<RnemdStrategy, const char*> rnemd_strategy_names = {
         "Edges", "Edge-Center"
     };
-    return shear_axis_strategy_names[enumValue];
+    return rnemd_strategy_names[enumValue];
 }
 
 } // namespace flow
