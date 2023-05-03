@@ -1092,8 +1092,8 @@ void gmx::LegacySimulator::do_md()
         clear_mat(force_vir);
 
         // [FLOW_FIELD]
-        // Add condition for checkpointing only on flow map output step. This is because we do 
-        // not save any data from the flow maps in a checkpoint, so if we resume from a checkpoint 
+        // Add condition for checkpointing only on flow map output step. This is because we do
+        // not save any data from the flow maps in a checkpoint, so if we resume from a checkpoint
         // in between output steps, all data since the last output has been lost. By only checkpointing
         // at flow output steps we do not throw away any data.
         //

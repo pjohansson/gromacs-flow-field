@@ -81,7 +81,7 @@
  * CREDITS:                                                                    *
  * I did not come up with this method, I only implemented it in Gromacs.       *
  * Credit for the method goes to someone who I have yet been able to look      *
- * up the name of, but will. I was introduced to it by Guillaume Galliero      * 
+ * up the name of, but will. I was introduced to it by Guillaume Galliero      *
  * of LFCR, Université de Pau et des Pays de l'Adour.                          *
  *                                                                             *
  * Petter Johansson, Pau 2020                                                  *
@@ -92,7 +92,7 @@
 
 // #define MPI_SHEAR_DEBUG
 
-/* These includes are used to sleep threads for small periods to print 
+/* These includes are used to sleep threads for small periods to print
    output from PE's in order, in conjunction with MPI_Barrier */
 #ifdef MPI_SHEAR_DEBUG
 #include <chrono>
@@ -124,17 +124,17 @@ struct ExchangeArea {
          zmax2;             /* Second area maximum */
 
     size_t group;           /* Index of the group for which to include atoms from */
-    
+
     bool is_split = false;  /* Whether or not the area has two areas */
 
-    Direction direction;    /* Whether the target velocity is positive or negative 
+    Direction direction;    /* Whether the target velocity is positive or negative
                                along the directed axis */
 };
 
 /*! \brief Tracks velocity data for a single exchange area */
 struct ExchangeCounter {
-    size_t index     = 0,               /* The atom index with the highest velocity 
-                                           opposing the targeted flow direction 
+    size_t index     = 0,               /* The atom index with the highest velocity
+                                           opposing the targeted flow direction
                                            of the exchange area of this counter */
 
            num_atoms = 0;               /* The number of atoms in the exchange area */
@@ -143,7 +143,7 @@ struct ExchangeCounter {
 
            velocity_total        = 0.0; /* Sum of atom velocities along the targeted
                                            flow direction in this exchange area */
-    
+
     /* Atom velocity corresponding to the \p index  */
     Vec3 velocity_max_vector = { 0.0, 0.0, 0.0 };
 };
@@ -166,7 +166,7 @@ struct ExchangeAreaCounter {
  ******************************************************************/
 
 /*! \brief Return the name, i.e. x, y, or z, of the  \p axis */
-constexpr static const char* get_axis_name(const Axis& axis) 
+constexpr static const char* get_axis_name(const Axis& axis)
 {
     constexpr std::array<const char*, DIM + 1> axis_names { "x", "y", "z", "null" };
     return axis_names[static_cast<size_t>(axis)];
@@ -198,15 +198,15 @@ static Axis get_direction(const ShearAxis_direction direction)
 
 /*! \brief Get the number of groups in User2 (i.e. shear-grps)
 
-    This is slightly complicated by how Gromacs adds a "rest" group 
-    to the array of names if the other groups do not add up to all 
-    atoms in the system. Thus, we detect if the final group is called 
+    This is slightly complicated by how Gromacs adds a "rest" group
+    to the array of names if the other groups do not add up to all
+    atoms in the system. Thus, we detect if the final group is called
     exactly "rest" and if so do not count it as one of the groups. */
 static size_t get_num_groups(const SimulationGroups *groups)
 {
     size_t num_groups = 0;
 
-    for (const auto global_group_index 
+    for (const auto global_group_index
          : groups->groups[SimulationAtomGroupType::User2])
     {
         const auto name = groups->groupNames[global_group_index];
@@ -223,7 +223,7 @@ static size_t get_num_groups(const SimulationGroups *groups)
 }
 
 /*! \brief Return the global index corresponding to local atom \p index */
-static int get_global_index_from_local(const size_t     index, 
+static int get_global_index_from_local(const size_t     index,
                                        const t_commrec *cr)
 {
     if (!havePPDomainDecomposition(cr))
@@ -232,22 +232,22 @@ static int get_global_index_from_local(const size_t     index,
     }
 
     /* For mpi_sync_counter_global_indices:
-       There is a risk that no atoms exist on the local rank, in which case 
+       There is a risk that no atoms exist on the local rank, in which case
        the counter's num_atoms will be 0 so we can transmit a dummy number
        instead of a real index. The num_atoms 0 value will flag to ignore it. */
     if (index < cr->dd->globalAtomIndices.size())
     {
         return cr->dd->globalAtomIndices.at(index);
     }
-    else 
+    else
     {
         return 0;
     }
 }
 
-/*! \brief If \p index_global corresponds to a \p index_local, set it 
+/*! \brief If \p index_global corresponds to a \p index_local, set it
     and return true, else return false */
-static bool get_local_index_from_global(int             &index_local, 
+static bool get_local_index_from_global(int             &index_local,
                                         const int        index_global,
                                         const t_commrec *cr)
 {
@@ -264,13 +264,13 @@ static bool get_local_index_from_global(int             &index_local,
         index_local = entry->la;
         return true;
     }
-    else 
+    else
     {
         return false;
     }
 }
 
-/*! \brief Get the position of atom local index \p along axis \p eAxis 
+/*! \brief Get the position of atom local index \p along axis \p eAxis
     in the box, accounting for pbc = xyz */
 static real get_position_in_box(const t_state *state,
                                 const size_t   i,
@@ -279,9 +279,9 @@ static real get_position_in_box(const t_state *state,
     const auto axis = static_cast<size_t>(eAxis);
     const real box_size = state->box[axis][axis];
 
-    real z = fmod(state->x[i][axis], box_size); 
+    real z = fmod(state->x[i][axis], box_size);
 
-    while (z < 0.0) 
+    while (z < 0.0)
     {
         z += box_size;
     }
@@ -294,10 +294,10 @@ static real get_position_in_box(const t_state *state,
  * EXCHANGE COUNTER COLLECTION FUNCTIONS *
  *****************************************/
 
-/*! \brief Return whether the input position \p z is inside the given exchange 
+/*! \brief Return whether the input position \p z is inside the given exchange
     area and is of the corresponding group */
-static bool in_counter_area(const size_t               i, 
-                            const real                 z, 
+static bool in_counter_area(const size_t               i,
+                            const real                 z,
                             const ExchangeAreaCounter &area_counter,
                             const SimulationGroups    *groups,
                             const t_commrec           *cr)
@@ -340,9 +340,9 @@ static void set_atom_in_counter(ExchangeCounter &counter,
     }
 }
 
-/*! \brief Add the atom with local \p index velocity along 
-    the target flow axis to the total in the \p area_counter 
-    and determine whether it's the atom with the highest 
+/*! \brief Add the atom with local \p index velocity along
+    the target flow axis to the total in the \p area_counter
+    and determine whether it's the atom with the highest
     *opposing* velocity */
 static void add_atom_velocity(ExchangeAreaCounter &area_counter,
                               const size_t         index,
@@ -392,8 +392,8 @@ static real mpi_sync_box_size(real local_box_size, const t_commrec *cr)
     real global_box_size = local_box_size;
 
     MPI_Allreduce(
-        &local_box_size, &global_box_size, 1, 
-        GMX_MPI_REAL, MPI_MAX, 
+        &local_box_size, &global_box_size, 1,
+        GMX_MPI_REAL, MPI_MAX,
         cr->mpi_comm_mysim);
 
     return global_box_size;
@@ -403,33 +403,33 @@ static real mpi_sync_box_size(real local_box_size, const t_commrec *cr)
    The ranks will then locally reduce this information into the swap indices
    and perform the exchange.
 
-   For this we need to keep in mind that velocities need to be updated on 
-   all ranks which own the swap atoms. This means that we need to work 
-   with the global atom index, and transform that back to local before 
+   For this we need to keep in mind that velocities need to be updated on
+   all ranks which own the swap atoms. This means that we need to work
+   with the global atom index, and transform that back to local before
    doing an exchange.
 
    Basic setup:
     * Transmit all counters, with global atom indices and velocities
-    * Determine top exchange candidates (will be same for all 
+    * Determine top exchange candidates (will be same for all
       ranks if they have the same counter information from all other)
     * Determine if a swap should be made
-      - If so, check if the global atom indices of either exchange 
+      - If so, check if the global atom indices of either exchange
         candidate has a local index
-      - If it does, set the velocity in it 
+      - If it does, set the velocity in it
       - Else do nothing
     */
 
 /*! \brief Synchronize the global atom indices from all nodes to all nodes and return
 
     The returned vector has elements
-   
+
         [i0, i1, ..., in]
 
-    where ij is the global atom index from node j. 
-    
-    Note: Input \p index_local *must* be the local index. This function transforms 
+    where ij is the global atom index from node j.
+
+    Note: Input \p index_local *must* be the local index. This function transforms
     it to a global index before synchronizing between nodes. */
-static std::vector<int> 
+static std::vector<int>
 mpi_sync_counter_global_indices(const int        local_index,
                                 const t_commrec *cr)
 {
@@ -440,23 +440,23 @@ mpi_sync_counter_global_indices(const int        local_index,
     std::vector<int> recv_buf (num_nodes, 0);
 
     MPI_Alltoall(
-        send_buf.data(), 1, MPI_INT, 
-        recv_buf.data(), 1, MPI_INT, 
+        send_buf.data(), 1, MPI_INT,
+        recv_buf.data(), 1, MPI_INT,
         cr->mpi_comm_mysim);
 
     return recv_buf;
 }
 
-/*! \brief Fill a buffer with the given \p velocity, where the velocity 
-    repeats once for every node in \p num_nodes 
-    
-    The buffer will have size DIM * num_nodes and consist of: 
+/*! \brief Fill a buffer with the given \p velocity, where the velocity
+    repeats once for every node in \p num_nodes
 
-        [vx, vy, vz, vx, vy, vz, ..., vx, vy, vz] 
+    The buffer will have size DIM * num_nodes and consist of:
+
+        [vx, vy, vz, vx, vy, vz, ..., vx, vy, vz]
         |< -------   num_nodes repeats  ------ >|
 
-    This buffer can easily be transmitted to other nodes using MPI_Alltoall. */   
-static std::vector<real> fill_send_velocity_buffer(const Vec3   &velocity, 
+    This buffer can easily be transmitted to other nodes using MPI_Alltoall. */
+static std::vector<real> fill_send_velocity_buffer(const Vec3   &velocity,
                                                    const size_t  num_nodes)
 {
     std::vector<real> buffer (DIM * num_nodes, 0.0);
@@ -472,24 +472,24 @@ static std::vector<real> fill_send_velocity_buffer(const Vec3   &velocity,
     return buffer;
 }
 
-/*! \brief Restructure a single dimension buffer into Vec3 arrays and return 
+/*! \brief Restructure a single dimension buffer into Vec3 arrays and return
 
-    The input buffer of velocity values will have the same form as from 
-    fill_send_velocity_buffer, except with the velocity values from the 
-    nodes after the MPI_Alltoall operation. The single dimension buffer 
-    is restructured as: 
+    The input buffer of velocity values will have the same form as from
+    fill_send_velocity_buffer, except with the velocity values from the
+    nodes after the MPI_Alltoall operation. The single dimension buffer
+    is restructured as:
 
-        [v0x, v0y, v0z, v1x, v1y, v1z, ..., vnx, vny, vnz] 
+        [v0x, v0y, v0z, v1x, v1y, v1z, ..., vnx, vny, vnz]
         ->
         [[v0x, v0y, v0z], [v1x, v1y, v1z], ..., [vnx, vny, vnz]]
 
     */
-static std::vector<Vec3> 
+static std::vector<Vec3>
 construct_velocity_vectors_from_buffer(const std::vector<real> &buffer,
                                        const size_t             num_nodes)
 {
     std::vector<Vec3> velocity_vectors;
-    
+
     velocity_vectors.reserve(num_nodes);
 
     GMX_RELEASE_ASSERT(num_nodes * DIM == buffer.size(),
@@ -507,15 +507,15 @@ construct_velocity_vectors_from_buffer(const std::vector<real> &buffer,
     return velocity_vectors;
 }
 
-/*! \brief Synchronize the velocity_max_vectors for this exchange counter area 
+/*! \brief Synchronize the velocity_max_vectors for this exchange counter area
     from all nodes
-    
-    The returned vector will be of form 
+
+    The returned vector will be of form
 
         [[v0x, v0y, v0z], [v1x, v1y, v1z], ..., [vnx, vny, vnz]]
-    
+
     where vij is the velocity vector value from node i. */
-static std::vector<Vec3> 
+static std::vector<Vec3>
 mpi_sync_counter_velocity_vectors(const Vec3      &local_velocity,
                                   const t_commrec *cr)
 {
@@ -525,21 +525,21 @@ mpi_sync_counter_velocity_vectors(const Vec3      &local_velocity,
     std::vector<real> recv_buf (send_buf.size(), 0.0);
 
     MPI_Alltoall(
-        send_buf.data(), DIM, GMX_MPI_REAL, 
-        recv_buf.data(), DIM, GMX_MPI_REAL, 
+        send_buf.data(), DIM, GMX_MPI_REAL,
+        recv_buf.data(), DIM, GMX_MPI_REAL,
         cr->mpi_comm_mysim);
-    
+
     return construct_velocity_vectors_from_buffer(recv_buf, cr->nnodes);
 }
 
 /*! \brief Synchronize the number of atoms from all nodes to all nodes and return
 
     The returned vector has elements
-   
+
         [n0, n1, ..., nn]
 
     where ni is the number of atoms from node i. */
-static std::vector<int> 
+static std::vector<int>
 mpi_sync_counter_num_atoms(const size_t     num_atoms,
                            const t_commrec *cr)
 {
@@ -547,21 +547,21 @@ mpi_sync_counter_num_atoms(const size_t     num_atoms,
     std::vector<int> recv_buf (send_buf.size(), 0);
 
     MPI_Alltoall(
-        send_buf.data(), 1, MPI_INT, 
-        recv_buf.data(), 1, MPI_INT, 
+        send_buf.data(), 1, MPI_INT,
+        recv_buf.data(), 1, MPI_INT,
         cr->mpi_comm_mysim);
 
     return recv_buf;
 }
 
-/*! \brief Synchronize a given value from all nodes to all nodes and return 
+/*! \brief Synchronize a given value from all nodes to all nodes and return
 
     The returned vector has elements
-   
+
         [v0, v1, ..., vn]
 
     where vi is the number of atoms from node i. */
-static std::vector<double> 
+static std::vector<double>
 mpi_sync_counter_values(const double     value,
                         const t_commrec *cr)
 {
@@ -569,34 +569,34 @@ mpi_sync_counter_values(const double     value,
     std::vector<double> recv_buf (send_buf.size(), 0);
 
     MPI_Alltoall(
-        send_buf.data(), 1, MPI_DOUBLE, 
-        recv_buf.data(), 1, MPI_DOUBLE, 
+        send_buf.data(), 1, MPI_DOUBLE,
+        recv_buf.data(), 1, MPI_DOUBLE,
         cr->mpi_comm_mysim);
 
     return recv_buf;
 }
 
-/*! \brief From the sync'd buffers, reconstruct the exchange counters from all nodes 
+/*! \brief From the sync'd buffers, reconstruct the exchange counters from all nodes
 
     The returned vector will be of form
 
         [counter_0, counter_1, ..., counter_n]
 
     where counter_i is the exchange counter originally from node i. */
-static std::vector<ExchangeCounter> 
+static std::vector<ExchangeCounter>
 construct_exchange_counters(const std::vector<int>    &global_inds,
                             const std::vector<int>    &num_atoms,
                             const std::vector<Vec3>   &velocity_vectors,
                             const std::vector<double> &total_velocities,
                             const std::vector<double> &atom_masses)
 {
-    GMX_RELEASE_ASSERT(global_inds.size() == num_atoms.size(), 
+    GMX_RELEASE_ASSERT(global_inds.size() == num_atoms.size(),
         "global_inds not same size as num_atoms after sync");
-    GMX_RELEASE_ASSERT(global_inds.size() == velocity_vectors.size(), 
+    GMX_RELEASE_ASSERT(global_inds.size() == velocity_vectors.size(),
         "global_inds not same size as velocity_vectors after sync");
-    GMX_RELEASE_ASSERT(global_inds.size() == total_velocities.size(), 
+    GMX_RELEASE_ASSERT(global_inds.size() == total_velocities.size(),
         "global_inds not same size as total_velocities after sync");
-    GMX_RELEASE_ASSERT(global_inds.size() == atom_masses.size(), 
+    GMX_RELEASE_ASSERT(global_inds.size() == atom_masses.size(),
         "global_inds not same size as atom_masses after sync");
 
     const auto num_nodes = global_inds.size();
@@ -619,24 +619,24 @@ construct_exchange_counters(const std::vector<int>    &global_inds,
     return counters;
 }
 
-/*! \brief Synchronize exchange counters from all nodes and return them 
+/*! \brief Synchronize exchange counters from all nodes and return them
 
     The returned vector will be of form
 
         [counter_0, counter_1, ..., counter_n]
 
     where counter_i is the exchange counter originally from node i.
-    
-    Note: After this synchronization, the index value for each counter 
+
+    Note: After this synchronization, the index value for each counter
     corresponds to the *global* atom index. Before, the node-local counters
     contain the *node-local* atom indices. */
-static std::vector<ExchangeCounter> 
-mpi_sync_counters(const ExchangeCounter &local_counter, 
+static std::vector<ExchangeCounter>
+mpi_sync_counters(const ExchangeCounter &local_counter,
                   const t_commrec       *cr)
 {
     const auto inds = mpi_sync_counter_global_indices(
         static_cast<int>(local_counter.index), cr);
-    
+
     const auto velocity_vectors = mpi_sync_counter_velocity_vectors(
         local_counter.velocity_max_vector, cr);
 
@@ -648,14 +648,14 @@ mpi_sync_counters(const ExchangeCounter &local_counter,
 
     const auto atom_masses = mpi_sync_counter_values(
         local_counter.atom_mass, cr);
-    
+
     return construct_exchange_counters(
         inds, num_atoms, velocity_vectors, total_vels, atom_masses);
 }
 
-/*! \brief Copy the atom velocity data \p from an exchange counter \p to a target 
+/*! \brief Copy the atom velocity data \p from an exchange counter \p to a target
 
-    We do not touch the total velocity or number of atoms, since they are aggregated 
+    We do not touch the total velocity or number of atoms, since they are aggregated
     separately. */
 static void copy_counter_atom_velocities(const ExchangeCounter &from,
                                          ExchangeCounter       &to)
@@ -665,9 +665,9 @@ static void copy_counter_atom_velocities(const ExchangeCounter &from,
     to.velocity_max_vector   = from.velocity_max_vector;
 }
 
-/*! \brief Reduce the sync'd exchange \p counters from all ranks to one for 
+/*! \brief Reduce the sync'd exchange \p counters from all ranks to one for
     the entire system */
-static ExchangeAreaCounter 
+static ExchangeAreaCounter
 get_final_area_counter(const std::vector<ExchangeCounter> &counters,
                        const ExchangeAreaCounter          &local_area_counter,
                        const ShearVelOpts                 &opts)
@@ -688,9 +688,9 @@ get_final_area_counter(const std::vector<ExchangeCounter> &counters,
                 {
                     copy_counter_atom_velocities(counter, final_counter);
                 }
-                
+
                 break;
-            
+
             case Direction::Negative:
                 if ( ((velocity > final_velocity) && (counter.num_atoms > 0))
                     || (final_counter.num_atoms == 0) )
@@ -733,7 +733,7 @@ static bool check_if_exchange(const ExchangeAreaCounter &area_counter0,
     const auto& counter0 = area_counter0.counter;
     const auto& counter1 = area_counter1.counter;
 
-    if ((counter0.num_atoms == 0) || (counter1.num_atoms == 0)) 
+    if ((counter0.num_atoms == 0) || (counter1.num_atoms == 0))
     {
         num_warns++;
 
@@ -745,7 +745,7 @@ static bool check_if_exchange(const ExchangeAreaCounter &area_counter0,
                     "step %lu: no atoms in area 0, cannot exchange",
                     step);
             }
-            if (counter1.num_atoms == 0) 
+            if (counter1.num_atoms == 0)
             {
                 gmx_warning(
                     "step %lu: no atoms in area 1, cannot exchange",
@@ -780,7 +780,7 @@ static void set_velocity(t_state                     *state,
 {
     const auto to_index_global = to.index;
 
-    GMX_RELEASE_ASSERT(to.atom_mass != 0.0, 
+    GMX_RELEASE_ASSERT(to.atom_mass != 0.0,
         "An ExchangeCounter has an exchanging atom with mass = 0, "
         "which is not allowed. Check the atom groups for shear coupling "
         "and ensure that they do not contain virtual atoms.");
@@ -810,19 +810,19 @@ static void exchange_velocities(t_state               *state,
 }
 
 
-/***************************************** 
+/*****************************************
  * SETUP FUNCTION FOR THE EXCHANGE AREAS *
  *****************************************/
 
 /*! \brief Determine and set the current exchange areas \p area0 and \p area1
 
-    The areas are created depending on the selected strategy and the current 
+    The areas are created depending on the selected strategy and the current
     box size. */
 static void set_exchange_areas(ExchangeArea       &area0,
                                ExchangeArea       &area1,
-                               const ShearVelOpts &opts, 
+                               const ShearVelOpts &opts,
                                const matrix        box,
-                               const t_commrec    *cr) 
+                               const t_commrec    *cr)
 {
     const auto axis = static_cast<size_t>(opts.axis);
 
@@ -835,7 +835,7 @@ static void set_exchange_areas(ExchangeArea       &area0,
     area1.direction = Direction::Positive;
 
     switch (opts.strategy) {
-        case ShearCouplStrategy::Edges: 
+        case ShearCouplStrategy::Edges:
             area0.zmin = opts.zedge_adj;
             area0.zmax = area0.zmin + opts.size;
 
@@ -843,8 +843,8 @@ static void set_exchange_areas(ExchangeArea       &area0,
             area1.zmin = area1.zmax - opts.size;
 
             break;
-        
-        case ShearCouplStrategy::EdgeCenter: 
+
+        case ShearCouplStrategy::EdgeCenter:
             area0.is_split = true;
             area0.zmin = opts.zedge_adj;
             area0.zmax = area0.zmin + opts.size / 2.0;
@@ -858,9 +858,9 @@ static void set_exchange_areas(ExchangeArea       &area0,
             }
 
             break;
-        
+
         default:
-            gmx_fatal(FARGS, 
+            gmx_fatal(FARGS,
                       "Invalid ShearCouplStrategy selected. "
                       "This should not be possible.");
             break;
@@ -877,7 +877,7 @@ static void set_exchange_areas(ExchangeArea       &area0,
             area1.group = 1;
             break;
         default:
-            gmx_fatal(FARGS, 
+            gmx_fatal(FARGS,
                     "Number of shear-grps was %d, not 1 or 2. "
                     "This should not be possible.",
                     opts.num_groups);
@@ -895,7 +895,7 @@ static void log_shear_area_info(const ExchangeArea     &area,
                                 const SimulationGroups *groups,
                                 const gmx::MDLogger    &mdlog)
 {
-    const auto global_group_index 
+    const auto global_group_index
         = groups->groups[SimulationAtomGroupType::User2].at(area.group);
 
     if (!area.is_split)
@@ -908,10 +908,10 @@ static void log_shear_area_info(const ExchangeArea     &area,
                 "    Target velocity (along %s): %g\n",
                 i,
                 *groups->groupNames[global_group_index],
-                get_axis_name(opts.axis), 
-                area.zmin, area.zmax, 
+                get_axis_name(opts.axis),
+                area.zmin, area.zmax,
                 get_axis_name(opts.direction),
-                area.target_velocity); 
+                area.target_velocity);
     }
     else
     {
@@ -923,11 +923,11 @@ static void log_shear_area_info(const ExchangeArea     &area,
                 "    Target velocity (along %s): %g\n",
                 i,
                 *groups->groupNames[global_group_index],
-                get_axis_name(opts.axis), 
-                area.zmin, area.zmax, 
+                get_axis_name(opts.axis),
+                area.zmin, area.zmax,
                 area.zmin2, area.zmax2,
                 get_axis_name(opts.direction),
-                area.target_velocity); 
+                area.target_velocity);
     }
 }
 
@@ -952,14 +952,14 @@ static void log_shear_coupling_info(const ShearVelOpts     &opts,
             "  Shear area size: %g\n"
             "  Edge adjustment: %g\n"
             "  ---\n"
-            "  Shear creation zones at start (changes with box size):", 
-            axis_name, 
+            "  Shear creation zones at start (changes with box size):",
+            axis_name,
             direction_name,
-            tcoupl, 
-            opts.step, 
+            tcoupl,
+            opts.step,
             opts.size,
             opts.zedge_adj);
-    
+
     ExchangeArea area0, area1;
     set_exchange_areas(area0, area1, opts, box, cr);
 
@@ -989,37 +989,37 @@ static void print_shear_area_info(const ExchangeArea     &area,
                                   const ShearVelOpts     &opts,
                                   const SimulationGroups *groups)
 {
-    const auto global_group_index 
+    const auto global_group_index
         = groups->groups[SimulationAtomGroupType::User2].at(area.group);
 
     if (!area.is_split)
     {
-        fprintf(stderr, 
+        fprintf(stderr,
                 "  Area %d:\n"
                 "    Group:                      %s\n"
                 "    Range (along %s):           [%g, %g]\n"
                 "    Target velocity (along %s): %g\n",
                 i,
                 *groups->groupNames[global_group_index],
-                get_axis_name(opts.axis), 
-                area.zmin, area.zmax, 
+                get_axis_name(opts.axis),
+                area.zmin, area.zmax,
                 get_axis_name(opts.direction),
-                area.target_velocity); 
+                area.target_velocity);
     }
     else
     {
-        fprintf(stderr, 
+        fprintf(stderr,
                 "  Area %d:\n"
                 "    Group:                      %s\n"
                 "    Range (along %s):           [%g, %g] & [%g, %g]\n"
                 "    Target velocity (along %s): %g\n",
                 i,
                 *groups->groupNames[global_group_index],
-                get_axis_name(opts.axis), 
-                area.zmin, area.zmax, 
+                get_axis_name(opts.axis),
+                area.zmin, area.zmax,
                 area.zmin2, area.zmax2,
                 get_axis_name(opts.direction),
-                area.target_velocity); 
+                area.target_velocity);
     }
 }
 
@@ -1036,7 +1036,7 @@ static void print_shear_coupling_info(const ShearVelOpts     &opts,
 
     fprintf(stderr, "\n");
 
-    fprintf(stderr, 
+    fprintf(stderr,
             "[Rank %d] Shear velocity coupling is turned on.\n"
             "  Axis:            %s\n"
             "  Shear direction: %s\n"
@@ -1044,15 +1044,15 @@ static void print_shear_coupling_info(const ShearVelOpts     &opts,
             "  Shear area size: %g\n"
             "  Edge adjustment: %g\n"
             "  ---\n"
-            "  Shear creation zones at start (changes with box size):\n", 
+            "  Shear creation zones at start (changes with box size):\n",
             cr->nodeid,
-            axis_name, 
+            axis_name,
             direction_name,
-            tcoupl, 
-            opts.step, 
+            tcoupl,
+            opts.step,
             opts.size,
             opts.zedge_adj);
-    
+
     print_shear_area_info(area0, 0, opts, groups);
     print_shear_area_info(area1, 1, opts, groups);
 
@@ -1065,13 +1065,13 @@ static void print_single_counter(const ExchangeCounter &counter)
     fprintf(stderr, "  index                 = %d\n", counter.index);
     fprintf(stderr, "  atom_mass             = %f\n", counter.atom_mass);
     fprintf(stderr, "  num_atoms             = %d\n", counter.num_atoms);
-    fprintf(stderr, "  velocity_max_vector   = (%f, %f, %f)\n", 
-        counter.velocity_max_vector[XX], 
-        counter.velocity_max_vector[YY], 
+    fprintf(stderr, "  velocity_max_vector   = (%f, %f, %f)\n",
+        counter.velocity_max_vector[XX],
+        counter.velocity_max_vector[YY],
         counter.velocity_max_vector[ZZ]);
 }
 
-static void 
+static void
 print_counter_information(const ExchangeCounter              &local_counter,
                           const ExchangeCounter              &final_counter,
                           const int                           area_num,
@@ -1128,16 +1128,16 @@ ShearVelOpts init_shear_velocity_coupling_opts(const t_inputrec       *ir,
     FILE *fp = nullptr;
     if (bShearCoupl)
     {
-        char xaxis[STRLEN], 
+        char xaxis[STRLEN],
              yaxis[STRLEN],
              subtitle[STRLEN];
 
-        snprintf(xaxis, STRLEN, 
-                 "t (%s)", 
+        snprintf(xaxis, STRLEN,
+                 "t (%s)",
                  unit_time);
 
-        snprintf(yaxis, STRLEN, 
-                 "\\Deltap\\s%s\\N (%s %s %s\\S-1\\N)", 
+        snprintf(yaxis, STRLEN,
+                 "\\Deltap\\s%s\\N (%s %s %s\\S-1\\N)",
                  get_axis_name(direction),
                  unit_mass, unit_length, unit_time);
 
@@ -1239,10 +1239,10 @@ void do_shear_velocity_coupling(t_state                *state,
         if (cr->sim_nodeid == nodeid)
         {
             print_counter_information(
-                area_counter0.counter, system_area_counter0.counter, 
+                area_counter0.counter, system_area_counter0.counter,
                 0, all_rank_counters0, cr);
             print_counter_information(
-                area_counter1.counter, system_area_counter1.counter, 
+                area_counter1.counter, system_area_counter1.counter,
                 1, all_rank_counters1, cr);
         }
 
@@ -1254,8 +1254,8 @@ void do_shear_velocity_coupling(t_state                *state,
     if (check_if_exchange(system_area_counter0, system_area_counter1, current_step))
     {
         exchange_velocities(
-            state, 
-            system_area_counter0.counter, 
+            state,
+            system_area_counter0.counter,
             system_area_counter1.counter,
             cr);
 
@@ -1264,7 +1264,7 @@ void do_shear_velocity_coupling(t_state                *state,
             log_exchange(
                 opts.log_pexchange,
                 current_time,
-                system_area_counter0.counter, 
+                system_area_counter0.counter,
                 system_area_counter1.counter,
                 opts.direction);
         }

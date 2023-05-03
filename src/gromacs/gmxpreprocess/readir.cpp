@@ -2209,7 +2209,7 @@ void get_ir(const char*     mdparin,
     replace_inp_entry(inp, "xtc-precision", "compressed-x-precision");
     replace_inp_entry(inp, "pull-print-com1", "pull-print-com");
 
-    /* [PETTER] Rebind user2-grps to use for shear coupling 
+    /* [PETTER] Rebind user2-grps to use for shear coupling
         This is likely easier than trying to create an entire new group */
     replace_inp_entry(inp, "user2-grps", "shear-grps");
 
@@ -4334,10 +4334,10 @@ void do_index(const char*                    mdparin,
                  wi);
 
     /* [PETTER] Assert that we have 1 or 2 groups for the shear coupling */
-    if (ir->bShearCoupling 
+    if (ir->bShearCoupling
         && (user2GroupNames.empty() || user2GroupNames.size() > 2))
     {
-        gmx_fatal(FARGS, 
+        gmx_fatal(FARGS,
                   "Invalid shear-grps input: must be 1 or 2 groups (is %d), "
                   "in which case area 0 only couples to atoms in the first "
                   "group and area 1 to atoms in the second.",
@@ -5170,13 +5170,13 @@ void double_check(t_inputrec* ir, matrix box, bool bHasNormalConstraints, bool b
         if ((ir->shear_strategy == ShearCouplStrategy::Edges)
             && (ir->pbcType != PbcType::XY))
         {
-            sprintf(warn_buf, 
+            sprintf(warn_buf,
                 "With shear-strategy = %s the system should probably not "
                 "be periodic along the axis, since both edges will shear "
                 "against each other. Use pbc = %s unless you are sure. "
                 "(currently pbc = %s)",
                 enumValueToString(ir->shear_strategy),
-                c_pbcTypeNames[PbcType::XY], 
+                c_pbcTypeNames[PbcType::XY],
                 c_pbcTypeNames[ir->pbcType]);
             warning(wi, warn_buf);
         }
