@@ -164,37 +164,6 @@ struct ExchangeAreaCounter {
  * UTILITY FUNCTIONS FOR WORKING WITH POSITIONS, INDICES AND AXIS *
  ******************************************************************/
 
-/*! \brief Return the name, i.e. x, y, or z, of the  \p axis */
-constexpr static const char* get_axis_name(const Axis& axis)
-{
-    constexpr std::array<const char*, DIM + 1> axis_names { "x", "y", "z", "null" };
-    return axis_names[static_cast<size_t>(axis)];
-}
-
-/*! \brief Return the Axis enum corresponding to input \p axis from the mdp option */
-static Axis get_area_def_axis(const RnemdAreaDefAxis axis)
-{
-    switch (axis)
-    {
-        case RnemdAreaDefAxis::X: return Axis::X;
-        case RnemdAreaDefAxis::Y: return Axis::Y;
-        case RnemdAreaDefAxis::Z: return Axis::Z;
-        default: return Axis::NR;
-    }
-}
-
-/*! \brief Return the Axis enum corresponding to input \p direction from the mdp option */
-static Axis get_energy_exchange_axis(const RnemdEnergyExchangeAxis direction)
-{
-    switch (direction)
-    {
-        case RnemdEnergyExchangeAxis::X: return Axis::X;
-        case RnemdEnergyExchangeAxis::Y: return Axis::Y;
-        case RnemdEnergyExchangeAxis::Z: return Axis::Z;
-        default: return Axis::NR;
-    }
-}
-
 /*! \brief Get the number of groups in User2 (i.e. shear-grps)
 
     This is slightly complicated by how Gromacs adds a "rest" group
@@ -271,9 +240,9 @@ static bool get_local_index_from_global(int             &index_local,
 
 /*! \brief Get the position of atom local index \p along axis \p eAxis
     in the box, accounting for pbc = xyz */
-static real get_position_in_box(const t_state *state,
-                                const size_t   i,
-                                const Axis     eAxis)
+static real get_position_in_box(const t_state          *state,
+                                const size_t            i,
+                                const RnemdAreaDefAxis  eAxis)
 {
     const auto axis = static_cast<size_t>(eAxis);
     const real box_size = state->box[axis][axis];
@@ -907,9 +876,9 @@ static void log_shear_area_info(const ExchangeArea     &area,
                 "    Target velocity (along %s): %g\n",
                 i,
                 *groups->groupNames[global_group_index],
-                get_axis_name(rnemd.area_def_axis),
+                enumValueToString(rnemd.area_def_axis),
                 area.zmin, area.zmax,
-                get_axis_name(rnemd.energy_exchange_axis),
+                enumValueToString(rnemd.energy_exchange_axis),
                 area.target_velocity);
     }
     else
@@ -922,10 +891,10 @@ static void log_shear_area_info(const ExchangeArea     &area,
                 "    Target velocity (along %s): %g\n",
                 i,
                 *groups->groupNames[global_group_index],
-                get_axis_name(rnemd.area_def_axis),
+                enumValueToString(rnemd.area_def_axis),
                 area.zmin, area.zmax,
                 area.zmin2, area.zmax2,
-                get_axis_name(rnemd.energy_exchange_axis),
+                enumValueToString(rnemd.energy_exchange_axis),
                 area.target_velocity);
     }
 }
@@ -937,9 +906,6 @@ static void log_shear_coupling_info(const RNEMD            &rnemd,
                                     const t_commrec        *cr,
                                     const gmx::MDLogger    &mdlog)
 {
-    const auto area_def_axis_name = get_axis_name(rnemd.area_def_axis);
-    const auto energy_exchange_axis_name = get_axis_name(rnemd.energy_exchange_axis);
-
     GMX_LOG(mdlog.info).appendText("");
 
     GMX_LOG(mdlog.info)
@@ -952,8 +918,8 @@ static void log_shear_coupling_info(const RNEMD            &rnemd,
             "  Edge adjustment: %g\n"
             "  ---\n"
             "  Shear creation zones at start (changes with box size):",
-            area_def_axis_name,
-            energy_exchange_axis_name,
+            enumValueToString(rnemd.area_def_axis),
+            enumValueToString(rnemd.energy_exchange_axis),
             tcoupl,
             rnemd.step,
             rnemd.size,
@@ -969,11 +935,11 @@ static void log_shear_coupling_info(const RNEMD            &rnemd,
 }
 
 /* Log momentum exchange information along the flow direction */
-static void log_exchange(FILE                  *fp,
-                         const double           time,
-                         const ExchangeCounter &counter0,
-                         const ExchangeCounter &counter1,
-                         const Axis             direction)
+static void log_exchange(FILE                          *fp,
+                         const double                   time,
+                         const ExchangeCounter         &counter0,
+                         const ExchangeCounter         &counter1,
+                         const RnemdEnergyExchangeAxis  direction)
 {
     const auto d = static_cast<size_t>(direction);
     const auto p0 = counter0.atom_mass * counter0.velocity_max_vector[d];
@@ -1122,13 +1088,13 @@ RNEMD init_rnemd(const t_inputrec       *ir,
             tcoupl, ir->delta_t, static_cast<double>(nstcoupl) * ir->delta_t);
     }
 
-    const auto area_def_axis = get_area_def_axis(input_opts.area_def_axis);
-    const auto energy_exchange_axis = get_energy_exchange_axis(input_opts.energy_exchange_axis);
+    const auto area_def_axis = input_opts.area_def_axis;
+    const auto energy_exchange_axis = input_opts.energy_exchange_axis;
 
     FILE *fp = nullptr;
     if (bRNEMD)
     {
-        const auto energy_exchange_axis_name = get_axis_name(energy_exchange_axis);
+        const auto energy_exchange_axis_name = enumValueToString(energy_exchange_axis);
 
         char xaxis[STRLEN],
              yaxis[STRLEN],

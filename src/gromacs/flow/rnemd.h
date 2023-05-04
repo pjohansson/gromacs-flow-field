@@ -17,18 +17,11 @@
 
 using namespace flow;
 
-enum class Axis {
-    X,
-    Y,
-    Z,
-    NR
-};
-
 struct RNEMD {
     FILE *log_pexchange;         /* Opened file to log momentum exchange into */
 
-    Axis area_def_axis,               /* Axis along which the areas that are coupled are defined */
-         energy_exchange_axis;               /* Axis for which the kinetic energy itself is swapped along */
+    RnemdAreaDefAxis area_def_axis;                 /* Axis along which the areas that are coupled are defined */
+    RnemdEnergyExchangeAxis energy_exchange_axis;   /* Axis for which the kinetic energy itself is swapped along */
 
     RnemdStrategy strategy;  /* Strategy for determining the exchange areas */
 
