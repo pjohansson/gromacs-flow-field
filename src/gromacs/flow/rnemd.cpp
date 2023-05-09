@@ -1,3 +1,4 @@
+#include "gromacs/flow/inputrec_types.h"
 #include "gromacs/flow/rnemd.h"
 
 #include "gromacs/fileio/oenv.h"
@@ -244,7 +245,7 @@ static real get_position_in_box(const t_state          *state,
                                 const size_t            i,
                                 const RnemdAreaDefAxis  eAxis)
 {
-    const auto axis = static_cast<size_t>(eAxis);
+    const auto axis = rnemdAxis2Index(eAxis);
     const real box_size = state->box[axis][axis];
 
     real z = fmod(state->x[i][axis], box_size);
@@ -792,7 +793,7 @@ static void set_exchange_areas(ExchangeArea    &area0,
                                const matrix     box,
                                const t_commrec *cr)
 {
-    const auto axis = static_cast<size_t>(rnemd.area_def_axis);
+    const auto axis = rnemdAxis2Index(rnemd.area_def_axis);
 
     const auto local_box_size = box[axis][axis];
     const auto box_size = mpi_sync_box_size(local_box_size, cr);

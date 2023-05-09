@@ -1,6 +1,8 @@
 #include "gmxpre.h"
 #include "inputrec_types.h"
+#include "gromacs/math/vectypes.h"
 #include "gromacs/utility/enumerationhelpers.h"
+#include "gromacs/utility/fatalerror.h"
 
 using namespace flow;
 
@@ -29,6 +31,36 @@ const char* enumValueToString(RnemdStrategy enumValue)
         "Edges", "Edge-Center"
     };
     return rnemd_strategy_names[enumValue];
+}
+
+size_t rnemdAxis2Index(const RnemdAreaDefAxis value)
+{
+    switch (static_cast<int>(value))
+    {
+        case XX:
+        case YY:
+        case ZZ:
+            return static_cast<size_t>(value);
+            break;
+        default:
+            gmx_fatal(FARGS, "invalid value in RnemdAxis enum = %d", value);
+            break;
+    }
+}
+
+size_t rnemdAxis2Index(const RnemdEnergyExchangeAxis value)
+{
+    switch (static_cast<int>(value))
+    {
+        case XX:
+        case YY:
+        case ZZ:
+            return static_cast<size_t>(value);
+            break;
+        default:
+            gmx_fatal(FARGS, "invalid value in RnemdAxis enum = %d", value);
+            break;
+    }
 }
 
 } // namespace flow

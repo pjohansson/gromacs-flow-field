@@ -1,6 +1,7 @@
 #ifndef MD_FLOW_FIELD_IR_TYPES
 #define MD_FLOW_FIELD_IR_TYPES
 
+#include <cstddef>
 #include "gromacs/utility/real.h"
 
 namespace flow
@@ -22,6 +23,7 @@ enum class RnemdAreaDefAxis : int {
     Default = Z
 };
 const char* enumValueToString(RnemdAreaDefAxis enumValue);
+size_t rnemdAxis2Index(const RnemdAreaDefAxis value);
 
 enum class RnemdEnergyExchangeAxis : int {
     X,
@@ -31,6 +33,7 @@ enum class RnemdEnergyExchangeAxis : int {
     Default = X
 };
 const char* enumValueToString(RnemdEnergyExchangeAxis enumValue);
+size_t rnemdAxis2Index(const RnemdEnergyExchangeAxis value);
 
 //! Reverse non-equilibrium molecular dynamics options
 struct RNEMDOptions {
