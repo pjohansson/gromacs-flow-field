@@ -29,6 +29,7 @@ enum class RnemdEnergyExchangeAxis : int {
     X,
     Y,
     Z,
+    KineticEnergy,
     Count,
     Default = X
 };

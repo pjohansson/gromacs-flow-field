@@ -25,12 +25,12 @@ void read_rnemd_opts(std::vector<t_inpfile> &inp,
 
     printStringNewline(&inp, "REVERSE NON-EQUILIBRIUM MOLECULAR DYNAMICS (UNOFFICIAL)");
 
-    printStringNoNewline(&inp, "Do RNEMD exchange of kinetic energy between areas");
+    printStringNoNewline(&inp, "Do RNEMD exchange of momentum or kinetic energy between areas");
     opts.bDoExchange = (getEnum<Boolean>(&inp, "rnemd", wi) != Boolean::No);
 
-    printStringNoNewline(&inp, "Axis along which to create areas for the energy exchange ");
-    printStringNoNewline(&inp, "and along which velocity vector to exchange energies: x, y or z");
+    printStringNoNewline(&inp, "Axis along which to create areas for the energy exchange: x, y, or z");
     opts.area_def_axis = getEnum<flow::RnemdAreaDefAxis>(&inp, "rnemd-area-def-axis", wi);
+    printStringNoNewline(&inp, "Axis along which to exchange momentum vector, or kinetic energy: x, y, z or ekin");
     opts.energy_exchange_axis = getEnum<flow::RnemdEnergyExchangeAxis>(&inp, "rnemd-exchange-axis", wi);
 
     printStringNoNewline(&inp, "Strategy for setting up exchange areas: Edges or Edge-Center");

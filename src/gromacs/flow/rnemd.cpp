@@ -14,6 +14,25 @@
 /*-----------------------------------------------------------------------------*
  * SHEAR VELOCITY COUPLING                                                     *
  * -----------------------                                                     *
+ *                                                                             *
+ * UPDATE 2023-05-04                                                           *
+ * I've known for a while now the the method is more formally known            *
+ * as "Reverse non-equilibrium molecular dynamics" (RNEMD) and was             *
+ * introduced by Florian Müller-Plathe. However, while I have updated          *
+ * the code this documentation has not yet been rewritten to reflect           *
+ * this.                                                                       *
+ *                                                                             *
+ * CHANGELOG                                                                   *
+ * The code can now also exchange atomic kinetic energies between              *
+ * the areas.                                                                  *
+ *                                                                             *
+ * This is accomplished by setting `rnemd-exchange-axis = ekin`                *
+ *                                                                             *
+ * References:                                                                 *
+ * Müller-Plathe, F., Phys Rev E 59, 4894-4898 (1999)                          *
+ * Bordat, P. and Müller-Plathe, F., J Chem Phys 116, 3362-3369 (2002)         *
+ *                                                                             *
+ * -----------------------                                                     *
  * This is an implementation of a method to set a target velocity in           *
  * different areas of a liquid system, in order to create a shear flow.        *
  * Instead of pulling with an external force or position restraints,           *
@@ -133,7 +152,7 @@ struct ExchangeArea {
 
 /*! \brief Tracks velocity data for a single exchange area */
 struct ExchangeCounter {
-    size_t index     = 0,               /* The atom index with the highest velocity
+    size_t index     = 0,               /* The atom index with the highest velocity or kinetic energy
                                            opposing the targeted flow direction
                                            of the exchange area of this counter */
 
@@ -141,11 +160,14 @@ struct ExchangeCounter {
 
     double atom_mass             = 0.0, /* Atom mass corresponding to the \p index */
 
-           velocity_total        = 0.0; /* Sum of atom velocities along the targeted
-                                           flow direction in this exchange area */
+           sum                   = 0.0, /* Sum of atom velocities along the targeted
+                                           flow direction, or kinetic energy in this exchange area */
+
+           max_value             = 0.0; /* Current maximum (or minimum) velocity or kinetic energy
+                                           found in the exchange area */
 
     /* Atom velocity corresponding to the \p index  */
-    gmx::RVec velocity_max_vector = { 0.0, 0.0, 0.0 };
+    gmx::RVec exchange_velocity = { 0.0, 0.0, 0.0 };
 };
 
 struct ExchangeAreaCounter {
@@ -298,15 +320,13 @@ static bool in_counter_area(const size_t               i,
 static void set_atom_in_counter(ExchangeCounter &counter,
                                 const size_t     index,
                                 const double     mass,
-                                const rvec       velocity)
+                                const real       new_max_value,
+                                const gmx::RVec &velocity)
 {
     counter.index = index;
     counter.atom_mass = mass;
-
-    for (size_t i = 0; i < DIM; ++i)
-    {
-        counter.velocity_max_vector[i] = velocity[i];
-    }
+    counter.max_value = new_max_value;
+    counter.exchange_velocity = velocity;
 }
 
 /*! \brief Add the atom with local \p index velocity along
@@ -322,31 +342,47 @@ static void add_atom_velocity(ExchangeAreaCounter &area_counter,
     auto& counter = area_counter.counter;
 
     const auto mass = mdatoms->massT[index];
-    const auto velocity_vector = state->v[index];
+    const auto& velocity = state->v[index];
 
-    const auto energy_exchange_axis = static_cast<size_t>(rnemd.energy_exchange_axis);
+    // Either the atom kinetic energy or velocity along a direction
+    double value = 0.0;
 
-    const auto velocity             = velocity_vector[energy_exchange_axis];
-    const auto current_max_velocity = counter.velocity_max_vector[energy_exchange_axis];
-
-    switch (area_counter.area.direction)
+    switch (rnemd.energy_exchange_axis)
     {
-        case Direction::Positive:
-            if ((velocity < current_max_velocity) || (counter.num_atoms == 0))
-            {
-                set_atom_in_counter(counter, index, mass, velocity_vector);
-            }
+        case RnemdEnergyExchangeAxis::KineticEnergy:
+            value = mass * velocity.norm2();
             break;
-
-        case Direction::Negative:
-            if ((velocity > current_max_velocity) || (counter.num_atoms == 0))
-            {
-                set_atom_in_counter(counter, index, mass, velocity_vector);
-            }
+        default:
+            value = velocity[rnemdAxis2Index(rnemd.energy_exchange_axis)];
             break;
     }
 
-    counter.velocity_total += velocity;
+    if (counter.num_atoms == 0)
+    {
+        set_atom_in_counter(counter, index, mass, value, velocity);
+    }
+    else
+    {
+        switch (area_counter.area.direction)
+        {
+            case Direction::Positive:
+                if (value < counter.max_value)
+                {
+                    set_atom_in_counter(counter, index, mass, value, velocity);
+                }
+                break;
+
+            case Direction::Negative:
+                if (value > counter.max_value)
+                {
+                    set_atom_in_counter(counter, index, mass, value, velocity);
+                }
+                break;
+        }
+
+    }
+
+    counter.sum += value;
     counter.num_atoms++;
 }
 
@@ -556,17 +592,20 @@ static std::vector<ExchangeCounter>
 construct_exchange_counters(const std::vector<int>       &global_inds,
                             const std::vector<int>       &num_atoms,
                             const std::vector<gmx::RVec> &velocity_vectors,
-                            const std::vector<double>    &total_velocities,
+                            const std::vector<double>    &max_values,
+                            const std::vector<double>    &sums,
                             const std::vector<double>    &atom_masses)
 {
     GMX_RELEASE_ASSERT(global_inds.size() == num_atoms.size(),
-        "global_inds not same size as num_atoms after sync");
+        "global_inds not same size as `num_atoms` after sync");
     GMX_RELEASE_ASSERT(global_inds.size() == velocity_vectors.size(),
-        "global_inds not same size as velocity_vectors after sync");
-    GMX_RELEASE_ASSERT(global_inds.size() == total_velocities.size(),
-        "global_inds not same size as total_velocities after sync");
+        "global_inds not same size as `velocity_vectors` after sync");
+    GMX_RELEASE_ASSERT(global_inds.size() == max_values.size(),
+        "global_inds not same size as `max_values` after sync");
+    GMX_RELEASE_ASSERT(global_inds.size() == sums.size(),
+        "global_inds not same size as `sums` after sync");
     GMX_RELEASE_ASSERT(global_inds.size() == atom_masses.size(),
-        "global_inds not same size as atom_masses after sync");
+        "global_inds not same size as `atom_masses` after sync");
 
     const auto num_nodes = global_inds.size();
 
@@ -578,9 +617,10 @@ construct_exchange_counters(const std::vector<int>       &global_inds,
 
         counter.index = global_inds.at(i);
         counter.num_atoms = num_atoms.at(i);
-        counter.velocity_total = total_velocities.at(i);
+        counter.sum = sums.at(i);
+        counter.max_value = max_values.at(i);
         counter.atom_mass = atom_masses.at(i);
-        counter.velocity_max_vector = velocity_vectors.at(i);
+        counter.exchange_velocity = velocity_vectors.at(i);
 
         counters.push_back(counter);
     }
@@ -606,32 +646,36 @@ mpi_sync_counters(const ExchangeCounter &local_counter,
     const auto inds = mpi_sync_counter_global_indices(
         static_cast<int>(local_counter.index), cr);
 
-    const auto velocity_vectors = mpi_sync_counter_velocity_vectors(
-        local_counter.velocity_max_vector, cr);
-
     const auto num_atoms = mpi_sync_counter_num_atoms(
         local_counter.num_atoms, cr);
 
-    const auto total_vels = mpi_sync_counter_values(
-        local_counter.velocity_total, cr);
+    const auto velocity_vectors = mpi_sync_counter_velocity_vectors(
+        local_counter.exchange_velocity, cr);
+
+    const auto max_values = mpi_sync_counter_values(
+        local_counter.max_value, cr);
+
+    const auto sums = mpi_sync_counter_values(
+        local_counter.sum, cr);
 
     const auto atom_masses = mpi_sync_counter_values(
         local_counter.atom_mass, cr);
 
     return construct_exchange_counters(
-        inds, num_atoms, velocity_vectors, total_vels, atom_masses);
+        inds, num_atoms, velocity_vectors, max_values, sums, atom_masses);
 }
 
 /*! \brief Copy the atom velocity data \p from an exchange counter \p to a target
 
-    We do not touch the total velocity or number of atoms, since they are aggregated
+    We do not touch the sum or number of atoms, since they are aggregated
     separately. */
 static void copy_counter_atom_velocities(const ExchangeCounter &from,
                                          ExchangeCounter       &to)
 {
-    to.index                 = from.index;
-    to.atom_mass             = from.atom_mass;
-    to.velocity_max_vector   = from.velocity_max_vector;
+    to.index               = from.index;
+    to.atom_mass           = from.atom_mass;
+    to.max_value           = from.max_value;
+    to.exchange_velocity   = from.exchange_velocity;
 }
 
 /*! \brief Reduce the sync'd exchange \p counters from all ranks to one for
@@ -642,36 +686,35 @@ get_final_area_counter(const std::vector<ExchangeCounter> &counters,
                        const RNEMD                        &rnemd)
 {
     ExchangeCounter final_counter;
-    const auto energy_exchange_axis = static_cast<size_t>(rnemd.energy_exchange_axis);
 
     for (const auto& counter : counters)
     {
-        const auto velocity       = counter.velocity_max_vector[energy_exchange_axis];
-        const auto final_velocity = final_counter.velocity_max_vector[energy_exchange_axis];
-
-        switch (local_area_counter.area.direction)
+        if (final_counter.num_atoms == 0)
         {
-            case Direction::Positive:
-                if ( ((velocity < final_velocity) && (counter.num_atoms > 0))
-                    || (final_counter.num_atoms == 0) )
-                {
-                    copy_counter_atom_velocities(counter, final_counter);
-                }
+            copy_counter_atom_velocities(counter, final_counter);
+        }
+        else if (counter.num_atoms > 0)
+        {
+            switch (local_area_counter.area.direction)
+            {
+                case Direction::Positive:
+                    if (counter.max_value < final_counter.max_value)
+                    {
+                        copy_counter_atom_velocities(counter, final_counter);
+                    }
+                    break;
 
-                break;
-
-            case Direction::Negative:
-                if ( ((velocity > final_velocity) && (counter.num_atoms > 0))
-                    || (final_counter.num_atoms == 0) )
-                {
-                    copy_counter_atom_velocities(counter, final_counter);
-                }
-
-                break;
+                case Direction::Negative:
+                    if (counter.max_value > final_counter.max_value)
+                    {
+                        copy_counter_atom_velocities(counter, final_counter);
+                    }
+                    break;
+            }
         }
 
-        final_counter.velocity_total += counter.velocity_total;
-        final_counter.num_atoms      += counter.num_atoms;
+        final_counter.sum       += counter.sum;
+        final_counter.num_atoms += counter.num_atoms;
     }
 
     return ExchangeAreaCounter {
@@ -685,10 +728,10 @@ get_final_area_counter(const std::vector<ExchangeCounter> &counters,
  * ATOM VELOCITY EXCHANGE FUNCTIONS *
  ************************************/
 
-/*! \brief Return the average atom velocity measured by \p counter */
-static real avg_velocity(const ExchangeCounter &counter)
+/*! \brief Return the average atom velocity or kinetic energy measured by \p counter */
+static real avg_value(const ExchangeCounter &counter)
 {
-    return counter.velocity_total / static_cast<real>(counter.num_atoms);
+    return static_cast<real>(counter.sum) / static_cast<real>(counter.num_atoms);
 }
 
 /*! \brief Return whether or not an atom velocity exchange should be made */
@@ -737,7 +780,7 @@ static bool check_if_exchange(const ExchangeAreaCounter &area_counter0,
     const auto& area1 = area_counter1.area;
 
     const auto target_diff = area1.target_velocity - area0.target_velocity;
-    const auto diff = avg_velocity(counter1) - avg_velocity(counter0);
+    const auto diff = avg_value(counter1) - avg_value(counter0);
 
     return (target_diff > diff);
 }
@@ -753,19 +796,17 @@ static void set_velocity(t_state                     *state,
         "An ExchangeCounter has an exchanging atom with mass = 0, "
         "which is not allowed. Check the atom groups for shear coupling "
         "and ensure that they do not contain virtual atoms.");
-    const auto mass_fac = sqrt(from.atom_mass / to.atom_mass);
+
+    // To conserve the kinetic energy of the system we scale
+    // the changed velocities by this factor
+    const auto mass_fac = static_cast<real>(sqrt(from.atom_mass / to.atom_mass));
 
     /* Check if this global index exists on this rank
        and which local index it corresponds to */
     int to_index_local;
     if (get_local_index_from_global(to_index_local, to_index_global, cr))
     {
-        const auto& velocity = from.velocity_max_vector;
-
-        for (size_t i = 0; i < DIM; ++i)
-        {
-            state->v[to_index_local][i] = velocity[i] * mass_fac;
-        }
+        state->v[to_index_local] = mass_fac * from.exchange_velocity;
     }
 }
 
@@ -940,11 +981,23 @@ static void log_exchange(FILE                          *fp,
                          const double                   time,
                          const ExchangeCounter         &counter0,
                          const ExchangeCounter         &counter1,
-                         const RnemdEnergyExchangeAxis  direction)
+                         const RnemdEnergyExchangeAxis  energy_exchange_axis)
 {
-    const auto d = static_cast<size_t>(direction);
-    const auto p0 = counter0.atom_mass * counter0.velocity_max_vector[d];
-    const auto p1 = counter1.atom_mass * counter1.velocity_max_vector[d];
+    double p0 = 0.0,
+           p1 = 0.0;
+
+    switch (energy_exchange_axis)
+    {
+        case RnemdEnergyExchangeAxis::KineticEnergy:
+            p0 = counter0.max_value;
+            p1 = counter1.max_value;
+            break;
+        default:
+            const auto axis = rnemdAxis2Index(energy_exchange_axis);
+            p0 = counter0.atom_mass * counter0.exchange_velocity[axis];
+            p1 = counter1.atom_mass * counter1.exchange_velocity[axis];
+            break;
+    }
 
     fprintf(fp, "%12.5e %12.5e\n", time, p1 - p0);
 }

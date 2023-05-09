@@ -20,7 +20,7 @@ const char* enumValueToString(RnemdAreaDefAxis enumValue)
 const char* enumValueToString(RnemdEnergyExchangeAxis enumValue)
 {
     static constexpr gmx::EnumerationArray<RnemdEnergyExchangeAxis, const char*> energy_exchange_axis_names = {
-        "X", "Y", "Z"
+        "X", "Y", "Z", "Ekin"
     };
     return energy_exchange_axis_names[enumValue];
 }
