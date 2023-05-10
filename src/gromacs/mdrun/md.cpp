@@ -1424,7 +1424,10 @@ void gmx::LegacySimulator::do_md()
         /* #########   [PETTER] [REMD]   ######### */
         if (bRNEMD && do_per_step(step, rnemd.step))
         {
-            do_rnemd_exchange(state, mdAtoms->mdatoms(), step, t, rnemd, groups, cr);
+            if (step > 10000) // temporarily disable until after PME tuning is completed
+            {
+                do_rnemd_exchange(state, mdAtoms->mdatoms(), step, t, rnemd, groups, cr);
+            }
         }
 
         /* #########   START SECOND UPDATE STEP ################# */
