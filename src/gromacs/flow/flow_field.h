@@ -64,27 +64,14 @@ public:
     FlowField(const std::string& fnbase,
               const int          nx,
               const int          nz,
-              const matrix       box)
-    :fnbase { fnbase },
-     name { "_FULL_" }
-    {
-        _setup_grid_and_finalize(nx, nz, box);
-    }
+              const matrix       box);
 
     //! Constructor which adds `group_name` to `fnbase`
     FlowField(const std::string& fnbase_original,
               const std::string& group_name,
               const int          nx,
               const int          nz,
-              const matrix       box)
-    :name { group_name }
-    {
-        fnbase.append(fnbase_original);
-        fnbase.append("_");
-        fnbase.append(group_name);
-
-        _setup_grid_and_finalize(nx, nz, box);
-    }
+              const matrix       box);
 
     //! Fast method for getting the bin index for a 2D position
     //!
@@ -106,24 +93,7 @@ public:
     //! relatively easy to check.
     //!
     //! TODO: Write tests.
-    size_t index_from_pos_2d(const real x, const real z) const
-    {
-        auto ix = static_cast<int>(floor(x * inv_spacing[XX])) % shape[XX];
-        while (ix < 0)
-        {
-            ix += shape[XX];
-        }
-
-        auto iz = static_cast<int>(floor(z * inv_spacing[ZZ])) % shape[ZZ];
-        while (iz < 0)
-        {
-            iz += shape[ZZ];
-        }
-
-        // Grid is ZYX ordered and iy = 0, ny = 1, so:
-        // iz + iy * nz + ix * (ny * nz) = iz + ix * nz
-        return static_cast<size_t>(iz + ix * shape[ZZ]);
-    }
+    size_t index_from_pos_2d(const real x, const real z) const;
 
     //! Get the number of grid bins along x
     size_t nx() const { return shape[XX]; }
@@ -144,17 +114,7 @@ public:
 private:
     void _setup_grid_and_finalize(const int    nx,
                                   const int    nz,
-                                  const matrix box)
-    {
-        shape = gmx::IVec{nx, 1, nz};
-        spacing = gmx::RVec{
-            box[XX][XX] / static_cast<real>(nx),
-            box[YY][YY],
-            box[ZZ][ZZ] / static_cast<real>(nz)
-        };
-
-        _finalize();
-    }
+                                  const matrix box);
 };
 
 
@@ -187,36 +147,10 @@ struct FlowData {
              const size_t                    nz,
              const matrix                    box,
              const uint64_t                  step_collect,
-             const uint64_t                  step_output)
-    :bDoFlowCollection { true },
-     step_collect { step_collect },
-     step_output { step_output },
-     num_samples { 0 }
-     {
-        flow_field = FlowField(fnbase, nx, nz, box);
-        for (const auto& name : group_names)
-        {
-            group_data.push_back(FlowField(fnbase, name, nx, nz, box));
-        }
-     }
+             const uint64_t                  step_output);
 
     //! Zero all data for all collected flow fields and reset sample counter
-    void reset_data() {
-        for (auto& bin : flow_field.values)
-        {
-            bin.fill(0.0);
-        }
-
-        for (auto& group : group_data)
-        {
-            for (auto& bin : group.values)
-            {
-                bin.fill(0.0);
-            }
-        }
-
-        num_samples = 0;
-    }
+    void reset_data();
 };
 
 
