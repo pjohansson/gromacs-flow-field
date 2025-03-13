@@ -207,7 +207,7 @@ void CommandLine::addOption(const char* name, const std::string& value)
 
 void CommandLine::addOption(const char* name, const std::filesystem::path& value)
 {
-    addOption(name, value.string().c_str());
+    addOption(name, value.c_str());
 }
 
 void CommandLine::addOption(const char* name, int value)
