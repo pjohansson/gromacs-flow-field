@@ -39,6 +39,7 @@ gmx_add_gtest_executable(${exename}
         gmx_chi.cpp
         gmx_mindist.cpp
         gmx_rms.cpp
+        gmx_rmsdist.cpp
         gmx_rmsf.cpp
         gmx_traj.cpp
         )
