@@ -51,7 +51,9 @@
 #include "testutils/tprfilegenerator.h"
 #include "testutils/xvgtest.h"
 
-namespace gmx::test
+namespace gmx
+{
+namespace test
 {
 namespace
 {
@@ -77,4 +79,5 @@ TEST_F(GmxRmsfTest, BasicOutputWorks)
 }
 
 } // namespace
-} // namespace gmx::test
+} // namespace test
+} // namespace gmx
