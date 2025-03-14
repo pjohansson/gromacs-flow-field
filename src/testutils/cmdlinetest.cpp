@@ -194,31 +194,22 @@ void CommandLine::addOption(const char* name)
     append(name);
 }
 
-namespace
-{
-
-//! Helper function to avoid MSVC thinking there is recursive usage
-void addOptionInner(const char* name, const char* value)
+void CommandLine::addOption(const char* name, const char* value)
 {
     append(name);
     append(value);
 }
 
-} // namespace
-
-void CommandLine::addOption(const char* name, const char* value)
-{
-    addOptionInner(name, value);
-}
-
 void CommandLine::addOption(const char* name, const std::string& value)
 {
-    addOptionInner(name, value.c_str());
+    append(name);
+    append(value.c_str());
 }
 
 void CommandLine::addOption(const char* name, const std::filesystem::path& value)
 {
-    addOptionInner(name, value.c_str());
+    append(name);
+    append(value.c_str());
 }
 
 void CommandLine::addOption(const char* name, int value)
