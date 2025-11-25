@@ -173,6 +173,8 @@
 #include "gromacs/utility/logger.h"
 #include "gromacs/utility/real.h"
 #include "gromacs/utility/smalloc.h"
+// [FLOW_FIELD]
+#include "gromacs/flow/flow_field.h"
 
 #include "legacysimulator.h"
 #include "replicaexchange.h"
@@ -645,6 +647,28 @@ void gmx::LegacySimulator::do_md()
     t_vcm vcm(topGlobal_.groups, *ir, topGlobal_.natoms);
     reportComRemovalInfo(fpLog_, vcm);
 
+    // [FLOW_FIELD]
+    flow::FlowData flowcr; // flow field = disabled by default
+    if (ir->flowFieldOptions.doFlowFieldCollection)
+    {
+        flowcr = flow::init_flow_container(nFile_, fnm_, ir, groups, state_);
+
+        if (MAIN(cr_))
+        {
+            flow::print_flow_collection_information(flowcr, ir->delta_t, mdLog_);
+        }
+    }
+    else if (opt2bSet("-flow", nFile_, fnm_))
+    {
+        const auto message = gmx::formatString(
+                "mdrun received the `-flow` flag, but flow field collection "
+                "is not enabled. To enable, set `flow-field = yes` in the "
+                ".mdp file. We cannot enable it here, because the preprocessor "
+                "must verify that the flow collection parameters are valid.");
+
+        gmx_fatal(FARGS, "%s", message.c_str());
+    }
+
     int64_t step     = ir->init_step;
     int64_t step_rel = 0;
 
@@ -1094,7 +1118,18 @@ void gmx::LegacySimulator::do_md()
         }
         clear_mat(force_vir);
 
-        checkpointHandler->decideIfCheckpointingThisStep(bNS, bFirstStep, bLastStep);
+        // [FLOW_FIELD]
+        // Add condition for checkpointing only on flow map output step. This is because we do
+        // not save any data from the flow maps in a checkpoint, so if we resume from a checkpoint
+        // in between output steps, all data since the last output has been lost. By only
+        // checkpointing at flow output steps we do not throw away any data.
+        //
+        // Since checkpoint is only done at neighbourlist creation steps (bNS) we hitchhike on that.
+        //
+        // TODO: Should we assert that the output step is a multiple of nstlist?
+        const bool bFlowOutputThisStep =
+                flowcr.bDoFlowCollection ? do_per_step(step, flowcr.step_output) : true;
+        checkpointHandler->decideIfCheckpointingThisStep(bNS && bFlowOutputThisStep, bFirstStep, bLastStep);
 
         /* Determine the energy and pressure:
          * at nstcalcenergy steps and at energy output steps (set below).
@@ -2112,6 +2147,12 @@ void gmx::LegacySimulator::do_md()
 
         bFirstStep = FALSE;
         bInitStep  = FALSE;
+
+        // [FLOW_FIELD]
+        if (flowcr.bDoFlowCollection && do_per_step(step, flowcr.step_collect))
+        {
+            flow::flow_collect_or_output(flowcr, step, cr_, ir, md, state_, groups);
+        }
 
         /* #######  SET VARIABLES FOR NEXT ITERATION IF THEY STILL NEED IT ###### */
         /* With all integrators, except VV, we need to retain the pressure

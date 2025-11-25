@@ -44,6 +44,8 @@
 #include "gromacs/utility/listoflists.h"
 #include "gromacs/utility/real.h"
 #include "gromacs/utility/stringutil.h"
+// [FLOW_FIELD]
+#include "gromacs/flow/gmx_io.h"
 
 /* This file is completely threadsafe - keep it that way! */
 
@@ -1548,6 +1550,9 @@ static void do_inputrec(gmx::ISerializer* serializer, t_inputrec* ir, int file_v
         serializer->doRvec(&ir->deform[i]);
     }
     serializer->doReal(&ir->cos_accel);
+
+    // [FLOW_FIELD]
+    gmx::flow::do_tpx_flow_field(serializer, ir->flowFieldOptions);
 
     serializer->doInt(&ir->userint1);
     serializer->doInt(&ir->userint2);

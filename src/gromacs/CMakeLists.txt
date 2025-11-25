@@ -121,6 +121,7 @@ add_subdirectory(coordinateio)
 add_subdirectory(trajectoryanalysis)
 add_subdirectory(energyanalysis)
 add_subdirectory(tools)
+add_subdirectory(flow)
 
 get_property(PROPERTY_SOURCES GLOBAL PROPERTY GMX_LIBGROMACS_SOURCES)
 list(APPEND LIBGROMACS_SOURCES ${GMXLIB_SOURCES} ${MDLIB_SOURCES} ${PROPERTY_SOURCES})
@@ -409,6 +410,7 @@ target_link_libraries(libgromacs PRIVATE
                       $<BUILD_INTERFACE:ewald>
                       $<BUILD_INTERFACE:fft>
                       $<BUILD_INTERFACE:fileio>
+                      $<BUILD_INTERFACE:flow>
                       $<BUILD_INTERFACE:gmxana>
                       $<BUILD_INTERFACE:gmxlib>
                       $<BUILD_INTERFACE:gmxpreprocess>
