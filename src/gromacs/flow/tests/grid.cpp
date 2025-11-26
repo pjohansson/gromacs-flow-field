@@ -1,10 +1,9 @@
 #include "gromacs/flow/grid.h"
 
-#include <optional>
+#include <numeric>
 
 #include <gtest/gtest.h>
 
-#include "gromacs/math/vec.h"
 #include "gromacs/math/vectypes.h"
 
 namespace gmx
@@ -14,97 +13,65 @@ namespace test
 namespace
 {
 
-using namespace gmx;
 using namespace flow;
 
-TEST(FlowGridTest, InitializesWithInput)
+TEST(FlowGridTest, ShapeAndSpacingAresSet)
 {
-    const auto grid = Grid3d({ 1, 2, 3 }, { 4.0, 5.0, 6.0 }, {});
+    const IVec   shape   = { 1, 2, 3 };
+    const RVec   spacing = { 4.0, 5.0, 6.0 };
+    const Grid3d grid(shape, spacing);
 
-    EXPECT_EQ(1, grid.shape()[XX]);
-    EXPECT_EQ(2, grid.shape()[YY]);
-    EXPECT_EQ(3, grid.shape()[ZZ]);
-
-    EXPECT_FLOAT_EQ(4.0, grid.spacing()[XX]);
-    EXPECT_FLOAT_EQ(5.0, grid.spacing()[YY]);
-    EXPECT_FLOAT_EQ(6.0, grid.spacing()[ZZ]);
+    EXPECT_EQ(grid.shape(), shape);
+    EXPECT_EQ(grid.spacing(), spacing);
 }
 
-TEST(FlowGridTest, InitializesWithInverseBinSpacing)
+TEST(FlowGridTest, SetsCorrectBoxSize)
 {
-    const auto grid = Grid3d({ 1, 2, 3 }, { 4.0, 5.0, 6.0 }, {});
+    const IVec   shape   = { 1, 2, 3 };
+    const RVec   spacing = { 4.0, 5.0, 6.0 };
+    const Grid3d grid(shape, spacing);
 
-    EXPECT_FLOAT_EQ(1.0 / 4.0, grid.invSpacing()[XX]);
-    EXPECT_FLOAT_EQ(1.0 / 5.0, grid.invSpacing()[YY]);
-    EXPECT_FLOAT_EQ(1.0 / 6.0, grid.invSpacing()[ZZ]);
+    EXPECT_FLOAT_EQ(grid.box()[XX], shape[XX] * spacing[XX]);
+    EXPECT_FLOAT_EQ(grid.box()[YY], shape[YY] * spacing[YY]);
+    EXPECT_FLOAT_EQ(grid.box()[ZZ], shape[ZZ] * spacing[ZZ]);
 }
 
-TEST(FlowGridTest, InitializesWithCorrectGridSize)
+TEST(FlowGridTest, InitializesValuesToCorrectNumValues)
 {
-    const int nx = 3, ny = 5, nz = 7;
-
-    const auto grid = Grid3d({ nx, ny, nz }, { 4.0, 5.0, 6.0 }, {});
+    constexpr int nx = 3, ny = 5, nz = 7;
+    const Grid3d  grid({ nx, ny, nz }, { -1.0, -1.0, -1.0 });
     EXPECT_EQ(nx * ny * nz, grid.values().size());
 }
 
 TEST(FlowGridTest, GridShapeMustBePositiveInAllDirections)
 {
-    const RVec spacing = { 1.0, 1.0, 1.0 };
+    EXPECT_THROW(Grid3d({ 0, 1, 1 }, { 1.0, 1.0, 1.0 }), std::invalid_argument);
+    EXPECT_THROW(Grid3d({ 1, 0, 1 }, { 1.0, 1.0, 1.0 }), std::invalid_argument);
+    EXPECT_THROW(Grid3d({ 1, 1, 0 }, { 1.0, 1.0, 1.0 }), std::invalid_argument);
 
-    EXPECT_THROW(Grid3d({ 0, 1, 1 }, spacing, {}), std::invalid_argument);
-    EXPECT_THROW(Grid3d({ 1, 0, 1 }, spacing, {}), std::invalid_argument);
-    EXPECT_THROW(Grid3d({ 1, 1, 0 }, spacing, {}), std::invalid_argument);
-
-    EXPECT_THROW(Grid3d({ -1, 1, 1 }, spacing, {}), std::invalid_argument);
-    EXPECT_THROW(Grid3d({ 1, -1, 1 }, spacing, {}), std::invalid_argument);
-    EXPECT_THROW(Grid3d({ 1, 1, -1 }, spacing, {}), std::invalid_argument);
-}
-
-TEST(FlowGridTest, GridOriginIsZeroByDefault)
-{
-    const IVec shape   = { 3, 5, 7 };
-    const RVec spacing = { 11.0, 13.0, 17.0 };
-
-    const auto grid_default = Grid3d(shape, spacing, {});
-    EXPECT_FLOAT_EQ(grid_default.origin()[XX], 0.0);
-    EXPECT_FLOAT_EQ(grid_default.origin()[YY], 0.0);
-    EXPECT_FLOAT_EQ(grid_default.origin()[ZZ], 0.0);
-}
-
-TEST(FlowGridTest, GridOriginFromOptionalArgument)
-{
-    const IVec shape   = { 3, 5, 7 };
-    const RVec spacing = { 11.0, 13.0, 17.0 };
-
-    const real x0 = 19.0, y0 = 23.0, z0 = 29.0;
-
-    const auto grid = Grid3d(shape, spacing, RVec{ x0, y0, z0 });
-    EXPECT_FLOAT_EQ(grid.origin()[XX], x0);
-    EXPECT_FLOAT_EQ(grid.origin()[YY], y0);
-    EXPECT_FLOAT_EQ(grid.origin()[ZZ], z0);
+    EXPECT_THROW(Grid3d({ -1, 1, 1 }, { 1.0, 1.0, 1.0 }), std::invalid_argument);
+    EXPECT_THROW(Grid3d({ 1, -1, 1 }, { 1.0, 1.0, 1.0 }), std::invalid_argument);
+    EXPECT_THROW(Grid3d({ 1, 1, -1 }, { 1.0, 1.0, 1.0 }), std::invalid_argument);
 }
 
 TEST(FlowGridTest, BinVolumeCalc)
 {
-    const IVec shape   = { 3, 5, 7 };
-    const RVec spacing = { 11.0, 13.0, 17.0 };
+    const IVec   shape   = { 3, 5, 7 };
+    const RVec   spacing = { 11.0, 13.0, 17.0 };
+    const Grid3d grid(shape, spacing);
 
-    const auto grid = Grid3d(shape, spacing, {});
-
-    const auto bin_volume = spacing[XX] * spacing[YY] * spacing[ZZ];
-    EXPECT_FLOAT_EQ(bin_volume, grid.bin_volume());
+    const double binVolume = spacing[XX] * spacing[YY] * spacing[ZZ];
+    EXPECT_FLOAT_EQ(binVolume, grid.binVolume());
 }
 
 TEST(FlowGridTest, AssignSetsAllCellsToValue)
 {
-    const size_t nx = 3, ny = 5, nz = 7;
+    constexpr double value = 5.0;
 
-    auto grid = Grid3d({ nx, ny, nz }, { 4.0, 5.0, 6.0 }, {});
-
-    const double value = 5.0;
+    Grid3d grid({ 3, 5, 7 }, { -1.0, -1.0, -1.0 });
     grid.assign(value);
 
-    for (const auto& v : grid.values())
+    for (const double v : grid.values())
     {
         EXPECT_FLOAT_EQ(v, value);
     }
@@ -114,14 +81,9 @@ TEST(FlowGridTest, DataInArrayUsesOrderingZYX)
 {
     const size_t nx = 3, ny = 5, nz = 7;
 
-    auto grid = Grid3d({ nx, ny, nz }, { 4.0, 5.0, 6.0 }, {});
+    Grid3d grid({ nx, ny, nz }, { -1.0, -1.0, -1.0 });
 
-    double val = 0.0;
-    for (auto& v : grid.values())
-    {
-        v = val;
-        val += 1.0;
-    }
+    std::iota(grid.values().begin(), grid.values().end(), 0.0);
 
     // Z increases first
     EXPECT_FLOAT_EQ(0.0, grid.at(0, 0, 0));
@@ -135,346 +97,172 @@ TEST(FlowGridTest, DataInArrayUsesOrderingZYX)
     EXPECT_FLOAT_EQ(static_cast<double>(ny * nz), grid.at(1, 0, 0));
 }
 
-TEST(FlowGridTest, AtMethodCanGetValue)
-{
-    const size_t nx = 3, ny = 5, nz = 7;
-
-    auto grid = Grid3d({ nx, ny, nz }, { 4.0, 5.0, 6.0 }, {});
-    grid.assign(0.0);
-
-    grid.values().front() = 3.0;
-    EXPECT_FLOAT_EQ(3.0, grid.at(0, 0, 0));
-
-    grid.values().back() = 5.0;
-    EXPECT_FLOAT_EQ(5.0, grid.at(nx - 1, ny - 1, nz - 1));
-}
-
-TEST(FlowGridTest, AtMethodCanSetValue)
-{
-    const size_t nx = 3, ny = 5, nz = 7;
-
-    auto grid = Grid3d({ nx, ny, nz }, { 4.0, 5.0, 6.0 }, {});
-    grid.assign(0.0);
-
-    const double value = 15.0;
-    const size_t ix = 1, iy = 2, iz = 3;
-
-    grid.at(ix, iy, iz) = value;
-    EXPECT_FLOAT_EQ(value, grid.at(ix, iy, iz));
-}
-
-TEST(FlowGridTest, AtMethodCanGetReference)
-{
-    const size_t nx = 3, ny = 5, nz = 7;
-
-    auto grid = Grid3d({ nx, ny, nz }, { 4.0, 5.0, 6.0 }, {});
-    grid.assign(0.0);
-
-    const double value = 15.0;
-    const size_t ix = 1, iy = 2, iz = 3;
-
-    const double& ref   = grid.at(ix, iy, iz);
-    grid.at(ix, iy, iz) = value;
-
-    EXPECT_FLOAT_EQ(value, static_cast<double>(ref));
-}
-
-TEST(FlowGridTest, AtMethodCanSetValueToReference)
-{
-    const size_t nx = 3, ny = 5, nz = 7;
-
-    auto grid = Grid3d({ nx, ny, nz }, { 4.0, 5.0, 6.0 }, {});
-
-    const double value = 15.0;
-    const size_t ix = 1, iy = 2, iz = 3;
-
-    auto& ref = grid.at(ix, iy, iz);
-    ref       = value;
-
-    EXPECT_FLOAT_EQ(value, grid.at(ix, iy, iz));
-}
-
-TEST(FlowGridTest, AtMethodWithAutoReturnsValueNotReference)
-{
-    const size_t nx = 3, ny = 5, nz = 7;
-
-    auto grid = Grid3d({ nx, ny, nz }, { 4.0, 5.0, 6.0 }, {});
-
-    const size_t ix = 1, iy = 2, iz = 3;
-
-    const double value1 = 15.0;
-    const double value2 = 2.0 * value1;
-    const double value3 = 2.0 * value2;
-
-    grid.at(ix, iy, iz) = value1;
-    auto non_ref        = grid.at(ix, iy, iz);
-
-    grid.at(ix, iy, iz) = value2;
-    auto& ref           = grid.at(ix, iy, iz);
-
-    grid.at(ix, iy, iz) = value3;
-
-    EXPECT_FLOAT_EQ(value1, non_ref);
-    EXPECT_FLOAT_EQ(value3, ref);
-}
-
 TEST(FlowGridTest, OutOfBoundsAccessThrows)
 {
     const size_t nx = 3, ny = 5, nz = 7;
 
-    auto grid = Grid3d({ nx, ny, nz }, { 4.0, 5.0, 6.0 }, {});
+    Grid3d grid({ nx, ny, nz }, { -1.0, -1.0, -1.0 });
 
     EXPECT_THROW(grid.at(nx, 0, 0), std::out_of_range);
     EXPECT_THROW(grid.at(0, ny, 0), std::out_of_range);
     EXPECT_THROW(grid.at(0, 0, nz), std::out_of_range);
 }
 
-TEST(FlowGridTest, ContainsWithRawPointer)
+TEST(FlowGridTest, ContainsWorks)
 {
-    const size_t nx = 3, ny = 5, nz = 7;
+    const IVec shape{ 3, 5, 7 };
+    const RVec box{ 5.0, 7.0, 11.0 };
+    const RVec spacing{ box[XX] / static_cast<real>(shape[XX]),
+                        box[YY] / static_cast<real>(shape[YY]),
+                        box[ZZ] / static_cast<real>(shape[ZZ]) };
 
-    const real box_x = 5.0, box_y = 7.0, box_z = 11.0;
+    const Grid3d grid(shape, spacing);
 
-    const real x0 = 1.0, y0 = 2.0, z0 = 3.0;
-    const RVec origin{ x0, y0, z0 };
+    EXPECT_TRUE(grid.contains(RVec{ 0.0f, 0.0f, 0.0f }));
+    EXPECT_TRUE(grid.contains(box));
 
-    const real dx = box_x / static_cast<real>(nx), dy = box_y / static_cast<real>(ny),
-               dz = box_z / static_cast<real>(nz);
-
-    const auto grid = Grid3d({ nx, ny, nz }, { dx, dy, dz }, origin);
-
-    constexpr real d     = 1e-3;
-    const rvec     r_in1 = { x0 + d, y0 + d, z0 + d },
-               r_in2     = { x0 + box_x - d, y0 + box_y - d, z0 + box_z - d },
-               r_out1 = { x0 - d, y0 + d, z0 + d }, r_out2 = { x0 + d, y0 - d, z0 + d },
-               r_out3 = { x0 + d, y0 + d, z0 - d },
-               r_out4 = { x0 + box_x + d, y0 + box_y - d, z0 + box_z - d },
-               r_out5 = { x0 + box_x - d, y0 + box_y + d, z0 + box_z - d },
-               r_out6 = { x0 + box_x - d, y0 + box_y - d, z0 + box_z + d };
-
-    EXPECT_TRUE(grid.contains(r_in1));
-    EXPECT_TRUE(grid.contains(r_in2));
-
-    EXPECT_FALSE(grid.contains(r_out1));
-    EXPECT_FALSE(grid.contains(r_out2));
-    EXPECT_FALSE(grid.contains(r_out3));
-    EXPECT_FALSE(grid.contains(r_out4));
-    EXPECT_FALSE(grid.contains(r_out5));
-    EXPECT_FALSE(grid.contains(r_out6));
+    constexpr real eps = 1e-3; // small adjustment to move just out of box
+    EXPECT_FALSE(grid.contains(RVec{ -eps, 0.0, 0.0 }));
+    EXPECT_FALSE(grid.contains(RVec{ 0.0, -eps, 0.0 }));
+    EXPECT_FALSE(grid.contains(RVec{ 0.0, 0.0, -eps }));
+    EXPECT_FALSE(grid.contains(RVec{ box[XX] + eps, 0.0, 0.0 }));
+    EXPECT_FALSE(grid.contains(RVec{ 0.0, box[YY] + eps, 0.0 }));
+    EXPECT_FALSE(grid.contains(RVec{ 0.0, 0.0, box[ZZ] + eps }));
 }
 
-TEST(FlowGridTest, ContainsWithRVec)
+TEST(FlowGridTest, AtPositionWorks)
 {
-    const size_t nx = 3, ny = 5, nz = 7;
+    const IVec shape   = { 7, 11, 13 };
+    const RVec spacing = { 0.5, 1.0, 2.0 };
+    Grid3d     grid(shape, spacing);
+    std::iota(grid.values().begin(), grid.values().end(), 0.0);
 
-    const real box_x = 5.0, box_y = 7.0, box_z = 11.0;
+    // Grid positions to test: must lie within shape defined above
+    // (outside values checked in other test below)
+    const IVec gridPositionsToTest[] = {
+        // Edge cases: at corners
+        { 0, 0, 0 },
+        { 6, 0, 0 },
+        { 0, 10, 0 },
+        { 0, 0, 12 },
+        { 6, 10, 12 },
+        // Some internal positions
+        { 1, 1, 1 },
+        { 3, 5, 6 },
+        { 5, 0, 11 },
+        { 0, 9, 11 },
+        { 5, 9, 0 },
+        { 5, 9, 11 },
+    };
 
-    const real x0 = 1.0, y0 = 2.0, z0 = 3.0;
-    const RVec origin{ x0, y0, z0 };
-
-    const real dx = box_x / static_cast<real>(nx), dy = box_y / static_cast<real>(ny),
-               dz = box_z / static_cast<real>(nz);
-
-    const auto grid = Grid3d({ nx, ny, nz }, { dx, dy, dz }, origin);
-
-    constexpr real d     = 1e-3;
-    const RVec     r_in1 = { x0 + d, y0 + d, z0 + d },
-               r_in2     = { x0 + box_x - d, y0 + box_y - d, z0 + box_z - d },
-               r_out1 = { x0 - d, y0 + d, z0 + d }, r_out2 = { x0 + d, y0 - d, z0 + d },
-               r_out3 = { x0 + d, y0 + d, z0 - d },
-               r_out4 = { x0 + box_x + d, y0 + box_y - d, z0 + box_z - d },
-               r_out5 = { x0 + box_x - d, y0 + box_y + d, z0 + box_z - d },
-               r_out6 = { x0 + box_x - d, y0 + box_y - d, z0 + box_z + d };
-
-    EXPECT_TRUE(grid.contains(r_in1));
-    EXPECT_TRUE(grid.contains(r_in2));
-
-    EXPECT_FALSE(grid.contains(r_out1));
-    EXPECT_FALSE(grid.contains(r_out2));
-    EXPECT_FALSE(grid.contains(r_out3));
-    EXPECT_FALSE(grid.contains(r_out4));
-    EXPECT_FALSE(grid.contains(r_out5));
-    EXPECT_FALSE(grid.contains(r_out6));
-}
-
-TEST(FlowGridTest, AtPositionInsideGrid)
-{
-    const int nx = 4, ny = 4, nz = 4;
-
-    const real dx = 0.5, dy = 1.0, dz = 2.0;
-
-    auto grid = Grid3d({ nx, ny, nz }, { dx, dy, dz }, {});
-
-    double val = 0.0;
-    for (auto& v : grid.values())
+    for (const IVec& gridPosition : gridPositionsToTest)
     {
-        v = val;
-        val += 1.0;
+        // Get position in center of chosen bin
+        const RVec position = { (static_cast<real>(gridPosition[XX]) + 0.5f) * spacing[XX],
+                                (static_cast<real>(gridPosition[YY]) + 0.5f) * spacing[YY],
+                                (static_cast<real>(gridPosition[ZZ]) + 0.5f) * spacing[ZZ] };
+
+        const int index = gridPosition[ZZ] + (gridPosition[YY] * shape[ZZ])
+                          + (gridPosition[XX] * shape[YY] * shape[ZZ]);
+        EXPECT_EQ(grid.atPosition(position), grid.values()[index]);
     }
-
-    EXPECT_FLOAT_EQ(grid.at(0, 0, 0), grid.at_pos(RVec{ 0.25, 0.5, 1.0 }));
-    EXPECT_FLOAT_EQ(grid.at(1, 0, 0), grid.at_pos(RVec{ 0.75, 0.5, 1.0 }));
-    EXPECT_FLOAT_EQ(grid.at(2, 0, 0), grid.at_pos(RVec{ 1.25, 0.5, 1.0 }));
-    EXPECT_FLOAT_EQ(grid.at(3, 0, 0), grid.at_pos(RVec{ 1.75, 0.5, 1.0 }));
-
-    EXPECT_FLOAT_EQ(grid.at(2, 1, 0), grid.at_pos(RVec{ 1.25, 1.5, 1.0 }));
-    EXPECT_FLOAT_EQ(grid.at(2, 2, 0), grid.at_pos(RVec{ 1.25, 2.5, 1.0 }));
-    EXPECT_FLOAT_EQ(grid.at(2, 3, 0), grid.at_pos(RVec{ 1.25, 3.5, 1.0 }));
-
-    EXPECT_FLOAT_EQ(grid.at(2, 2, 1), grid.at_pos(RVec{ 1.25, 2.5, 3.0 }));
-    EXPECT_FLOAT_EQ(grid.at(2, 2, 2), grid.at_pos(RVec{ 1.25, 2.5, 5.0 }));
-    EXPECT_FLOAT_EQ(grid.at(2, 2, 3), grid.at_pos(RVec{ 1.25, 2.5, 7.0 }));
-}
-
-TEST(FlowGridTest, AtPositionOutsideGridSaturatesAtEdge)
-{
-    const int nx = 4, ny = 4, nz = 4;
-
-    const real dx = 0.5, dy = 1.0, dz = 2.0;
-
-    auto grid = Grid3d({ nx, ny, nz }, { dx, dy, dz }, {});
-
-    double val = 0.0;
-    for (auto& v : grid.values())
-    {
-        v = val;
-        val += 1.0;
-    }
-
-    EXPECT_FLOAT_EQ(grid.at(0, 0, 0), grid.at_pos(RVec{ -0.25, 0.5, 1.0 }));
-    EXPECT_FLOAT_EQ(grid.at(0, 0, 0), grid.at_pos(RVec{ 0.25, -0.5, 1.0 }));
-    EXPECT_FLOAT_EQ(grid.at(0, 0, 0), grid.at_pos(RVec{ 0.25, 0.5, -1.0 }));
-
-    EXPECT_FLOAT_EQ(grid.at(3, 0, 0), grid.at_pos(RVec{ 10.0, 0.5, 1.0 }));
-    EXPECT_FLOAT_EQ(grid.at(0, 3, 0), grid.at_pos(RVec{ 0.25, 10.0, 1.0 }));
-    EXPECT_FLOAT_EQ(grid.at(0, 0, 3), grid.at_pos(RVec{ 0.25, 0.5, 10.0 }));
-}
-
-TEST(FlowGridTest, AtPositionInsideGridWithShiftedOrigin)
-{
-    const int nx = 4, ny = 4, nz = 4;
-
-    const real dx = 0.5, dy = 1.0, dz = 2.0;
-
-    const real x0 = 10.0, y0 = 20.0, z0 = 30.0;
-
-    auto grid = Grid3d({ nx, ny, nz }, { dx, dy, dz }, RVec{ x0, y0, z0 });
-
-    double val = 0.0;
-    for (auto& v : grid.values())
-    {
-        v = val;
-        val += 1.0;
-    }
-
-    EXPECT_FLOAT_EQ(grid.at(0, 0, 0), grid.at_pos(RVec{ 10.25, 20.5, 31.0 }));
-    EXPECT_FLOAT_EQ(grid.at(1, 0, 0), grid.at_pos(RVec{ 10.75, 20.5, 31.0 }));
-    EXPECT_FLOAT_EQ(grid.at(2, 0, 0), grid.at_pos(RVec{ 11.25, 20.5, 31.0 }));
-    EXPECT_FLOAT_EQ(grid.at(3, 0, 0), grid.at_pos(RVec{ 11.75, 20.5, 31.0 }));
-
-    EXPECT_FLOAT_EQ(grid.at(2, 1, 0), grid.at_pos(RVec{ 11.25, 21.5, 31.0 }));
-    EXPECT_FLOAT_EQ(grid.at(2, 2, 0), grid.at_pos(RVec{ 11.25, 22.5, 31.0 }));
-    EXPECT_FLOAT_EQ(grid.at(2, 3, 0), grid.at_pos(RVec{ 11.25, 23.5, 31.0 }));
-
-    EXPECT_FLOAT_EQ(grid.at(2, 2, 1), grid.at_pos(RVec{ 11.25, 22.5, 33.0 }));
-    EXPECT_FLOAT_EQ(grid.at(2, 2, 2), grid.at_pos(RVec{ 11.25, 22.5, 35.0 }));
-    EXPECT_FLOAT_EQ(grid.at(2, 2, 3), grid.at_pos(RVec{ 11.25, 22.5, 37.0 }));
-}
-
-TEST(FlowGridTest, AtPositionWorksWithConst)
-{
-    const int nx = 4, ny = 4, nz = 4;
-
-    const real dx = 0.5, dy = 1.0, dz = 2.0;
-
-    auto grid1 = Grid3d({ nx, ny, nz }, { dx, dy, dz }, {});
-
-    double val = 0.0;
-    for (auto& v : grid1.values())
-    {
-        v = val;
-        val += 1.0;
-    }
-
-    const auto grid2 = grid1;
-
-    EXPECT_FLOAT_EQ(grid2.at(3, 0, 0), grid2.at_pos(RVec{ 1.75, 0.5, 1.0 }));
 }
 
 TEST(FlowGridTest, AtPositionPBCPutsPosInBox)
 {
-    const int nx = 7, ny = 11, nz = 13;
+    const IVec shape   = { 7, 11, 13 };
+    const RVec spacing = { 0.5, 1.0, 2.0 };
+    Grid3d     grid(shape, spacing);
+    std::iota(grid.values().begin(), grid.values().end(), 0.0);
 
-    const real dx = 0.5, dy = 1.0, dz = 2.0;
-
-    const real x0 = 10.0, y0 = 20.0, z0 = 30.0;
-
-    const real box_x = 40.0, box_y = 50.0, box_z = 60.0;
-
-    const matrix box = { { box_x, 0.0, 0.0 }, { 0.0, box_y, 0.0 }, { 0.0, 0.0, box_z } };
-
-    auto grid = Grid3d({ nx, ny, nz }, { dx, dy, dz }, RVec{ x0, y0, z0 });
-
-    double val = 0.0;
-    for (auto& v : grid.values())
-    {
-        v = val;
-        val += 1.0;
-    }
-
-    const real x = x0 + (1.0 * dx), y = y0 + (2.0 * dy), z = z0 + (1.0 * dz);
+    const RVec& box = grid.box();
+    const real  x0  = 1.0 * spacing[XX];
+    const real  y0  = 2.0 * spacing[YY];
+    const real  z0  = 3.0 * spacing[ZZ];
 
     // Along x
-    EXPECT_FLOAT_EQ(grid.at_pos(RVec{ x, y, z }), grid.at_pos_pbc(RVec{ x + box_x, y, z }, box));
-    EXPECT_FLOAT_EQ(grid.at_pos(RVec{ x, y, z }), grid.at_pos_pbc(RVec{ x - box_x, y, z }, box));
+    EXPECT_FLOAT_EQ(grid.atPosition(RVec{ x0, y0, z0 }), grid.atPosition(RVec{ x0 + box[XX], y0, z0 }));
+    EXPECT_FLOAT_EQ(grid.atPosition(RVec{ x0, y0, z0 }), grid.atPosition(RVec{ x0 - box[XX], y0, z0 }));
 
     // Along y
-    EXPECT_FLOAT_EQ(grid.at_pos(RVec{ x, y, z }), grid.at_pos_pbc(RVec{ x, y + box_y, z }, box));
-    EXPECT_FLOAT_EQ(grid.at_pos(RVec{ x, y, z }), grid.at_pos_pbc(RVec{ x, y - box_y, z }, box));
+    EXPECT_FLOAT_EQ(grid.atPosition(RVec{ x0, y0, z0 }), grid.atPosition(RVec{ x0, y0 + box[YY], z0 }));
+    EXPECT_FLOAT_EQ(grid.atPosition(RVec{ x0, y0, z0 }), grid.atPosition(RVec{ x0, y0 - box[YY], z0 }));
 
     // Along z
-    EXPECT_FLOAT_EQ(grid.at_pos(RVec{ x, y, z }), grid.at_pos_pbc(RVec{ x, y, z + box_z }, box));
-    EXPECT_FLOAT_EQ(grid.at_pos(RVec{ x, y, z }), grid.at_pos_pbc(RVec{ x, y, z - box_z }, box));
+    EXPECT_FLOAT_EQ(grid.atPosition(RVec{ x0, y0, z0 }), grid.atPosition(RVec{ x0, y0, z0 + box[ZZ] }));
+    EXPECT_FLOAT_EQ(grid.atPosition(RVec{ x0, y0, z0 }), grid.atPosition(RVec{ x0, y0, z0 - box[ZZ] }));
 
     // Along all dimensions
-    EXPECT_FLOAT_EQ(grid.at_pos(RVec{ x, y, z }),
-                    grid.at_pos_pbc(RVec{ x + box_x, y + box_y, z + box_z }, box));
-    EXPECT_FLOAT_EQ(grid.at_pos(RVec{ x, y, z }),
-                    grid.at_pos_pbc(RVec{ x - box_x, y - box_y, z - box_z }, box));
+    EXPECT_FLOAT_EQ(grid.atPosition(RVec{ x0, y0, z0 }),
+                    grid.atPosition(RVec{ x0 + box[XX], y0 + box[YY], z0 + box[ZZ] }));
+    EXPECT_FLOAT_EQ(grid.atPosition(RVec{ x0, y0, z0 }),
+                    grid.atPosition(RVec{ x0 - box[XX], y0 - box[YY], z0 - box[ZZ] }));
 
-    // Along all dimensions, multiple shifts
+    // // Along all dimensions, multiple shifts
     EXPECT_FLOAT_EQ(
-            grid.at_pos(RVec{ x, y, z }),
-            grid.at_pos_pbc(RVec{ x + (3.0f * box_x), y + (5.0f * box_y), z + (7.0f * box_z) }, box));
+            grid.atPosition(RVec{ x0, y0, z0 }),
+            grid.atPosition(RVec{ x0 + (3.0f * box[XX]), y0 + (5.0f * box[YY]), z0 + (7.0f * box[ZZ]) }));
     EXPECT_FLOAT_EQ(
-            grid.at_pos(RVec{ x, y, z }),
-            grid.at_pos_pbc(RVec{ x - (7.0f * box_x), y - (3.0f * box_y), z - (5.0f * box_z) }, box));
+            grid.atPosition(RVec{ x0, y0, z0 }),
+            grid.atPosition(RVec{ x0 - (7.0f * box[XX]), y0 - (3.0f * box[YY]), z0 - (5.0f * box[ZZ]) }));
 }
 
-TEST(FlowGridTest, AtPositionWithPBCWorksWithConst)
+TEST(FlowGridTest, IndexFromPositionWorks)
 {
-    const int nx = 4, ny = 4, nz = 4;
+    const IVec shape   = { 7, 11, 13 };
+    const RVec spacing = { 0.5, 1.0, 2.0 };
+    Grid3d     grid(shape, spacing);
+    std::iota(grid.values().begin(), grid.values().end(), 0.0);
 
-    const real dx = 0.5, dy = 1.0, dz = 2.0;
+    // Grid positions to test: must lie within shape defined above
+    // (outside values checked in other test below)
+    const IVec gridPositionsToTest[] = {
+        // Edge cases: at corners
+        { 0, 0, 0 },
+        { 6, 0, 0 },
+        { 0, 10, 0 },
+        { 0, 0, 12 },
+        { 6, 10, 12 },
+        // Some internal positions
+        { 1, 1, 1 },
+        { 3, 5, 6 },
+        { 5, 0, 11 },
+        { 0, 9, 11 },
+        { 5, 9, 0 },
+        { 5, 9, 11 },
+        // Some outside positions (PBC adjusted to put inside box)
+        { -1, -1, -1 },
+        { 57, 103, 85 },
+        { -57, 103, 85 },
+    };
 
-    const real box_x = 40.0, box_y = 50.0, box_z = 60.0;
-
-    const matrix box = { { box_x, 0.0, 0.0 }, { 0.0, box_y, 0.0 }, { 0.0, 0.0, box_z } };
-
-    auto grid1 = Grid3d({ nx, ny, nz }, { dx, dy, dz }, {});
-
-    double val = 0.0;
-    for (auto& v : grid1.values())
+    for (const IVec& gridPosition : gridPositionsToTest)
     {
-        v = val;
-        val += 1.0;
+        // Get position in center of chosen bin
+        const RVec position = { (static_cast<real>(gridPosition[XX]) + 0.5f) * spacing[XX],
+                                (static_cast<real>(gridPosition[YY]) + 0.5f) * spacing[YY],
+                                (static_cast<real>(gridPosition[ZZ]) + 0.5f) * spacing[ZZ] };
+
+        int ix = gridPosition[XX] % shape[XX];
+        int iy = gridPosition[YY] % shape[YY];
+        int iz = gridPosition[ZZ] % shape[ZZ];
+
+        while (ix < 0)
+        {
+            ix += shape[XX];
+        }
+        while (iy < 0)
+        {
+            iy += shape[YY];
+        }
+        while (iz < 0)
+        {
+            iz += shape[ZZ];
+        }
+
+        const int index = iz + (iy * shape[ZZ]) + (ix * shape[YY] * shape[ZZ]);
+        EXPECT_EQ(grid.indexFromPosition(position), index);
     }
-
-    const auto grid2 = grid1;
-
-    EXPECT_FLOAT_EQ(
-            grid2.at(2, 1, 1),
-            grid2.at_pos_pbc(RVec{ 1.25f + (3.0f * box_x), 1.5f - (2.0f * box_y), 3.0f - box_z }, box));
 }
 
 } // namespace

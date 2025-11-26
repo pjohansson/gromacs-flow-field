@@ -3,6 +3,11 @@
 #include <cmath>
 #include <cstdio>
 
+#include <stdexcept>
+
+#include "gromacs/utility/cstringutil.h"
+#include "gromacs/utility/stringutil.h"
+
 #include "flow_field.h"
 
 namespace gmx
@@ -11,118 +16,114 @@ namespace flow
 {
 
 template<typename T>
-const T& flow::Grid3d<T>::at(const int ix, const int iy, const int iz) const
+Grid3d<T>::Grid3d(const IVec& shape, const RVec& spacing) : shape_{ shape }, spacing_{ spacing }
+{
+    if ((shape_[XX] < 1) || (shape_[YY] < 1) || (shape_[ZZ] < 1))
+    {
+        throw std::invalid_argument(formatString(
+                "Grid3d::Grid3d: shape (%d, %d, %d) must be positive along all directions",
+                shape_[XX],
+                shape_[YY],
+                shape_[ZZ]));
+    }
+
+    for (int i = 0; i < DIM; ++i)
+    {
+        box_[i]        = static_cast<real>(shape_[i]) * spacing_[i];
+        invSpacing_[i] = 1.0 / spacing_[i];
+    }
+
+    values_.resize(shape_[XX] * shape_[YY] * shape_[ZZ]);
+}
+
+template<typename T>
+void Grid3d<T>::assign(const T& value)
+{
+    for (auto& v : values_)
+    {
+        v = value;
+    }
+}
+
+template<typename T>
+const T& Grid3d<T>::at(const int ix, const int iy, const int iz) const
 {
     return values_.at(gridPositionToIndex(
             static_cast<size_t>(ix), static_cast<size_t>(iy), static_cast<size_t>(iz)));
 }
 
 template<typename T>
-T& flow::Grid3d<T>::at(const int ix, const int iy, const int iz)
+T& Grid3d<T>::at(const int ix, const int iy, const int iz)
 {
-    return values_.at(gridPositionToIndex(
-            static_cast<size_t>(ix), static_cast<size_t>(iy), static_cast<size_t>(iz)));
-}
-
-static int get_pos_in_grid_saturated(const size_t dim, const rvec r, const ivec shape, const rvec origin, const rvec spacing)
-{
-    auto i = static_cast<int>((r[dim] - origin[dim]) / spacing[dim]);
-
-    if (i < 0)
-    {
-        i = 0;
-    }
-
-    if (i >= shape[dim])
-    {
-        i = shape[dim] - 1;
-    }
-
-    return i;
+    return const_cast<T&>(const_cast<const Grid3d*>(this)->at(ix, iy, iz));
 }
 
 template<typename T>
-const T& flow::Grid3d<T>::at_pos(const rvec r) const
+const T& Grid3d<T>::atPosition(const rvec position) const
 {
-    const auto ix = get_pos_in_grid_saturated(XX, r, shape_, origin_, spacing_);
-    const auto iy = get_pos_in_grid_saturated(YY, r, shape_, origin_, spacing_);
-    const auto iz = get_pos_in_grid_saturated(ZZ, r, shape_, origin_, spacing_);
 
-    return at(ix, iy, iz);
+    return values_[indexFromPosition(position)];
 }
 
 template<typename T>
-T& flow::Grid3d<T>::at_pos(const rvec r)
+T& Grid3d<T>::atPosition(const rvec position)
 {
-    const auto ix = get_pos_in_grid_saturated(XX, r, shape_, origin_, spacing_);
-    const auto iy = get_pos_in_grid_saturated(YY, r, shape_, origin_, spacing_);
-    const auto iz = get_pos_in_grid_saturated(ZZ, r, shape_, origin_, spacing_);
-
-    return at(ix, iy, iz);
+    return values_[indexFromPosition(position)];
 }
 
 template<typename T>
-T& flow::Grid3d<T>::at_pos_pbc(const rvec r0, const matrix box)
+size_t Grid3d<T>::indexFromPosition(const rvec position) const
 {
-    rvec r_pbc = { std::fmod(r0[XX], box[XX][XX]),
-                   std::fmod(r0[YY], box[YY][YY]),
-                   std::fmod(r0[ZZ], box[ZZ][ZZ]) };
+    IVec gridPosition = { static_cast<int>(std::floor(position[XX] * invSpacing_[XX])) % shape_[XX],
+                          static_cast<int>(std::floor(position[YY] * invSpacing_[YY])) % shape_[YY],
+                          static_cast<int>(std::floor(position[ZZ] * invSpacing_[ZZ])) % shape_[ZZ] };
 
-    for (size_t i = 0; i < DIM; ++i)
+    for (int i = 0; i < DIM; ++i)
     {
-        while (r_pbc[i] < 0.0)
+        while (gridPosition[i] < 0)
         {
-            r_pbc[i] += box[i][i];
+            gridPosition[i] += shape_[i];
         }
     }
 
-    const auto ix = get_pos_in_grid_saturated(XX, r_pbc, shape_, origin_, spacing_);
-    const auto iy = get_pos_in_grid_saturated(YY, r_pbc, shape_, origin_, spacing_);
-    const auto iz = get_pos_in_grid_saturated(ZZ, r_pbc, shape_, origin_, spacing_);
-
-    return at(ix, iy, iz);
+    return gridPosition[ZZ] + (gridPosition[YY] * shape_[ZZ])
+           + (gridPosition[XX] * shape_[YY] * shape_[ZZ]);
 }
 
 template<typename T>
-const T& flow::Grid3d<T>::at_pos_pbc(const rvec r0, const matrix box) const
+bool Grid3d<T>::contains(const rvec r) const
 {
-    rvec r_pbc = { std::fmod(r0[XX], box[XX][XX]),
-                   std::fmod(r0[YY], box[YY][YY]),
-                   std::fmod(r0[ZZ], box[ZZ][ZZ]) };
-
-    for (size_t i = 0; i < DIM; ++i)
-    {
-        while (r_pbc[i] < 0.0)
-        {
-            r_pbc[i] += box[i][i];
-        }
-    }
-
-    const auto ix = get_pos_in_grid_saturated(XX, r_pbc, shape_, origin_, spacing_);
-    const auto iy = get_pos_in_grid_saturated(YY, r_pbc, shape_, origin_, spacing_);
-    const auto iz = get_pos_in_grid_saturated(ZZ, r_pbc, shape_, origin_, spacing_);
-
-    return at(ix, iy, iz);
+    return (r[XX] >= 0.0 && r[XX] <= box_[XX] && r[YY] >= 0.0 && r[YY] <= box_[YY] && r[ZZ] >= 0.0
+            && r[ZZ] <= box_[ZZ]);
 }
 
+template<typename T>
+size_t Grid3d<T>::gridPositionToIndex(const size_t ix, const size_t iy, const size_t iz) const
+{
+    const auto nx = static_cast<size_t>(shape_[XX]);
+    const auto ny = static_cast<size_t>(shape_[YY]);
+    const auto nz = static_cast<size_t>(shape_[ZZ]);
 
-// Since this file does not know which types `T` to generate
-// code for, we need to instantiate the structure for all
-// needed types during compilation.
-//
-// Pros: All code is generated once and linked to. If this
-//       code was inlined into the class definition (in grid.h)
-//       each created object would have a copy of the code,
-//       increasing their size.
-//
-// Cons: We need to know all the types in advance and instantiate
-//       them as below.
-//
-// Thoughts: After finishing development, consider moving to
-//           inlined methods?
-//
-// Also, this would not be an issue in Rust. God bless
-// the borrow checker.
+    if ((ix >= nx) || (iy >= ny) || (iz >= nz))
+    {
+        char buf[STRLEN];
+        snprintf(buf,
+                 STRLEN,
+                 "Grid3d::_index: position (%lu, %lu, %lu) not within "
+                 "grid of size (%lu, %lu, %lu)",
+                 ix,
+                 iy,
+                 iz,
+                 nx,
+                 ny,
+                 nz);
+
+        throw std::out_of_range(buf);
+    }
+
+    return iz + (iy * nz) + (ix * ny * nz);
+}
+
 template class Grid3d<float>;
 template class Grid3d<double>;
 template class Grid3d<Bin>;

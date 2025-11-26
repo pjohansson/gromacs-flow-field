@@ -87,7 +87,7 @@ void FlowField::_setup_grid_and_finalize(const int nx, const int nz, const matri
     //                      box[YY][YY],
     //                      box[ZZ][ZZ] / static_cast<real>(nz) };
 
-    _finalize();
+    // _finalize();
 }
 
 
@@ -108,7 +108,7 @@ FlowData::FlowData(const std::string&              fnbase,
     step_output{ step_output },
     num_samples{ 0 }
 {
-    // flow_field = FlowField(fnbase, nx, nz, box);
+    flow_field = FlowField(fnbase, nx, nz, box);
 
     for (const auto& name : group_names)
     {
@@ -271,7 +271,7 @@ static void average_flow_field_bin(Bin& bin, const double num_samples, const dou
 static void average_flow_field(FlowField& flow_field, const size_t num_samples_int)
 {
     const auto num_samples = static_cast<double>(num_samples_int);
-    const auto bin_volume  = static_cast<double>(flow_field.bin_volume());
+    const auto bin_volume  = static_cast<double>(flow_field.binVolume());
 
     for (auto& bin : flow_field.values())
     {
