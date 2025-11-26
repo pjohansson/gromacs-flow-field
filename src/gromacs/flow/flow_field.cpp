@@ -61,31 +61,31 @@ FlowField::FlowField(const std::string& fnbase_original,
 
 size_t FlowField::index_from_pos_2d(const real x, const real z) const
 {
-    auto ix = static_cast<int>(floor(x * inv_spacing[XX])) % shape[XX];
+    auto ix = static_cast<int>(floor(x * invSpacing()[XX])) % shape()[XX];
     while (ix < 0)
     {
-        ix += shape[XX];
+        ix += shape()[XX];
     }
 
-    auto iz = static_cast<int>(floor(z * inv_spacing[ZZ])) % shape[ZZ];
+    auto iz = static_cast<int>(floor(z * invSpacing()[ZZ])) % shape()[ZZ];
     while (iz < 0)
     {
-        iz += shape[ZZ];
+        iz += shape()[ZZ];
     }
 
     // grid is zyx ordered and iy = 0, ny = 1, so:
     // iz + iy * nz + ix * (ny * nz) = iz + ix * nz
-    return static_cast<size_t>(iz + (ix * shape[ZZ]));
+    return static_cast<size_t>(iz + (ix * shape()[ZZ]));
 }
 
 
 void FlowField::_setup_grid_and_finalize(const int nx, const int nz, const matrix box)
 {
-    shape = gmx::IVec{ nx, 1, nz };
+    // shape_ = gmx::IVec{ nx, 1, nz };
 
-    spacing = gmx::RVec{ box[XX][XX] / static_cast<real>(nx),
-                         box[YY][YY],
-                         box[ZZ][ZZ] / static_cast<real>(nz) };
+    // spacing_ = gmx::RVec{ box[XX][XX] / static_cast<real>(nx),
+    //                      box[YY][YY],
+    //                      box[ZZ][ZZ] / static_cast<real>(nz) };
 
     _finalize();
 }
@@ -102,9 +102,13 @@ FlowData::FlowData(const std::string&              fnbase,
                    const matrix                    box,
                    const uint64_t                  step_collect,
                    const uint64_t                  step_output) :
-    bDoFlowCollection{ true }, step_collect{ step_collect }, step_output{ step_output }, num_samples{ 0 }
+    bDoFlowCollection{ true },
+    flow_field{ FlowField(fnbase, nx, nz, box) },
+    step_collect{ step_collect },
+    step_output{ step_output },
+    num_samples{ 0 }
 {
-    flow_field = FlowField(fnbase, nx, nz, box);
+    // flow_field = FlowField(fnbase, nx, nz, box);
 
     for (const auto& name : group_names)
     {
@@ -115,14 +119,14 @@ FlowData::FlowData(const std::string&              fnbase,
 
 void FlowData::reset_data()
 {
-    for (auto& bin : flow_field.values)
+    for (auto& bin : flow_field.values())
     {
         bin.fill(0.0);
     }
 
     for (auto& group : group_data)
     {
-        for (auto& bin : group.values)
+        for (auto& bin : group.values())
         {
             bin.fill(0.0);
         }
@@ -207,7 +211,7 @@ static void collect_flow_data(flow::FlowData&         flowcr,
 
             const size_t bin_index = flowcr.flow_field.index_from_pos_2d(r[XX], r[ZZ]);
 
-            auto& bin = flowcr.flow_field.values.at(bin_index);
+            auto& bin = flowcr.flow_field.values().at(bin_index);
             add_flow_to_bin(bin, v, mass);
 
             // If we are collecting flow field data for multiple groups, we add
@@ -215,7 +219,7 @@ static void collect_flow_data(flow::FlowData&         flowcr,
             // collection of flow fields.
             if (index_group < static_cast<int>(flowcr.group_data.size()))
             {
-                auto& bin = flowcr.group_data.at(index_group).values.at(bin_index);
+                auto& bin = flowcr.group_data.at(index_group).values().at(bin_index);
                 add_flow_to_bin(bin, v, mass);
             }
         }
@@ -269,7 +273,7 @@ static void average_flow_field(FlowField& flow_field, const size_t num_samples_i
     const auto num_samples = static_cast<double>(num_samples_int);
     const auto bin_volume  = static_cast<double>(flow_field.bin_volume());
 
-    for (auto& bin : flow_field.values)
+    for (auto& bin : flow_field.values())
     {
         average_flow_field_bin(bin, num_samples, bin_volume);
     }
@@ -285,7 +289,7 @@ struct Output
 {
     //! Constructor which copies metadata from given `flow_field`
     Output(const FlowField& flow_field) :
-        fnbase{ flow_field.fnbase }, shape{ flow_field.shape }, spacing{ flow_field.spacing }
+        fnbase{ flow_field.fnbase }, shape{ flow_field.shape() }, spacing{ flow_field.spacing() }
     {
         const auto num_bins = shape[XX] * shape[YY] * shape[ZZ];
 
@@ -535,9 +539,9 @@ static void mpi_collect_single_flow_field(FlowField& flow_field, const t_commrec
     GMX_RELEASE_ASSERT(sizeof(double) * FlowVar::NumVars == sizeof(Bin),
                        "std::vector<flow::Bin> is not contiguous, MPI_Reduce will fail");
 
-    MPI_Reduce(MAIN(cr) ? MPI_IN_PLACE : flow_field.values.data(),
-               MAIN(cr) ? flow_field.values.data() : nullptr,
-               FlowVar::NumVars * flow_field.values.size(), // total number of doubles stored in vector
+    MPI_Reduce(MAIN(cr) ? MPI_IN_PLACE : flow_field.values().data(),
+               MAIN(cr) ? flow_field.values().data() : nullptr,
+               FlowVar::NumVars * flow_field.values().size(), // total number of doubles stored in vector
                MPI_DOUBLE,
                MPI_SUM,
                MAINRANK(cr),

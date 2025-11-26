@@ -46,6 +46,6 @@ target_link_libraries(flow INTERFACE
                       utility
                       )
 
-# if (BUILD_TESTING)
-#     add_subdirectory(tests)
-# endif()
+if (BUILD_TESTING)
+    add_subdirectory(tests)
+endif()

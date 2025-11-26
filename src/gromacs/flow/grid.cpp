@@ -13,13 +13,15 @@ namespace flow
 template<typename T>
 const T& flow::Grid3d<T>::at(const int ix, const int iy, const int iz) const
 {
-    return values.at(_index(static_cast<size_t>(ix), static_cast<size_t>(iy), static_cast<size_t>(iz)));
+    return values_.at(gridPositionToIndex(
+            static_cast<size_t>(ix), static_cast<size_t>(iy), static_cast<size_t>(iz)));
 }
 
 template<typename T>
 T& flow::Grid3d<T>::at(const int ix, const int iy, const int iz)
 {
-    return values.at(_index(static_cast<size_t>(ix), static_cast<size_t>(iy), static_cast<size_t>(iz)));
+    return values_.at(gridPositionToIndex(
+            static_cast<size_t>(ix), static_cast<size_t>(iy), static_cast<size_t>(iz)));
 }
 
 static int get_pos_in_grid_saturated(const size_t dim, const rvec r, const ivec shape, const rvec origin, const rvec spacing)
@@ -42,9 +44,9 @@ static int get_pos_in_grid_saturated(const size_t dim, const rvec r, const ivec 
 template<typename T>
 const T& flow::Grid3d<T>::at_pos(const rvec r) const
 {
-    const auto ix = get_pos_in_grid_saturated(XX, r, shape, origin, spacing);
-    const auto iy = get_pos_in_grid_saturated(YY, r, shape, origin, spacing);
-    const auto iz = get_pos_in_grid_saturated(ZZ, r, shape, origin, spacing);
+    const auto ix = get_pos_in_grid_saturated(XX, r, shape_, origin_, spacing_);
+    const auto iy = get_pos_in_grid_saturated(YY, r, shape_, origin_, spacing_);
+    const auto iz = get_pos_in_grid_saturated(ZZ, r, shape_, origin_, spacing_);
 
     return at(ix, iy, iz);
 }
@@ -52,9 +54,9 @@ const T& flow::Grid3d<T>::at_pos(const rvec r) const
 template<typename T>
 T& flow::Grid3d<T>::at_pos(const rvec r)
 {
-    const auto ix = get_pos_in_grid_saturated(XX, r, shape, origin, spacing);
-    const auto iy = get_pos_in_grid_saturated(YY, r, shape, origin, spacing);
-    const auto iz = get_pos_in_grid_saturated(ZZ, r, shape, origin, spacing);
+    const auto ix = get_pos_in_grid_saturated(XX, r, shape_, origin_, spacing_);
+    const auto iy = get_pos_in_grid_saturated(YY, r, shape_, origin_, spacing_);
+    const auto iz = get_pos_in_grid_saturated(ZZ, r, shape_, origin_, spacing_);
 
     return at(ix, iy, iz);
 }
@@ -74,9 +76,9 @@ T& flow::Grid3d<T>::at_pos_pbc(const rvec r0, const matrix box)
         }
     }
 
-    const auto ix = get_pos_in_grid_saturated(XX, r_pbc, shape, origin, spacing);
-    const auto iy = get_pos_in_grid_saturated(YY, r_pbc, shape, origin, spacing);
-    const auto iz = get_pos_in_grid_saturated(ZZ, r_pbc, shape, origin, spacing);
+    const auto ix = get_pos_in_grid_saturated(XX, r_pbc, shape_, origin_, spacing_);
+    const auto iy = get_pos_in_grid_saturated(YY, r_pbc, shape_, origin_, spacing_);
+    const auto iz = get_pos_in_grid_saturated(ZZ, r_pbc, shape_, origin_, spacing_);
 
     return at(ix, iy, iz);
 }
@@ -96,9 +98,9 @@ const T& flow::Grid3d<T>::at_pos_pbc(const rvec r0, const matrix box) const
         }
     }
 
-    const auto ix = get_pos_in_grid_saturated(XX, r_pbc, shape, origin, spacing);
-    const auto iy = get_pos_in_grid_saturated(YY, r_pbc, shape, origin, spacing);
-    const auto iz = get_pos_in_grid_saturated(ZZ, r_pbc, shape, origin, spacing);
+    const auto ix = get_pos_in_grid_saturated(XX, r_pbc, shape_, origin_, spacing_);
+    const auto iy = get_pos_in_grid_saturated(YY, r_pbc, shape_, origin_, spacing_);
+    const auto iz = get_pos_in_grid_saturated(ZZ, r_pbc, shape_, origin_, spacing_);
 
     return at(ix, iy, iz);
 }

@@ -96,14 +96,14 @@ public:
     size_t index_from_pos_2d(real x, real z) const;
 
     //! Get the number of grid bins along x
-    size_t nx() const { return shape[XX]; }
+    size_t nx() const { return shape()[XX]; }
     //! Get the number of grid bins along z
-    size_t nz() const { return shape[ZZ]; }
+    size_t nz() const { return shape()[ZZ]; }
 
     //! Get the grid bin spacing along x
-    real dx() const { return spacing[XX]; }
+    real dx() const { return spacing()[XX]; }
     //! Get the grid bin spacing along z
-    real dz() const { return spacing[ZZ]; }
+    real dz() const { return spacing()[ZZ]; }
 
     //! Base for output file names (`fnbase_00001.dat`, ...)
     std::string fnbase;

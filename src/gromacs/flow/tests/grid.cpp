@@ -21,22 +21,22 @@ TEST(FlowGridTest, InitializesWithInput)
 {
     const auto grid = Grid3d({ 1, 2, 3 }, { 4.0, 5.0, 6.0 }, {});
 
-    EXPECT_EQ(1, grid.shape[XX]);
-    EXPECT_EQ(2, grid.shape[YY]);
-    EXPECT_EQ(3, grid.shape[ZZ]);
+    EXPECT_EQ(1, grid.shape()[XX]);
+    EXPECT_EQ(2, grid.shape()[YY]);
+    EXPECT_EQ(3, grid.shape()[ZZ]);
 
-    EXPECT_FLOAT_EQ(4.0, grid.spacing[XX]);
-    EXPECT_FLOAT_EQ(5.0, grid.spacing[YY]);
-    EXPECT_FLOAT_EQ(6.0, grid.spacing[ZZ]);
+    EXPECT_FLOAT_EQ(4.0, grid.spacing()[XX]);
+    EXPECT_FLOAT_EQ(5.0, grid.spacing()[YY]);
+    EXPECT_FLOAT_EQ(6.0, grid.spacing()[ZZ]);
 }
 
 TEST(FlowGridTest, InitializesWithInverseBinSpacing)
 {
     const auto grid = Grid3d({ 1, 2, 3 }, { 4.0, 5.0, 6.0 }, {});
 
-    EXPECT_FLOAT_EQ(1.0 / 4.0, grid.inv_spacing[XX]);
-    EXPECT_FLOAT_EQ(1.0 / 5.0, grid.inv_spacing[YY]);
-    EXPECT_FLOAT_EQ(1.0 / 6.0, grid.inv_spacing[ZZ]);
+    EXPECT_FLOAT_EQ(1.0 / 4.0, grid.invSpacing()[XX]);
+    EXPECT_FLOAT_EQ(1.0 / 5.0, grid.invSpacing()[YY]);
+    EXPECT_FLOAT_EQ(1.0 / 6.0, grid.invSpacing()[ZZ]);
 }
 
 TEST(FlowGridTest, InitializesWithCorrectGridSize)
@@ -44,7 +44,7 @@ TEST(FlowGridTest, InitializesWithCorrectGridSize)
     const int nx = 3, ny = 5, nz = 7;
 
     const auto grid = Grid3d({ nx, ny, nz }, { 4.0, 5.0, 6.0 }, {});
-    EXPECT_EQ(nx * ny * nz, grid.values.size());
+    EXPECT_EQ(nx * ny * nz, grid.values().size());
 }
 
 TEST(FlowGridTest, GridShapeMustBePositiveInAllDirections)
@@ -66,9 +66,9 @@ TEST(FlowGridTest, GridOriginIsZeroByDefault)
     const RVec spacing = { 11.0, 13.0, 17.0 };
 
     const auto grid_default = Grid3d(shape, spacing, {});
-    EXPECT_FLOAT_EQ(grid_default.origin[XX], 0.0);
-    EXPECT_FLOAT_EQ(grid_default.origin[YY], 0.0);
-    EXPECT_FLOAT_EQ(grid_default.origin[ZZ], 0.0);
+    EXPECT_FLOAT_EQ(grid_default.origin()[XX], 0.0);
+    EXPECT_FLOAT_EQ(grid_default.origin()[YY], 0.0);
+    EXPECT_FLOAT_EQ(grid_default.origin()[ZZ], 0.0);
 }
 
 TEST(FlowGridTest, GridOriginFromOptionalArgument)
@@ -79,9 +79,9 @@ TEST(FlowGridTest, GridOriginFromOptionalArgument)
     const real x0 = 19.0, y0 = 23.0, z0 = 29.0;
 
     const auto grid = Grid3d(shape, spacing, RVec{ x0, y0, z0 });
-    EXPECT_FLOAT_EQ(grid.origin[XX], x0);
-    EXPECT_FLOAT_EQ(grid.origin[YY], y0);
-    EXPECT_FLOAT_EQ(grid.origin[ZZ], z0);
+    EXPECT_FLOAT_EQ(grid.origin()[XX], x0);
+    EXPECT_FLOAT_EQ(grid.origin()[YY], y0);
+    EXPECT_FLOAT_EQ(grid.origin()[ZZ], z0);
 }
 
 TEST(FlowGridTest, BinVolumeCalc)
@@ -104,7 +104,7 @@ TEST(FlowGridTest, AssignSetsAllCellsToValue)
     const double value = 5.0;
     grid.assign(value);
 
-    for (const auto& v : grid.values)
+    for (const auto& v : grid.values())
     {
         EXPECT_FLOAT_EQ(v, value);
     }
@@ -117,7 +117,7 @@ TEST(FlowGridTest, DataInArrayUsesOrderingZYX)
     auto grid = Grid3d({ nx, ny, nz }, { 4.0, 5.0, 6.0 }, {});
 
     double val = 0.0;
-    for (auto& v : grid.values)
+    for (auto& v : grid.values())
     {
         v = val;
         val += 1.0;
@@ -142,10 +142,10 @@ TEST(FlowGridTest, AtMethodCanGetValue)
     auto grid = Grid3d({ nx, ny, nz }, { 4.0, 5.0, 6.0 }, {});
     grid.assign(0.0);
 
-    grid.values.front() = 3.0;
+    grid.values().front() = 3.0;
     EXPECT_FLOAT_EQ(3.0, grid.at(0, 0, 0));
 
-    grid.values.back() = 5.0;
+    grid.values().back() = 5.0;
     EXPECT_FLOAT_EQ(5.0, grid.at(nx - 1, ny - 1, nz - 1));
 }
 
@@ -306,7 +306,7 @@ TEST(FlowGridTest, AtPositionInsideGrid)
     auto grid = Grid3d({ nx, ny, nz }, { dx, dy, dz }, {});
 
     double val = 0.0;
-    for (auto& v : grid.values)
+    for (auto& v : grid.values())
     {
         v = val;
         val += 1.0;
@@ -335,7 +335,7 @@ TEST(FlowGridTest, AtPositionOutsideGridSaturatesAtEdge)
     auto grid = Grid3d({ nx, ny, nz }, { dx, dy, dz }, {});
 
     double val = 0.0;
-    for (auto& v : grid.values)
+    for (auto& v : grid.values())
     {
         v = val;
         val += 1.0;
@@ -361,7 +361,7 @@ TEST(FlowGridTest, AtPositionInsideGridWithShiftedOrigin)
     auto grid = Grid3d({ nx, ny, nz }, { dx, dy, dz }, RVec{ x0, y0, z0 });
 
     double val = 0.0;
-    for (auto& v : grid.values)
+    for (auto& v : grid.values())
     {
         v = val;
         val += 1.0;
@@ -390,7 +390,7 @@ TEST(FlowGridTest, AtPositionWorksWithConst)
     auto grid1 = Grid3d({ nx, ny, nz }, { dx, dy, dz }, {});
 
     double val = 0.0;
-    for (auto& v : grid1.values)
+    for (auto& v : grid1.values())
     {
         v = val;
         val += 1.0;
@@ -416,13 +416,13 @@ TEST(FlowGridTest, AtPositionPBCPutsPosInBox)
     auto grid = Grid3d({ nx, ny, nz }, { dx, dy, dz }, RVec{ x0, y0, z0 });
 
     double val = 0.0;
-    for (auto& v : grid.values)
+    for (auto& v : grid.values())
     {
         v = val;
         val += 1.0;
     }
 
-    const real x = x0 + 1.0 * dx, y = y0 + 2.0 * dy, z = z0 + 1.0 * dz;
+    const real x = x0 + (1.0 * dx), y = y0 + (2.0 * dy), z = z0 + (1.0 * dz);
 
     // Along x
     EXPECT_FLOAT_EQ(grid.at_pos(RVec{ x, y, z }), grid.at_pos_pbc(RVec{ x + box_x, y, z }, box));
@@ -443,10 +443,12 @@ TEST(FlowGridTest, AtPositionPBCPutsPosInBox)
                     grid.at_pos_pbc(RVec{ x - box_x, y - box_y, z - box_z }, box));
 
     // Along all dimensions, multiple shifts
-    EXPECT_FLOAT_EQ(grid.at_pos(RVec{ x, y, z }),
-                    grid.at_pos_pbc(RVec{ x + 3.0 * box_x, y + 5.0 * box_y, z + 7.0 * box_z }, box));
-    EXPECT_FLOAT_EQ(grid.at_pos(RVec{ x, y, z }),
-                    grid.at_pos_pbc(RVec{ x - 7.0 * box_x, y - 3.0 * box_y, z - 5.0 * box_z }, box));
+    EXPECT_FLOAT_EQ(
+            grid.at_pos(RVec{ x, y, z }),
+            grid.at_pos_pbc(RVec{ x + (3.0f * box_x), y + (5.0f * box_y), z + (7.0f * box_z) }, box));
+    EXPECT_FLOAT_EQ(
+            grid.at_pos(RVec{ x, y, z }),
+            grid.at_pos_pbc(RVec{ x - (7.0f * box_x), y - (3.0f * box_y), z - (5.0f * box_z) }, box));
 }
 
 TEST(FlowGridTest, AtPositionWithPBCWorksWithConst)
@@ -462,7 +464,7 @@ TEST(FlowGridTest, AtPositionWithPBCWorksWithConst)
     auto grid1 = Grid3d({ nx, ny, nz }, { dx, dy, dz }, {});
 
     double val = 0.0;
-    for (auto& v : grid1.values)
+    for (auto& v : grid1.values())
     {
         v = val;
         val += 1.0;
@@ -470,8 +472,9 @@ TEST(FlowGridTest, AtPositionWithPBCWorksWithConst)
 
     const auto grid2 = grid1;
 
-    EXPECT_FLOAT_EQ(grid2.at(2, 1, 1),
-                    grid2.at_pos_pbc(RVec{ 1.25 + 3.0 * box_x, 1.5 - 2.0 * box_y, 3.0 - box_z }, box));
+    EXPECT_FLOAT_EQ(
+            grid2.at(2, 1, 1),
+            grid2.at_pos_pbc(RVec{ 1.25f + (3.0f * box_x), 1.5f - (2.0f * box_y), 3.0f - box_z }, box));
 }
 
 } // namespace
