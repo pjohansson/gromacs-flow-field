@@ -5,6 +5,7 @@
 
 #include <stdexcept>
 
+#include "gromacs/utility/arrayref.h"
 #include "gromacs/utility/cstringutil.h"
 #include "gromacs/utility/stringutil.h"
 
@@ -59,20 +60,20 @@ T& Grid3d<T>::at(const int ix, const int iy, const int iz)
 }
 
 template<typename T>
-const T& Grid3d<T>::atPosition(const rvec position) const
+const T& Grid3d<T>::atPosition(const RVec& position) const
 {
 
     return values_[indexFromPosition(position)];
 }
 
 template<typename T>
-T& Grid3d<T>::atPosition(const rvec position)
+T& Grid3d<T>::atPosition(const RVec& position)
 {
     return values_[indexFromPosition(position)];
 }
 
 template<typename T>
-size_t Grid3d<T>::indexFromPosition(const rvec position) const
+size_t Grid3d<T>::indexFromPosition(const RVec& position) const
 {
     IVec gridPosition = { static_cast<int>(std::floor(position[XX] * invSpacing_[XX])) % shape_[XX],
                           static_cast<int>(std::floor(position[YY] * invSpacing_[YY])) % shape_[YY],
@@ -89,12 +90,29 @@ size_t Grid3d<T>::indexFromPosition(const rvec position) const
     return gridPosition[ZZ] + (gridPosition[YY] * shape_[ZZ])
            + (gridPosition[XX] * shape_[YY] * shape_[ZZ]);
 }
+template<typename T>
+real Grid3d<T>::binVolume() const noexcept
+{
+    return spacing_[XX] * spacing_[YY] * spacing_[ZZ];
+}
 
 template<typename T>
-bool Grid3d<T>::contains(const rvec r) const
+bool Grid3d<T>::contains(const RVec& r) const
 {
     return (r[XX] >= 0.0 && r[XX] <= box_[XX] && r[YY] >= 0.0 && r[YY] <= box_[YY] && r[ZZ] >= 0.0
             && r[ZZ] <= box_[ZZ]);
+}
+
+template<typename T>
+ArrayRef<T> Grid3d<T>::values()
+{
+    return values_;
+}
+
+template<typename T>
+ArrayRef<const T> Grid3d<T>::values() const
+{
+    return values_;
 }
 
 template<typename T>

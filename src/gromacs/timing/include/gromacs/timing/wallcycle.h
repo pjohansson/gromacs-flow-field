@@ -126,6 +126,8 @@ enum class WallCycleCounter : int
     Imd,
     MdGpuGraph,
     Test,
+    // [ FLOW_FIELD]
+    FlowField,
     Count
 };
 
@@ -177,6 +179,9 @@ enum class WallCycleSubCounter : int
     GpuSetLincs,
     GpuSetSettle,
     Test,
+    // [FLOW_FIELD]
+    FlowFieldCollect,
+    FlowFieldOutput,
     Count
 };
 
@@ -258,7 +263,9 @@ static const char* enumValuetoString(WallCycleCounter enumValue)
         "Position swapping",
         "IMD",
         "MD Graph",
-        "Test"
+        "Test",
+        // [FLOW_FIELD]
+        "Flow Field module"
     };
     static_assert(checkStringsLengths<22>(wallCycleCounterNames));
     return wallCycleCounterNames[enumValue];
@@ -313,7 +320,9 @@ static const char* enumValuetoString(WallCycleSubCounter enumValue)
         "Settle setup",
         "GPU LINCS setup",
         "GPU settle setup",
-        "Test subcounter"
+        "Test subcounter",
+        "Flow field collect",
+        "Flow field output"
     };
     static_assert(checkStringsLengths<22>(wallCycleSubCounterNames));
     return wallCycleSubCounterNames[enumValue];

@@ -1,7 +1,8 @@
-#ifndef MD_FLOW_FIELD
-#define MD_FLOW_FIELD
+#ifndef GMX_FLOW_FIELD_H
+#define GMX_FLOW_FIELD_H
 
 #include <array>
+#include <filesystem>
 #include <string>
 #include <vector>
 
@@ -13,9 +14,13 @@ struct SimulationGroups;
 struct t_state;
 struct t_commrec;
 struct t_mdatoms;
+struct gmx_wallcycle;
 
 namespace gmx
 {
+
+template<typename T>
+class ArrayRef;
 struct MDLogger;
 
 namespace flow
@@ -32,7 +37,7 @@ constexpr char FLOW_FILE_HEADER_NAME[] = "GMX_FLOW_2";
 //! static_cast to integer when using it (bad!).
 namespace FlowVar
 {
-enum FlowVariable : size_t
+enum FlowVariable : int
 {
     //! Number of atoms
     NumAtoms,
@@ -49,72 +54,64 @@ enum FlowVariable : size_t
 };
 } // namespace FlowVar
 
-
 //! Data stored in a single bin of the flow field grid
 using Bin = std::array<double, FlowVar::NumVars>;
 
-
 //! Flow field data and associated metadata
-//!
-//! We subclass `Grid3d` in order to deal with the grid bookkeeping.
-//! Since the flow field data is more or less an extension of that
-//! class we do this rather than creating a `Grid3d` member variable,
-//! which makes working with this class more painful and harder to
-//! understand.
-class FlowField : public Grid3d<Bin>
+class FlowField
 {
 public:
     //! Empty constructor
     FlowField() {}
 
     //! Constructor for full flow field data
-    FlowField(const std::string& fnbase, int nx, int nz, const matrix box);
+    FlowField(const std::filesystem::path& basePath, int numBinsX, int numBinsZ, const matrix box);
 
-    //! Constructor which adds `group_name` to `fnbase`
-    FlowField(const std::string& fnbase_original, const std::string& group_name, int nx, int nz, const matrix box);
+    //! Constructor which joins \p groupName with fnBaseName
+    FlowField(const std::filesystem::path& basePath,
+              const std::string&           groupName,
+              int                          numBinsX,
+              int                          numBinsZ,
+              const matrix                 box);
 
-    //! Fast method for getting the bin index for a 2D position
-    //!
-    //! Implemented specifically here since I have not figured out how
-    //! this interface could look like in `Grid3d`. We want as fast access
-    //! to the storage as possible and thus make some optimizations:
-    //!
-    //! 1) We know that the grid covers the entire system and not just
-    //!    a subset of it. This means we can more easily calculate
-    //!    the indexing and won't need to check for saturation at the
-    //!    edges as the built in methods currently do.
-    //!
-    //! 2) After calculating the indices along each axis we use them
-    //!    directly to access the bin, which skips a check for each
-    //!    dimension inside the index accessor.
-    //!
-    //! The risk is that we make a mistake in the indexing or PBC removal
-    //! which results in out-of-memory access, but this calculation is
-    //! relatively easy to check.
-    //!
-    //! TODO: Write tests.
-    size_t index_from_pos_2d(real x, real z) const;
+    //! Get the bin volume.
+    double binVolume() const { return grid_.binVolume(); }
 
-    //! Get the number of grid bins along x
-    size_t nx() const { return shape()[XX]; }
-    //! Get the number of grid bins along z
-    size_t nz() const { return shape()[ZZ]; }
+    //! Get the grid shape.
+    const IVec& shape() const { return grid_.shape(); }
 
-    //! Get the grid bin spacing along x
-    real dx() const { return spacing()[XX]; }
-    //! Get the grid bin spacing along z
-    real dz() const { return spacing()[ZZ]; }
+    //! Get the grid spacing.
+    const RVec& spacing() const { return grid_.spacing(); }
 
-    //! Base for output file names (`fnbase_00001.dat`, ...)
-    std::string fnbase;
+    //! Get a reference to the 1d array of bins in the grid.
+    ArrayRef<Bin>       bins();
+    ArrayRef<const Bin> bins() const;
 
-    //! Name or identifier for group
-    std::string name;
+    //! Get a reference to the bin at a position in the grid (throws if indices are outside).
+    const Bin& binAt(const size_t ix, const size_t iy, const size_t iz) const
+    {
+        return grid_.at(ix, iy, iz);
+    }
+
+    //! Get the 1d bin index for the given \p positions (PBC corrected to be put inside the box)
+    size_t binIndexFromPosition(rvec position) const { return grid_.indexFromPosition(position); }
+
+    //! Return the base path which flow field files will be written as.
+    const std::filesystem::path& basePath() const { return basePath_; }
+
+    //! Return the group name.
+    const char* groupName() const { return name_.c_str(); }
 
 private:
-    void _setup_grid_and_finalize(int nx, int nz, const matrix box);
-};
+    //! Base for output file names (`fnbase_00001.dat`, ...)
+    std::filesystem::path basePath_;
 
+    //! Name or identifier for group
+    std::string name_;
+
+    //! Grid of collected values.
+    Grid3d<Bin> grid_;
+};
 
 struct FlowData
 {
@@ -122,58 +119,59 @@ struct FlowData
     bool bDoFlowCollection = false;
 
     //! 2d flow field grid data for all groups (combined field)
-    FlowField flow_field;
+    FlowField totalFlowField;
 
     //! 2d flow field data for individual groups, if multiple are selected
-    std::vector<FlowField> group_data;
+    std::vector<FlowField> perGroupFlowFields;
 
     //! Collect flow field data at step multiples of this
-    uint64_t step_collect;
+    uint64_t nstCollect;
 
     //! Average and output flow field data at step multiples of this
-    uint64_t step_output;
+    uint64_t nstOutput;
 
     //! Number of samples since last output of flow field
-    uint64_t num_samples;
+    uint64_t numSamples;
 
     //! Empty constructor, turns off flow field collection
     FlowData() {}
 
     //! Constructor for full flow field, turns on collection
-    FlowData(const std::string&              fnbase,
-             const std::vector<std::string>& group_names,
-             size_t                          nx,
-             size_t                          nz,
-             const matrix                    box,
-             uint64_t                        step_collect,
-             uint64_t                        step_output);
+    FlowData(const std::filesystem::path& basePath,
+             ArrayRef<const std::string>  groupNames,
+             size_t                       numBinsX,
+             size_t                       numBinsZ,
+             const matrix                 box,
+             uint64_t                     nstCollect,
+             uint64_t                     nstOutput);
 
     //! Zero all data for all collected flow fields and reset sample counter
-    void reset_data();
+    void reset();
 };
 
 //! Prepare and return a container for flow field data
-FlowData init_flow_container(int                     nfile,
-                             const t_filenm          fnm[],
-                             const t_inputrec*       ir,
-                             const SimulationGroups* groups,
-                             const t_state*          state);
+FlowData initFlowContainer(int                     nFile,
+                           const t_filenm          fnm[],
+                           const t_inputrec&       inputRecord,
+                           const SimulationGroups& groups,
+                           const t_state&          state);
 
 
 //! Write information about the flow field collection
-void print_flow_collection_information(const FlowData& flowcr, double dt, const gmx::MDLogger& mdlog);
+void printFlowCollectionInformation(const FlowData& flowContainer, double dt, const gmx::MDLogger& mdLog);
 
 
 //! If at a collection or output step, perform actions
-void flow_collect_or_output(FlowData&               flowcr,
-                            int64_t                 step,
-                            const t_commrec*        cr,
-                            const t_inputrec*       ir,
-                            const t_mdatoms*        mdatoms,
-                            const t_state*          state,
-                            const SimulationGroups* groups);
+void collectOrOutputFlowFieldData(FlowData&               flowContainer,
+                                  int64_t                 currentStep,
+                                  const t_commrec&        commRec,
+                                  const t_inputrec&       inputRec,
+                                  const t_mdatoms&        mdAtoms,
+                                  const t_state&          state,
+                                  const SimulationGroups& groups,
+                                  gmx_wallcycle*          wallCycleCounters);
 
 } // namespace flow
 } // namespace gmx
 
-#endif // MD_FLOW_FIELD
+#endif // GMX_FLOW_FIELD_H

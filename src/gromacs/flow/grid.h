@@ -1,13 +1,16 @@
-#ifndef MD_FLOW_FIELD_GRID
-#define MD_FLOW_FIELD_GRID
+#ifndef GMX_FLOW_GRID_H
+#define GMX_FLOW_GRID_H
 
 #include <vector>
 
 #include "gromacs/math/vectypes.h"
-#include "gromacs/utility/arrayref.h"
 
 namespace gmx
 {
+
+template<typename T>
+class ArrayRef;
+
 namespace flow
 {
 
@@ -33,17 +36,17 @@ public:
 
     //! Grid cell reference accessors from particle \p position.
     // Applies PBC correction to put \p inside the \c box_.
-    const T& atPosition(const rvec position) const;
-    T&       atPosition(const rvec position);
+    const T& atPosition(const RVec& position) const;
+    T&       atPosition(const RVec& position);
 
     //! Return the 1d index of \c values() corresponding to input \p position.
-    size_t indexFromPosition(const rvec position) const;
+    size_t indexFromPosition(const RVec& position) const;
 
     //! Check whether a position is contained within the grid
-    bool contains(const rvec r) const;
+    bool contains(const RVec& position) const;
 
     //! Return the bin volume
-    real binVolume() const noexcept { return spacing_[XX] * spacing_[YY] * spacing_[ZZ]; }
+    real binVolume() const noexcept;
 
     //! Return the grid shape.
     const IVec& shape() const { return shape_; }
@@ -51,13 +54,12 @@ public:
     //! Return the grid spacing.
     const RVec& spacing() const { return spacing_; }
 
-    const RVec& invSpacing() const { return invSpacing_; }
     //! Return the box containing the grid.
     const RVec& box() const { return box_; }
 
     //! Return a reference to the stored values.
-    ArrayRef<T>       values() { return values_; }
-    ArrayRef<const T> values() const { return values_; }
+    ArrayRef<const T> values() const;
+    ArrayRef<T>       values();
 
 private:
     //! Get the 1D index in the `values` array for a 3D grid position
@@ -86,4 +88,4 @@ private:
 } // namespace flow
 } // namespace gmx
 
-#endif // MD_FLOW_FIELD_GRID
+#endif // GMX_FLOW_GRID_H

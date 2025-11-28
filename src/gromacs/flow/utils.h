@@ -1,10 +1,15 @@
+#ifndef GMX_FLOW_UTILS_H
+#define GMX_FLOW_UTILS_H
+
+#include <string>
+#include <vector>
+
 //! Various utilities for this module
 
 #include "gromacs/topology/topology.h"
 
-#ifndef MD_FLOW_FIELD_UTILS
-#    define MD_FLOW_FIELD_UTILS
-
+namespace gmx
+{
 namespace flow
 {
 /*! \brief Get the number of groups in User1
@@ -13,25 +18,25 @@ namespace flow
     to the array of names if the other groups do not add up to all
     atoms in the system. Thus, we detect if the final group is called
     exactly "rest" and if so do not count it as one of the groups. */
-static size_t get_num_groups(const SimulationGroups* groups)
+inline std::vector<std::string> getGroupsInUser1(const SimulationGroups& groups)
 {
-    size_t num_groups = 0;
+    std::vector<std::string> groupNames;
 
-    for (const auto global_group_index : groups->groups[SimulationAtomGroupType::User1])
+    for (const int globalGroupIndex : groups.groups[SimulationAtomGroupType::User1])
     {
-        const auto name = groups->groupNames[global_group_index];
-
-        if (strncmp(*name, "rest", 8) == 0)
-        {
-            break;
-        }
-
-        num_groups++;
+        groupNames.emplace_back(*groups.groupNames[globalGroupIndex]);
     }
 
-    return num_groups;
+    // Remove "rest" group if it is the last value
+    if (!groupNames.empty() && groupNames.back() == "rest")
+    {
+        groupNames.pop_back();
+    }
+
+    return groupNames;
 }
 
 } // namespace flow
+} // namespace gmx
 
-#endif // MD_FLOW_FIELD_UTILS
+#endif // GMX_FLOW_UTILS_H

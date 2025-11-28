@@ -648,14 +648,14 @@ void gmx::LegacySimulator::do_md()
     reportComRemovalInfo(fpLog_, vcm);
 
     // [FLOW_FIELD]
-    flow::FlowData flowcr; // flow field = disabled by default
+    flow::FlowData flowContainer; // flow field = disabled by default
     if (ir->flowFieldOptions.doFlowFieldCollection)
     {
-        flowcr = flow::init_flow_container(nFile_, fnm_, ir, groups, state_);
+        flowContainer = flow::initFlowContainer(nFile_, fnm_, *ir, *groups, *state_);
 
         if (MAIN(cr_))
         {
-            flow::print_flow_collection_information(flowcr, ir->delta_t, mdLog_);
+            flow::printFlowCollectionInformation(flowContainer, ir->delta_t, mdLog_);
         }
     }
     else if (opt2bSet("-flow", nFile_, fnm_))
@@ -1128,7 +1128,7 @@ void gmx::LegacySimulator::do_md()
         //
         // TODO: Should we assert that the output step is a multiple of nstlist?
         const bool bFlowOutputThisStep =
-                flowcr.bDoFlowCollection ? do_per_step(step, flowcr.step_output) : true;
+                flowContainer.bDoFlowCollection ? do_per_step(step, flowContainer.nstOutput) : true;
         checkpointHandler->decideIfCheckpointingThisStep(bNS && bFlowOutputThisStep, bFirstStep, bLastStep);
 
         /* Determine the energy and pressure:
@@ -2149,9 +2149,10 @@ void gmx::LegacySimulator::do_md()
         bInitStep  = FALSE;
 
         // [FLOW_FIELD]
-        if (flowcr.bDoFlowCollection && do_per_step(step, flowcr.step_collect))
+        if (flowContainer.bDoFlowCollection && do_per_step(step, flowContainer.nstCollect))
         {
-            flow::flow_collect_or_output(flowcr, step, cr_, ir, md, state_, groups);
+            flow::collectOrOutputFlowFieldData(
+                    flowContainer, step, *cr_, *ir, *md, *state_, *groups, wallCycleCounters_);
         }
 
         /* #######  SET VARIABLES FOR NEXT ITERATION IF THEY STILL NEED IT ###### */
