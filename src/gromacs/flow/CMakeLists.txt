@@ -33,18 +33,30 @@
 # the research papers on the package. Check out http://www.gromacs.org.
 # 
 # Set up the module library
-add_library(flow INTERFACE)
+add_library(flow OBJECT)
 
-file(GLOB FLOW_SOURCES *.cpp)
-set(LIBGROMACS_SOURCES ${LIBGROMACS_SOURCES} ${FLOW_SOURCES} PARENT_SCOPE)
+target_sources(flow PRIVATE
+    flow_field.cpp
+    gmx_io.cpp
+    grid.cpp
+)
 
-target_link_libraries(flow INTERFACE
-                      legacy_api
-                      gpu_utils
-                      math
-                      timing
-                      utility
-                      )
+target_link_libraries(flow PRIVATE
+    common
+    legacy_api
+    legacy_modules
+    math
+    timing
+    utility
+)
+
+if (BUILD_SHARED_LIBS)
+    set_target_properties(flow PROPERTIES POSITION_INDEPENDENT_CODE ON)
+endif()
+
+# Set required compile flags
+gmx_target_compile_options(flow)
+target_compile_definitions(flow PRIVATE HAVE_CONFIG_H)
 
 if (BUILD_TESTING)
     add_subdirectory(tests)

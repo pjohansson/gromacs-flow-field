@@ -34,4 +34,4 @@
 gmx_add_unit_test(FlowTest flow-test
     CPP_SOURCE_FILES
         grid.cpp
-        )
+)
