@@ -634,7 +634,7 @@ FlowData initFlowContainer(const int               nFile,
                     static_cast<uint64_t>(inputRec.flowFieldOptions.nstOutput));
 }
 
-void printFlowCollectionInformation(const FlowData& flowContainer, const double dt, const gmx::MDLogger& mdLog)
+void printFlowCollectionInformation(const FlowData& flowContainer, const double dt, const MDLogger& mdLog)
 {
     // Log to warning level, which prints both to md.log and stdout
     // (info level only writes to md.log)

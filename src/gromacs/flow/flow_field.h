@@ -217,13 +217,13 @@ private:
 //! Prepare and return a container for flow field data
 FlowData initFlowContainer(int                     nFile,
                            const t_filenm          fnm[],
-                           const t_inputrec&       inputRecord,
+                           const t_inputrec&       inputRec,
                            const SimulationGroups& groups,
                            const t_state&          state);
 
 
 //! Write information about the flow field collection
-void printFlowCollectionInformation(const FlowData& flowContainer, double dt, const gmx::MDLogger& mdLog);
+void printFlowCollectionInformation(const FlowData& flowContainer, double dt, const MDLogger& mdLog);
 
 
 //! If at a collection or output step, perform actions
