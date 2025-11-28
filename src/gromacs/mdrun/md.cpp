@@ -1128,7 +1128,7 @@ void gmx::LegacySimulator::do_md()
         //
         // TODO: Should we assert that the output step is a multiple of nstlist?
         const bool bFlowOutputThisStep =
-                flowContainer.bDoFlowCollection ? do_per_step(step, flowContainer.nstOutput) : true;
+                flowContainer.isActive() ? do_per_step(step, flowContainer.nstOutput()) : true;
         checkpointHandler->decideIfCheckpointingThisStep(bNS && bFlowOutputThisStep, bFirstStep, bLastStep);
 
         /* Determine the energy and pressure:
@@ -2149,7 +2149,7 @@ void gmx::LegacySimulator::do_md()
         bInitStep  = FALSE;
 
         // [FLOW_FIELD]
-        if (flowContainer.bDoFlowCollection && do_per_step(step, flowContainer.nstCollect))
+        if (flowContainer.isActive() && do_per_step(step, flowContainer.nstCollect()))
         {
             flow::collectOrOutputFlowFieldData(
                     &flowContainer, step, *cr_, *ir, *md, *state_, *groups, wallCycleCounters_);

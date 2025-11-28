@@ -155,26 +155,9 @@ private:
     Grid3d<Bin> grid_;
 };
 
-struct FlowData
+class FlowData
 {
-    //! Whether or not to collect flow field data
-    bool bDoFlowCollection = false;
-
-    //! 2d flow field grid data for all groups (combined field)
-    FlowField totalFlowField;
-
-    //! 2d flow field data for individual groups, if multiple are selected
-    std::vector<FlowField> perGroupFlowFields;
-
-    //! Collect flow field data at step multiples of this
-    uint64_t nstCollect;
-
-    //! Average and output flow field data at step multiples of this
-    uint64_t nstOutput;
-
-    //! Number of samples since last output of flow field
-    uint64_t numSamples;
-
+public:
     //! Empty constructor, turns off flow field collection
     FlowData() {}
 
@@ -187,8 +170,48 @@ struct FlowData
              uint64_t                     nstCollect,
              uint64_t                     nstOutput);
 
+    //! Return whether or not flow field data collection is active.
+    bool isActive() const { return isActive_; }
+
+    //! Return a reference to the flow field grid data for all groups (combined field)
+    FlowField&       totalFlowField();
+    const FlowField& totalFlowField() const;
+
+    //! Return a reference to the flow field grid data for individual groups
+    ArrayRef<FlowField>       perGroupFlowFields();
+    ArrayRef<const FlowField> perGroupFlowFields() const;
+
+    //! Return \c nstCollect_
+    uint64_t nstCollect() const { return nstCollect_; }
+
+    //! Return \c nstOutput_
+    uint64_t nstOutput() const { return nstOutput_; }
+
+    //! Return \c numSamples_
+    uint64_t& numSamples() { return numSamples_; }
+    uint64_t  numSamples() const { return numSamples_; }
+
     //! Zero all data for all collected flow fields and reset sample counter
     void reset();
+
+private:
+    //! Whether or not to collect flow field data
+    bool isActive_ = false;
+
+    //! 2d flow field grid data for all groups (combined field)
+    FlowField totalFlowField_;
+
+    //! 2d flow field data for individual groups, if multiple are selected
+    std::vector<FlowField> perGroupFlowFields_;
+
+    //! Collect flow field data at step multiples of this
+    uint64_t nstCollect_;
+
+    //! Average and output flow field data at step multiples of this
+    uint64_t nstOutput_;
+
+    //! Number of samples since last output of flow field
+    uint64_t numSamples_;
 };
 
 //! Prepare and return a container for flow field data

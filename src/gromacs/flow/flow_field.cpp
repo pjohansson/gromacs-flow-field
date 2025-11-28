@@ -125,28 +125,48 @@ FlowData::FlowData(const std::filesystem::path&      basePath,
                    const matrix                      box,
                    const uint64_t                    nstCollect,
                    const uint64_t                    nstOutput) :
-    bDoFlowCollection{ true },
-    totalFlowField{ FlowField(basePath, numBinsX, numBinsZ, box) },
-    nstCollect{ nstCollect },
-    nstOutput{ nstOutput },
-    numSamples{ 0 }
+    isActive_{ true },
+    totalFlowField_{ FlowField(basePath, numBinsX, numBinsZ, box) },
+    nstCollect_{ nstCollect },
+    nstOutput_{ nstOutput },
+    numSamples_{ 0 }
 {
-    totalFlowField = FlowField(basePath, numBinsX, numBinsZ, box);
+    totalFlowField_ = FlowField(basePath, numBinsX, numBinsZ, box);
 
     for (const std::string& name : groupNames)
     {
-        perGroupFlowFields.push_back(FlowField(basePath, name, numBinsX, numBinsZ, box));
+        perGroupFlowFields_.push_back(FlowField(basePath, name, numBinsX, numBinsZ, box));
     }
 }
 
+FlowField& FlowData::totalFlowField()
+{
+    return totalFlowField_;
+}
+
+const FlowField& FlowData::totalFlowField() const
+{
+    return totalFlowField_;
+}
+
+ArrayRef<FlowField> FlowData::perGroupFlowFields()
+{
+    return perGroupFlowFields_;
+};
+
+ArrayRef<const FlowField> FlowData::perGroupFlowFields() const
+{
+    return perGroupFlowFields_;
+};
+
 void FlowData::reset()
 {
-    for (Bin& bin : totalFlowField.bins())
+    for (Bin& bin : totalFlowField_.bins())
     {
         bin.fill(0.0);
     }
 
-    for (FlowField& groupFlowField : perGroupFlowFields)
+    for (FlowField& groupFlowField : perGroupFlowFields_)
     {
         for (Bin& bin : groupFlowField.bins())
         {
@@ -154,7 +174,7 @@ void FlowData::reset()
         }
     }
 
-    numSamples = 0;
+    numSamples_ = 0;
 }
 
 
@@ -198,11 +218,12 @@ static void collectFlowData(FlowData*               flowContainer,
     const real dtHalf               = static_cast<real>(0.5 * inputRec.delta_t);
     const bool integratorIsLeapFrog = (inputRec.eI == IntegrationAlgorithm::MD);
 
-    const int numGroups =
-            flowContainer->perGroupFlowFields.empty() ? 1 : flowContainer->perGroupFlowFields.size();
+    const int numGroups = flowContainer->perGroupFlowFields().empty()
+                                  ? 1
+                                  : flowContainer->perGroupFlowFields().size();
 
-    flowContainer->totalFlowField.updateSimulationBox(state.box);
-    for (FlowField& groupFlowField : flowContainer->perGroupFlowFields)
+    flowContainer->totalFlowField().updateSimulationBox(state.box);
+    for (FlowField& groupFlowField : flowContainer->perGroupFlowFields())
     {
         groupFlowField.updateSimulationBox(state.box);
     }
@@ -229,24 +250,24 @@ static void collectFlowData(FlowData*               flowContainer,
                 position -= dtHalf * velocity;
             }
 
-            const size_t binIndex = flowContainer->totalFlowField.binIndexFromPosition(position);
+            const size_t binIndex = flowContainer->totalFlowField().binIndexFromPosition(position);
             {
-                Bin& bin = flowContainer->totalFlowField.bins()[binIndex];
+                Bin& bin = flowContainer->totalFlowField().bins()[binIndex];
                 addFlowToBin(bin, velocity, mass);
             }
 
             // If we are collecting flow field data for multiple groups, we add
             // that here. The `indexGroup` corresponds to the indexing in our
             // collection of flow fields.
-            if (atomGroupIndexInUser1 < static_cast<int>(flowContainer->perGroupFlowFields.size()))
+            if (atomGroupIndexInUser1 < static_cast<int>(flowContainer->perGroupFlowFields().size()))
             {
-                Bin& bin = flowContainer->perGroupFlowFields.at(atomGroupIndexInUser1).bins()[binIndex];
+                Bin& bin = flowContainer->perGroupFlowFields().at(atomGroupIndexInUser1).bins()[binIndex];
                 addFlowToBin(bin, velocity, mass);
             }
         }
     }
 
-    ++flowContainer->numSamples;
+    ++flowContainer->numSamples();
 }
 
 
@@ -412,13 +433,13 @@ struct OutputFields
 //! Average all flow fields, trim empty bins and return formatted for output
 static OutputFields getAveragedFlowFieldsForOutput(FlowData* flowContainer)
 {
-    averageFlowField(&flowContainer->totalFlowField, flowContainer->numSamples);
-    const OutputData totalFlowField(flowContainer->totalFlowField);
+    averageFlowField(&flowContainer->totalFlowField(), flowContainer->numSamples());
+    const OutputData totalFlowField(flowContainer->totalFlowField());
 
     std::vector<OutputData> perGroupFlowFields;
-    for (FlowField& groupFlowField : flowContainer->perGroupFlowFields)
+    for (FlowField& groupFlowField : flowContainer->perGroupFlowFields())
     {
-        averageFlowField(&groupFlowField, flowContainer->numSamples);
+        averageFlowField(&groupFlowField, flowContainer->numSamples());
         perGroupFlowFields.push_back(OutputData(groupFlowField));
     }
 
@@ -576,9 +597,9 @@ static void mpiCollectFlowDataOnMain(FlowData* flowContainer, const t_commrec& c
 {
     if (PAR(&commRec))
     {
-        mpiCollectSingleFlowField(&flowContainer->totalFlowField, commRec);
+        mpiCollectSingleFlowField(&flowContainer->totalFlowField(), commRec);
 
-        for (FlowField& perGroupFlowField : flowContainer->perGroupFlowFields)
+        for (FlowField& perGroupFlowField : flowContainer->perGroupFlowFields())
         {
             mpiCollectSingleFlowField(&perGroupFlowField, commRec);
         }
@@ -628,30 +649,30 @@ void printFlowCollectionInformation(const FlowData& flowContainer, const double 
             .asParagraph()
             .appendText("Flow field collection frequency:\n")
             .appendTextFormatted("  Collect: %g ps (every %llu steps).\n",
-                                 flowContainer.nstCollect * dt,
-                                 static_cast<unsigned long long>(flowContainer.nstCollect))
+                                 flowContainer.nstCollect() * dt,
+                                 static_cast<unsigned long long>(flowContainer.nstCollect()))
             .appendTextFormatted("  Output:  %g ps (every %llu steps).",
-                                 flowContainer.nstOutput * dt,
-                                 static_cast<unsigned long long>(flowContainer.nstOutput));
+                                 flowContainer.nstOutput() * dt,
+                                 static_cast<unsigned long long>(flowContainer.nstOutput()));
 
     GMX_LOG(mdLog.warning)
             .asParagraph()
             .appendText("Flow field grid information:\n")
             .appendTextFormatted("  Shape:   %d x %d (along x and z)\n",
-                                 flowContainer.totalFlowField.shape()[XX],
-                                 flowContainer.totalFlowField.shape()[ZZ])
+                                 flowContainer.totalFlowField().shape()[XX],
+                                 flowContainer.totalFlowField().shape()[ZZ])
             .appendTextFormatted("  Spacing: %g x %g nm^2",
-                                 flowContainer.totalFlowField.spacing()[XX],
-                                 flowContainer.totalFlowField.spacing()[ZZ]);
+                                 flowContainer.totalFlowField().spacing()[XX],
+                                 flowContainer.totalFlowField().spacing()[ZZ]);
 
     GMX_LOG(mdLog.warning)
             .asParagraph()
             .appendTextFormatted(
                     "Writing full flow data to files "
                     "with base '%s_00001.dat' (...).",
-                    flowContainer.totalFlowField.basePath().c_str());
+                    flowContainer.totalFlowField().basePath().c_str());
 
-    if (!flowContainer.perGroupFlowFields.empty())
+    if (!flowContainer.perGroupFlowFields().empty())
     {
         GMX_LOG(mdLog.warning)
                 .asParagraph()
@@ -660,7 +681,7 @@ void printFlowCollectionInformation(const FlowData& flowContainer, const double 
                         "individual flow data for each group individually in "
                         "addition to the combined field:\n");
 
-        for (const auto& group : flowContainer.perGroupFlowFields)
+        for (const auto& group : flowContainer.perGroupFlowFields())
         {
             GMX_LOG(mdLog.warning)
                     .appendTextFormatted("  %s -> '%s_00001.dat' (...)\n",
@@ -693,7 +714,7 @@ void collectOrOutputFlowFieldData(FlowData*               flowContainer,
     collectFlowData(flowContainer, commRec, inputRec, mdAtoms, state, groups);
     wallcycle_sub_stop(wallCycleCounters, WallCycleSubCounter::FlowFieldCollect);
 
-    if (do_per_step(currentStep, flowContainer->nstOutput) && (currentStep != inputRec.init_step))
+    if (do_per_step(currentStep, flowContainer->nstOutput()) && (currentStep != inputRec.init_step))
     {
         wallcycle_sub_start(wallCycleCounters, WallCycleSubCounter::FlowFieldOutput);
         mpiCollectFlowDataOnMain(flowContainer, commRec);
@@ -701,7 +722,7 @@ void collectOrOutputFlowFieldData(FlowData*               flowContainer,
         if (MAIN(&commRec))
         {
             const OutputFields outputData = getAveragedFlowFieldsForOutput(flowContainer);
-            writeAllFlowFieldToDisk(outputData, currentStep, flowContainer->nstOutput);
+            writeAllFlowFieldToDisk(outputData, currentStep, flowContainer->nstOutput());
         }
 
         flowContainer->reset();
