@@ -14,93 +14,94 @@ namespace gmx
 namespace flow
 {
 
-void read_flow_field_opts(std::vector<t_inpfile>& inp, FlowFieldOptions& opts, char* groups, WarningHandler* wi)
+void readFlowFieldMdpOptions(std::vector<t_inpfile>* inputFile,
+                             FlowFieldOptions*       options,
+                             char*                   user1GroupsName,
+                             WarningHandler*         warnings)
 {
-    printStringNewline(&inp, "FLOW FIELD COLLECTION");
+    printStringNewline(inputFile, "FLOW FIELD COLLECTION");
 
-    printStringNoNewline(&inp, "Do flow field collection: No or Yes");
-    opts.doFlowFieldCollection = (getEnum<Boolean>(&inp, "flow-field", wi) != Boolean::No);
+    printStringNoNewline(inputFile, "Do flow field collection: No or Yes");
+    options->doFlowFieldCollection = (getEnum<Boolean>(inputFile, "flow-field", warnings) != Boolean::No);
 
-    printStringNoNewline(&inp, "This selects the subset of atoms for the flow field");
-    printStringNoNewline(&inp, "collection. You can select multiple groups, in which");
-    printStringNoNewline(&inp, "case the fields for all groups combined and the fields");
-    printStringNoNewline(&inp, "for all individual groups are all collected and written");
-    printStringNoNewline(&inp, "to disk. If no groups are selected, all atoms in the");
-    printStringNoNewline(&inp, "system will be used.");
-    setStringEntry(&inp, "flow-field-grps", groups, nullptr);
+    printStringNoNewline(inputFile, "This selects the subset of atoms for the flow field");
+    printStringNoNewline(inputFile, "collection. You can select multiple groups, in which");
+    printStringNoNewline(inputFile, "case the fields for all groups combined and the fields");
+    printStringNoNewline(inputFile, "for all individual groups are all collected and written");
+    printStringNoNewline(inputFile, "to disk. If no groups are selected, all atoms in the");
+    printStringNoNewline(inputFile, "system will be used.");
+    setStringEntry(inputFile, "flow-field-grps", user1GroupsName, nullptr); // replaces user1-grps with flow-field-grps
 
-    printStringNoNewline(&inp, "Interval in steps between sampling flow field data");
-    opts.nstsample = get_eint(&inp, "flow-nstsample", 0, wi);
-    printStringNoNewline(&inp, "Interval in steps between averaging and outputting flow field data");
-    opts.nstoutput = get_eint(&inp, "flow-nstoutput", 0, wi);
+    printStringNoNewline(inputFile, "Interval in steps between sampling flow field data");
+    options->nstSample = get_eint(inputFile, "flow-nstsample", 0, warnings);
+    printStringNoNewline(inputFile,
+                         "Interval in steps between averaging and outputting flow field data");
+    options->nstOutput = get_eint(inputFile, "flow-nstoutput", 0, warnings);
 
-    printStringNoNewline(&inp, "Number of flow field grid bins along x");
-    opts.nx = get_eint(&inp, "flow-nx", 0, wi);
-    printStringNoNewline(&inp, "Number of flow field grid bins along z");
-    opts.nz = get_eint(&inp, "flow-nz", 0, wi);
+    printStringNoNewline(inputFile, "Number of flow field grid bins along x");
+    options->numBinsX = get_eint(inputFile, "flow-nx", 0, warnings);
+    printStringNoNewline(inputFile, "Number of flow field grid bins along z");
+    options->numBinsZ = get_eint(inputFile, "flow-nz", 0, warnings);
 }
 
-
-void check_flow_field_opts(const t_inputrec* ir, WarningHandler* wi)
+void checkFlowFieldMdpOptions(const t_inputrec& inputRec, WarningHandler* warnings)
 {
-    const auto& opts = ir->flowFieldOptions;
+    const FlowFieldOptions& options = inputRec.flowFieldOptions;
 
-    if (opts.nx < 1)
+    if (options.numBinsX < 1)
     {
-        wi->addError("flow-nx should be >= 1");
+        warnings->addError("flow-nx should be >= 1");
     }
-    if (opts.nz < 1)
+    if (options.numBinsZ < 1)
     {
-        wi->addError("flow-nz should be >= 1");
+        warnings->addError("flow-nz should be >= 1");
     }
-    if (opts.nstsample < 1)
+    if (options.nstSample < 1)
     {
-        wi->addError("flow-nstsample should be >= 1");
+        warnings->addError("flow-nstsample should be >= 1");
     }
-    if (opts.nstoutput < 1)
+    if (options.nstOutput < 1)
     {
-        wi->addError("flow-nstoutput should be >= 1");
+        warnings->addError("flow-nstoutput should be >= 1");
     }
 
-    if (opts.nstoutput % opts.nstsample != 0)
+    if (options.nstOutput % options.nstSample != 0)
     {
         const std::string message = gmx::formatString(
                 "flow-nstoutput (%d) should be "
                 "a multiple of flow-nstsample (%d)",
-                opts.nstoutput,
-                opts.nstsample);
+                options.nstOutput,
+                options.nstSample);
 
-        wi->addError(message);
+        warnings->addError(message);
     }
 
-    if (ir->pressureCouplingOptions.epc != PressureCoupling::No)
+    if (inputRec.pressureCouplingOptions.epc != PressureCoupling::No)
     {
         const std::string message = gmx::formatString(
                 "Pressure scaling and flow field collection were both turned "
                 "on, but flow field collection requires a fixed system box!");
 
-        wi->addError(message);
+        warnings->addError(message);
     }
 }
 
-
-void do_tpx_flow_field(gmx::ISerializer* serializer, FlowFieldOptions& opts)
+void doTpxFlowFieldIo(ISerializer* serializer, FlowFieldOptions& options)
 {
-    serializer->doBool(&opts.doFlowFieldCollection);
-    serializer->doInt(&opts.nstsample);
-    serializer->doInt(&opts.nstoutput);
-    serializer->doInt(&opts.nx);
-    serializer->doInt(&opts.nz);
+    serializer->doBool(&options.doFlowFieldCollection);
+    serializer->doInt(&options.nstSample);
+    serializer->doInt(&options.nstOutput);
+    serializer->doInt(&options.numBinsX);
+    serializer->doInt(&options.numBinsZ);
 }
 
-
-void pr_flow_field(FILE* fp, int indent, const FlowFieldOptions& opts)
+void printFlowFieldOptionsToLog(FILE* fp, int indent, const FlowFieldOptions& options)
 {
-    pr_str(fp, indent, "flow-field", booleanValueToString(opts.doFlowFieldCollection));
-    pr_int(fp, indent, "flow-nstsample", opts.nstsample);
-    pr_int(fp, indent, "flow-nstoutput", opts.nstoutput);
-    pr_int(fp, indent, "flow-nx", opts.nx);
-    pr_int(fp, indent, "flow-nz", opts.nz);
+    pr_str(fp, indent, "flow-field", booleanValueToString(options.doFlowFieldCollection));
+    pr_int(fp, indent, "flow-nstsample", options.nstSample);
+    pr_int(fp, indent, "flow-nstoutput", options.nstOutput);
+    pr_int(fp, indent, "flow-nx", options.numBinsX);
+    pr_int(fp, indent, "flow-nz", options.numBinsZ);
 }
 
 } // namespace flow

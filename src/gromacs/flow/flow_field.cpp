@@ -556,11 +556,11 @@ FlowData initFlowContainer(const int               nFile,
 
     return FlowData(basePath,
                     groupNames.size() > 1 ? groupNames : std::vector<std::string>{},
-                    static_cast<size_t>(inputRec.flowFieldOptions.nx),
-                    static_cast<size_t>(inputRec.flowFieldOptions.nz),
+                    static_cast<size_t>(inputRec.flowFieldOptions.numBinsX),
+                    static_cast<size_t>(inputRec.flowFieldOptions.numBinsZ),
                     state.box,
-                    static_cast<uint64_t>(inputRec.flowFieldOptions.nstsample),
-                    static_cast<uint64_t>(inputRec.flowFieldOptions.nstoutput));
+                    static_cast<uint64_t>(inputRec.flowFieldOptions.nstSample),
+                    static_cast<uint64_t>(inputRec.flowFieldOptions.nstOutput));
 }
 
 void printFlowCollectionInformation(const FlowData& flowContainer, const double dt, const gmx::MDLogger& mdLog)

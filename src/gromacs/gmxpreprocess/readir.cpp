@@ -1806,7 +1806,7 @@ void check_ir(const char*                    mdparin,
     // [FLOW_FIELD]
     if (ir->flowFieldOptions.doFlowFieldCollection)
     {
-        gmx::flow::check_flow_field_opts(ir, wi);
+        gmx::flow::checkFlowFieldMdpOptions(*ir, wi);
     }
 }
 
@@ -2879,7 +2879,7 @@ void get_ir(const char*     mdparin,
     ir->bAdress = (get_eeenum(&inp, "adress", no_names, wi) != 0);
 
     /* [FLOW_FIELD] Flow field collection */
-    gmx::flow::read_flow_field_opts(inp, ir->flowFieldOptions, inputrecStrings->user1, wi);
+    gmx::flow::readFlowFieldMdpOptions(&inp, &ir->flowFieldOptions, inputrecStrings->user1, wi);
 
     /* User defined thingies */
     printStringNewline(&inp, "User defined thingies");

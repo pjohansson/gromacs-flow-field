@@ -1552,7 +1552,7 @@ static void do_inputrec(gmx::ISerializer* serializer, t_inputrec* ir, int file_v
     serializer->doReal(&ir->cos_accel);
 
     // [FLOW_FIELD]
-    gmx::flow::do_tpx_flow_field(serializer, ir->flowFieldOptions);
+    gmx::flow::doTpxFlowFieldIo(serializer, ir->flowFieldOptions);
 
     serializer->doInt(&ir->userint1);
     serializer->doInt(&ir->userint2);

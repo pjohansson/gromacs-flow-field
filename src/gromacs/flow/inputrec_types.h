@@ -1,5 +1,5 @@
-#ifndef MD_FLOW_FIELD_IR_TYPES
-#define MD_FLOW_FIELD_IR_TYPES
+#ifndef GMX_FLOW_INPUTREC_TYPES_H
+#define GMX_FLOW_INPUTREC_TYPES_H
 
 namespace gmx
 {
@@ -16,19 +16,19 @@ struct FlowFieldOptions
     bool doFlowFieldCollection = false;
 
     //! Interval in steps for sampling flow field data
-    int nstsample = 0;
+    int nstSample = 0;
 
     //! Interval in steps for averaging and writing flow field data to disk
-    int nstoutput = 0;
+    int nstOutput = 0;
 
     //! Number of flow field grid bins along x
-    int nx = 0;
+    int numBinsX = 0;
 
     //! Number of flow field grid bins along z
-    int nz = 0;
+    int numBinsZ = 0;
 };
 
 } // namespace flow
 } // namespace gmx
 
-#endif // MD_FLOW_FIELD_IR_TYPES
+#endif // GMX_FLOW_INPUTREC_TYPES_H
