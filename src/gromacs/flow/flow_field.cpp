@@ -186,7 +186,7 @@ static void addFlowToBin(Bin& bin, const RVec& velocity, const real mass)
 //! * Temperature in each bin (but here we only add upp the kinetic energy)
 //! * Mass flow along x in each bin (to be divided by total mass in bins)
 //! * Mass flow along z in each bin (to be divided by total mass in bins)
-static void collectFlowData(FlowData&               flowContainer,
+static void collectFlowData(FlowData*               flowContainer,
                             const t_commrec&        commRec,
                             const t_inputrec&       inputRec,
                             const t_mdatoms&        mdAtoms,
@@ -199,10 +199,10 @@ static void collectFlowData(FlowData&               flowContainer,
     const bool integratorIsLeapFrog = (inputRec.eI == IntegrationAlgorithm::MD);
 
     const int numGroups =
-            flowContainer.perGroupFlowFields.empty() ? 1 : flowContainer.perGroupFlowFields.size();
+            flowContainer->perGroupFlowFields.empty() ? 1 : flowContainer->perGroupFlowFields.size();
 
-    flowContainer.totalFlowField.updateSimulationBox(state.box);
-    for (FlowField& groupFlowField : flowContainer.perGroupFlowFields)
+    flowContainer->totalFlowField.updateSimulationBox(state.box);
+    for (FlowField& groupFlowField : flowContainer->perGroupFlowFields)
     {
         groupFlowField.updateSimulationBox(state.box);
     }
@@ -229,24 +229,24 @@ static void collectFlowData(FlowData&               flowContainer,
                 position -= dtHalf * velocity;
             }
 
-            const size_t binIndex = flowContainer.totalFlowField.binIndexFromPosition(position);
+            const size_t binIndex = flowContainer->totalFlowField.binIndexFromPosition(position);
             {
-                Bin& bin = flowContainer.totalFlowField.bins()[binIndex];
+                Bin& bin = flowContainer->totalFlowField.bins()[binIndex];
                 addFlowToBin(bin, velocity, mass);
             }
 
             // If we are collecting flow field data for multiple groups, we add
             // that here. The `indexGroup` corresponds to the indexing in our
             // collection of flow fields.
-            if (atomGroupIndexInUser1 < static_cast<int>(flowContainer.perGroupFlowFields.size()))
+            if (atomGroupIndexInUser1 < static_cast<int>(flowContainer->perGroupFlowFields.size()))
             {
-                Bin& bin = flowContainer.perGroupFlowFields.at(atomGroupIndexInUser1).bins()[binIndex];
+                Bin& bin = flowContainer->perGroupFlowFields.at(atomGroupIndexInUser1).bins()[binIndex];
                 addFlowToBin(bin, velocity, mass);
             }
         }
     }
 
-    ++flowContainer.numSamples;
+    ++flowContainer->numSamples;
 }
 
 
@@ -258,45 +258,45 @@ static void collectFlowData(FlowData&               flowContainer,
 //!
 //! Note: This also divides the mass and number of atom fields by the
 //! bin volume, making them the mass-and-number densities.
-static void averageFlowFieldBin(Bin& bin, const double numSamplesAsDouble, const double binVolume)
+static void averageFlowFieldBin(Bin* bin, const double numSamplesAsDouble, const double binVolume)
 {
-    const double numAtoms = bin[FlowVar::NumAtoms];
-    const double mass     = bin[FlowVar::Mass];
+    const double numAtoms = (*bin)[FlowVar::NumAtoms];
+    const double mass     = (*bin)[FlowVar::Mass];
 
     /* The temperature and flow is averaged by the sampled number
     of atoms and mass in each bin. To not divide by zero in empty
     bins we take care to check. */
     if (numAtoms > 0.0)
     {
-        bin[FlowVar::Temp] /= (2.0 * gmx::c_boltz * numAtoms);
+        (*bin)[FlowVar::Temp] /= (2.0 * gmx::c_boltz * numAtoms);
     }
 
     if (mass > 0.0)
     {
-        bin[FlowVar::U] /= mass;
-        bin[FlowVar::V] /= mass;
+        (*bin)[FlowVar::U] /= mass;
+        (*bin)[FlowVar::V] /= mass;
     }
 
     // In contrast to above, the mass and number of atoms has to
     // be divided by the number of samples taken to get their average.
     // Additionally, since we want the mass and atom number densities,
     // divide by the bin volume.
-    bin[FlowVar::NumAtoms] /= (numSamplesAsDouble * binVolume);
-    bin[FlowVar::Mass] /= (numSamplesAsDouble * binVolume);
+    (*bin)[FlowVar::NumAtoms] /= (numSamplesAsDouble * binVolume);
+    (*bin)[FlowVar::Mass] /= (numSamplesAsDouble * binVolume);
 }
 
 //! Average the flow field data inside all bins, in-place
 //!
 //! Note: This also divides the mass and number of atom fields by the
 //! bin volume, making them the mass-and-number densities.
-static void averageFlowField(FlowField& flowField, const size_t numSamples)
+static void averageFlowField(FlowField* flowField, const size_t numSamples)
 {
     const double numSamplesAsDouble = static_cast<double>(numSamples);
-    const double binVolume          = flowField.binVolume();
+    const double binVolume          = flowField->binVolume();
 
-    for (Bin& bin : flowField.bins())
+    for (Bin& bin : flowField->bins())
     {
-        averageFlowFieldBin(bin, numSamplesAsDouble, binVolume);
+        averageFlowFieldBin(&bin, numSamplesAsDouble, binVolume);
     }
 }
 
@@ -410,15 +410,15 @@ struct OutputFields
 };
 
 //! Average all flow fields, trim empty bins and return formatted for output
-static OutputFields getAveragedFlowFieldsForOutput(FlowData& flowContainer)
+static OutputFields getAveragedFlowFieldsForOutput(FlowData* flowContainer)
 {
-    averageFlowField(flowContainer.totalFlowField, flowContainer.numSamples);
-    const OutputData totalFlowField(flowContainer.totalFlowField);
+    averageFlowField(&flowContainer->totalFlowField, flowContainer->numSamples);
+    const OutputData totalFlowField(flowContainer->totalFlowField);
 
     std::vector<OutputData> perGroupFlowFields;
-    for (FlowField& groupFlowField : flowContainer.perGroupFlowFields)
+    for (FlowField& groupFlowField : flowContainer->perGroupFlowFields)
     {
-        averageFlowField(groupFlowField, flowContainer.numSamples);
+        averageFlowField(&groupFlowField, flowContainer->numSamples);
         perGroupFlowFields.push_back(OutputData(groupFlowField));
     }
 
@@ -536,7 +536,7 @@ static void writeAllFlowFieldToDisk(const OutputFields& outputFields,
  *********************/
 
 //! Reduce the data from a single flow field from all ranks to main
-static void mpiCollectSingleFlowField(FlowField& flowField, const t_commrec& commRec)
+static void mpiCollectSingleFlowField(FlowField* flowField, const t_commrec& commRec)
 {
     // We want to transmit all `flow::Bin`s in a single MPI communication.
     // The bins are stored in a std::vector, which guarantuees that adjacent
@@ -562,9 +562,9 @@ static void mpiCollectSingleFlowField(FlowField& flowField, const t_commrec& com
     GMX_RELEASE_ASSERT(sizeof(double) * FlowVar::NumVars == sizeof(Bin),
                        "std::vector<flow::Bin> is not contiguous, MPI_Reduce will fail");
 
-    MPI_Reduce(MAIN(&commRec) ? MPI_IN_PLACE : flowField.bins().data(),
-               MAIN(&commRec) ? flowField.bins().data() : nullptr,
-               FlowVar::NumVars * flowField.bins().size(), // total number of doubles stored in vector
+    MPI_Reduce(MAIN(&commRec) ? MPI_IN_PLACE : flowField->bins().data(),
+               MAIN(&commRec) ? flowField->bins().data() : nullptr,
+               FlowVar::NumVars * flowField->bins().size(), // total number of doubles stored in vector
                MPI_DOUBLE,
                MPI_SUM,
                MAINRANK(commRec),
@@ -572,15 +572,15 @@ static void mpiCollectSingleFlowField(FlowField& flowField, const t_commrec& com
 }
 
 //! If we are using MPI, collect all flow field data to the main rank
-static void mpiCollectFlowDataOnMain(FlowData& flowContainer, const t_commrec& commRec)
+static void mpiCollectFlowDataOnMain(FlowData* flowContainer, const t_commrec& commRec)
 {
     if (PAR(&commRec))
     {
-        mpiCollectSingleFlowField(flowContainer.totalFlowField, commRec);
+        mpiCollectSingleFlowField(&flowContainer->totalFlowField, commRec);
 
-        for (FlowField& perGroupFlowField : flowContainer.perGroupFlowFields)
+        for (FlowField& perGroupFlowField : flowContainer->perGroupFlowFields)
         {
-            mpiCollectSingleFlowField(perGroupFlowField, commRec);
+            mpiCollectSingleFlowField(&perGroupFlowField, commRec);
         }
     }
 }
@@ -678,7 +678,7 @@ void printFlowCollectionInformation(const FlowData& flowContainer, const double 
             .appendText("****************************************");
 }
 
-void collectOrOutputFlowFieldData(FlowData&               flowContainer,
+void collectOrOutputFlowFieldData(FlowData*               flowContainer,
                                   const int64_t           currentStep,
                                   const t_commrec&        commRec,
                                   const t_inputrec&       inputRec,
@@ -693,7 +693,7 @@ void collectOrOutputFlowFieldData(FlowData&               flowContainer,
     collectFlowData(flowContainer, commRec, inputRec, mdAtoms, state, groups);
     wallcycle_sub_stop(wallCycleCounters, WallCycleSubCounter::FlowFieldCollect);
 
-    if (do_per_step(currentStep, flowContainer.nstOutput) && (currentStep != inputRec.init_step))
+    if (do_per_step(currentStep, flowContainer->nstOutput) && (currentStep != inputRec.init_step))
     {
         wallcycle_sub_start(wallCycleCounters, WallCycleSubCounter::FlowFieldOutput);
         mpiCollectFlowDataOnMain(flowContainer, commRec);
@@ -701,10 +701,10 @@ void collectOrOutputFlowFieldData(FlowData&               flowContainer,
         if (MAIN(&commRec))
         {
             const OutputFields outputData = getAveragedFlowFieldsForOutput(flowContainer);
-            writeAllFlowFieldToDisk(outputData, currentStep, flowContainer.nstOutput);
+            writeAllFlowFieldToDisk(outputData, currentStep, flowContainer->nstOutput);
         }
 
-        flowContainer.reset();
+        flowContainer->reset();
         wallcycle_sub_stop(wallCycleCounters, WallCycleSubCounter::FlowFieldOutput);
     }
 

@@ -204,7 +204,7 @@ void printFlowCollectionInformation(const FlowData& flowContainer, double dt, co
 
 
 //! If at a collection or output step, perform actions
-void collectOrOutputFlowFieldData(FlowData&               flowContainer,
+void collectOrOutputFlowFieldData(FlowData*               flowContainer,
                                   int64_t                 currentStep,
                                   const t_commrec&        commRec,
                                   const t_inputrec&       inputRec,

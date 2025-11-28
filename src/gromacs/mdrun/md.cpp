@@ -2152,7 +2152,7 @@ void gmx::LegacySimulator::do_md()
         if (flowContainer.bDoFlowCollection && do_per_step(step, flowContainer.nstCollect))
         {
             flow::collectOrOutputFlowFieldData(
-                    flowContainer, step, *cr_, *ir, *md, *state_, *groups, wallCycleCounters_);
+                    &flowContainer, step, *cr_, *ir, *md, *state_, *groups, wallCycleCounters_);
         }
 
         /* #######  SET VARIABLES FOR NEXT ITERATION IF THEY STILL NEED IT ###### */
