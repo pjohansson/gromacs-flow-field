@@ -78,23 +78,26 @@ public:
     const T& atPosition(const RVec& position) const;
     T&       atPosition(const RVec& position);
 
-    //! Return the 1d index of \c values() corresponding to input \p position.
-    size_t indexFromPosition(const RVec& position) const;
-
     //! Check whether a position is contained within the grid
     bool contains(const RVec& position) const;
 
     //! Return the bin volume
     real binVolume() const noexcept;
 
+    //! Return the box containing the grid.
+    const RVec& box() const { return box_; }
+
+    //! Update the grid box and related data.
+    void setBox(const matrix newBox);
+
+    //! Return the 1d index of \c values() corresponding to input \p position.
+    size_t indexFromPosition(const RVec& position) const;
+
     //! Return the grid shape.
     const IVec& shape() const { return shape_; }
 
     //! Return the grid spacing.
     const RVec& spacing() const { return spacing_; }
-
-    //! Return the box containing the grid.
-    const RVec& box() const { return box_; }
 
     //! Return a reference to the stored values.
     ArrayRef<const T> values() const;

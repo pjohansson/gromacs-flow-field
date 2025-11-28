@@ -305,6 +305,25 @@ TEST(FlowGridTest, IndexFromPositionWorks)
     }
 }
 
+TEST(FlowGridTest, SetBoxUpdatesSpacings)
+{
+    const IVec shape   = { 7, 11, 13 };
+    const RVec spacing = { 0.5, 1.0, 2.0 };
+    Grid3d     grid(shape, spacing);
+
+    const matrix newBox = { { 2.0f * shape[XX] * spacing[XX], 0.0, 0.0 },
+                            { 0.0, 2.0f * shape[YY] * spacing[YY], 0.0 },
+                            { 0.0, 0.0, 2.0f * shape[ZZ] * spacing[ZZ] } };
+    grid.setBox(newBox);
+
+    for (int i = 0; i < DIM; ++i)
+    {
+        EXPECT_EQ(grid.box()[i], newBox[i][i]);
+    }
+    EXPECT_EQ(grid.shape(), shape);
+    EXPECT_EQ(grid.spacing(), 2.0f * spacing);
+}
+
 } // namespace
 } // namespace test
 } // namespace gmx

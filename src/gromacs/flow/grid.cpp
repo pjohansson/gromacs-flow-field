@@ -46,6 +46,7 @@
 
 #include "gromacs/utility/arrayref.h"
 #include "gromacs/utility/cstringutil.h"
+#include "gromacs/utility/gmxassert.h"
 #include "gromacs/utility/stringutil.h"
 
 #include "flow_field.h"
@@ -67,11 +68,10 @@ Grid3d<T>::Grid3d(const IVec& shape, const RVec& spacing) : shape_{ shape }, spa
                 shape_[ZZ]));
     }
 
-    for (int i = 0; i < DIM; ++i)
-    {
-        box_[i]        = static_cast<real>(shape_[i]) * spacing_[i];
-        invSpacing_[i] = 1.0 / spacing_[i];
-    }
+    const matrix box{ { static_cast<real>(shape_[XX]) * spacing_[XX], 0.0, 0.0 },
+                      { 0.0, static_cast<real>(shape_[YY]) * spacing_[YY], 0.0 },
+                      { 0.0, 0.0, static_cast<real>(shape_[ZZ]) * spacing_[ZZ] } };
+    setBox(box);
 
     values_.resize(shape_[XX] * shape_[YY] * shape_[ZZ]);
 }
@@ -140,6 +140,31 @@ bool Grid3d<T>::contains(const RVec& r) const
 {
     return (r[XX] >= 0.0 && r[XX] <= box_[XX] && r[YY] >= 0.0 && r[YY] <= box_[YY] && r[ZZ] >= 0.0
             && r[ZZ] <= box_[ZZ]);
+}
+
+template<typename T>
+void Grid3d<T>::setBox(const matrix newBox)
+{
+    // Assert that the new box is not triclinic
+    for (int i = 0; i < DIM; ++i)
+    {
+        for (int j = 0; j < DIM; ++j)
+        {
+            if (i != j)
+            {
+                GMX_RELEASE_ASSERT(newBox[i][j] == 0.0,
+                                   "Simulation box is not diagonal: flow field output cannot "
+                                   "handle triclinic boxes!");
+            }
+        }
+    }
+
+    for (int i = 0; i < DIM; ++i)
+    {
+        box_[i]        = newBox[i][i];
+        spacing_[i]    = box_[i] / static_cast<real>(shape_[i]);
+        invSpacing_[i] = 1.0 / spacing_[i];
+    }
 }
 
 template<typename T>

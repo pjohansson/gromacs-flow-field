@@ -109,6 +109,11 @@ ArrayRef<const Bin> FlowField::bins() const
     return grid_.values();
 }
 
+void FlowField::updateSimulationBox(const matrix newSimulationBox)
+{
+    grid_.setBox(newSimulationBox);
+}
+
 /**************************
  * FLOWDATA CLASS METHODS *
  **************************/
@@ -195,6 +200,12 @@ static void collectFlowData(FlowData&               flowContainer,
 
     const int numGroups =
             flowContainer.perGroupFlowFields.empty() ? 1 : flowContainer.perGroupFlowFields.size();
+
+    flowContainer.totalFlowField.updateSimulationBox(state.box);
+    for (FlowField& groupFlowField : flowContainer.perGroupFlowFields)
+    {
+        groupFlowField.updateSimulationBox(state.box);
+    }
 
     for (int i = 0; i < mdAtoms.homenr; ++i)
     {

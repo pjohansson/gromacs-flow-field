@@ -119,9 +119,11 @@ void checkFlowFieldMdpOptions(const t_inputrec& inputRec, WarningHandler* warnin
     {
         const std::string message = gmx::formatString(
                 "Pressure scaling and flow field collection were both turned "
-                "on, but flow field collection requires a fixed system box!");
+                "on. Note that this scales flow field bins at every collection "
+                "step, which may result in incorrectly sampled quantities "
+                "if the box is changing size rapidly.");
 
-        warnings->addError(message);
+        warnings->addWarning(message);
     }
 }
 

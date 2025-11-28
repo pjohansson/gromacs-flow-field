@@ -141,6 +141,9 @@ public:
     //! Return the group name.
     const char* groupName() const { return name_.c_str(); }
 
+    //! Update the simulation box size.
+    void updateSimulationBox(const matrix newSimulationBox);
+
 private:
     //! Base for output file names (`fnbase_00001.dat`, ...)
     std::filesystem::path basePath_;
