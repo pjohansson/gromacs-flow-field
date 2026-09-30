@@ -32,32 +32,38 @@
 # the research papers on the package. Check out https://www.gromacs.org.
 
 if (GMX_USE_HDF5)
-    gmx_add_unit_test(H5mdTests h5md-test
-        CPP_SOURCE_FILES
-            h5md.cpp
-            h5mdtestbase.cpp
-            h5md_attribute.cpp
-            h5md_datasetbase.cpp
-            h5md_datasetbuilder.cpp
-            h5md_fixeddataset.cpp
-            h5md_framedataset.cpp
-            h5md_framedatasetbuilder.cpp
-            h5md_group.cpp
-            h5md_guard.cpp
-            h5md_particleblock.cpp
-            h5md_timedatablock.cpp
-            h5md_topologyutils.cpp
-            h5md_type.cpp
-            h5md_util.cpp
-        )
+    set(H5MD_TEST_SOURCE_FILES
+        h5md.cpp
+        h5mdtestbase.cpp
+        h5md_attribute.cpp
+        h5md_datasetbase.cpp
+        h5md_datasetbuilder.cpp
+        h5md_fixeddataset.cpp
+        h5md_framedataset.cpp
+        h5md_framedatasetbuilder.cpp
+        h5md_group.cpp
+        h5md_guard.cpp
+        h5md_particleblock.cpp
+        h5md_timedatablock.cpp
+        h5md_topologyutils.cpp
+        h5md_type.cpp
+        h5md_util.cpp
+    )
+
+    if (GMX_HAVE_SZ3)
+        list(APPEND H5MD_TEST_SOURCE_FILES h5md_compression.cpp)
+    else()
+        list(APPEND H5MD_TEST_SOURCE_FILES h5md_sz3_disabled.cpp)
+    endif()
 else()
-    gmx_add_unit_test(H5mdTests h5md-test
-        CPP_SOURCE_FILES
-            h5md_disabled.cpp
-        )
+    set(H5MD_TEST_SOURCE_FILES h5md_disabled.cpp)
 endif()
 
-target_link_libraries(h5md-test PRIVATE 
+gmx_add_unit_test(H5mdTests h5md-test CPP_SOURCE_FILES ${H5MD_TEST_SOURCE_FILES})
+target_link_libraries(h5md-test PRIVATE
     h5md
     topology
 )
+if (GMX_HAVE_SZ3)
+    target_link_libraries(h5md-test PRIVATE hdf5sz3)
+endif()
