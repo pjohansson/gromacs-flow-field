@@ -40,6 +40,7 @@ if(GMX_USE_HDF5)
     target_sources(h5md PRIVATE
         h5md.cpp
         h5md_attribute.cpp
+        h5md_compression.cpp
         h5md_datasetbase.cpp
         h5md_fixeddataset.cpp
         h5md_framedataset.cpp
@@ -53,6 +54,7 @@ if(GMX_USE_HDF5)
 
     target_include_directories(h5md SYSTEM PUBLIC ${HDF5_INCLUDE_DIRS})
     target_link_libraries(h5md PUBLIC ${HDF5_LIBRARIES})
+    target_link_libraries(h5md PRIVATE hdf5sz3)
 else()
     # We do not need to compile H5md implementation files if we aren't building with it
     target_sources(h5md PRIVATE h5md.cpp)
