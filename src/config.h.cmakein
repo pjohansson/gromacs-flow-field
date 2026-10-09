@@ -168,6 +168,9 @@
 /* Use (and compile) HDF5 related i/o features (H5MD) */
 #cmakedefine01 GMX_USE_HDF5
 
+/* Use (and compile) SZ3 related i/o features (H5MD) */
+#cmakedefine01 GMX_USE_SZ3
+
 /* Enable NVIDIA NVTX instrumentation */
 #cmakedefine01 GMX_USE_NVTX
 
