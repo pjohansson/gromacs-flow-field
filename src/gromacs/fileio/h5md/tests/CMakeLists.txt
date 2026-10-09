@@ -37,6 +37,7 @@ if (GMX_USE_HDF5)
             h5md.cpp
             h5mdtestbase.cpp
             h5md_attribute.cpp
+            h5md_compression.cpp
             h5md_datasetbase.cpp
             h5md_datasetbuilder.cpp
             h5md_fixeddataset.cpp
@@ -50,6 +51,7 @@ if (GMX_USE_HDF5)
             h5md_type.cpp
             h5md_util.cpp
         )
+    target_link_libraries(h5md-test PRIVATE hdf5sz3)
 else()
     gmx_add_unit_test(H5mdTests h5md-test
         CPP_SOURCE_FILES
