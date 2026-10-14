@@ -115,7 +115,7 @@ function(gmx_setup_internal_sz3)
     include(FetchContent)
     set(FETCHCONTENT_QUIET ON)
 
-    FetchContent_Declare(SZ3 SOURCE_DIR ${CMAKE_SOURCE_DIR}/src/external/sz3 EXCLUDE_FROM_ALL QUIET)
+    FetchContent_Declare(SZ3 SOURCE_DIR ${CMAKE_SOURCE_DIR}/src/external/sz3 EXCLUDE_FROM_ALL SYSTEM)
     FetchContent_GetProperties(SZ3)
     if (NOT ${sz3_POPULATED})
         FetchContent_MakeAvailable(SZ3)
