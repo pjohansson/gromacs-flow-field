@@ -111,7 +111,7 @@ function(gmx_setup_internal_sz3)
     set(SZ3_INSTALL OFF)
     set(SZ3_DEBUG_TIMINGS OFF)
     # We only link against SZ3core and hdf5sz3, neither of which require OpenMP
-    set(CMAKE_DISABLE_FIND_OPENMP ON)
+    set(CMAKE_DISABLE_FIND_PACKAGE_OpenMP ON)
     set(CMAKE_MESSAGE_LOG_LEVEL WARNING)
 
     include(FetchContent)
