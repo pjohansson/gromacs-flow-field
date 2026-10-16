@@ -53,10 +53,13 @@ class BasicVector;
  * The lossy compression error is bounded as:
  * value - absoluteError <= value <= value + absoluteError
  *
+ * \note This filter must be applied before any checksum filters are
+ * (e.g. Fletcher-32).
+ *
  * \param[in] creationPropertyList Property list for data set creation.
  * \param[in] absoluteError        Maximum absolute error for compression.
  *
- * \throws H5mdError if absolutError is not positive or the compression
+ * \throws H5mdError if \p absoluteError is not positive or the compression
  * filter could not be applied to \p creationPropertyList.
  */
 template<typename ValueType>
