@@ -48,6 +48,14 @@ namespace gmx
 template<typename T>
 class BasicVector;
 
+/*! \brief Register the active SZ3 filter and return if successful.
+ *
+ * This replaces, for the current process, an SZ3 filter that HDF5
+ * may have loaded from HDF5_PLUGIN_PATH with the filter that GROMACS
+ * is built against.
+ */
+bool registerSz3Filter();
+
 /*! \brief Set lossy SZ3 compression filter to input property list.
  *
  * The lossy compression error is bounded as:

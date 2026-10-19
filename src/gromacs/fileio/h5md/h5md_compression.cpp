@@ -54,6 +54,15 @@
 namespace gmx
 {
 
+bool registerSz3Filter()
+{
+#if GMX_HAVE_SZ3
+    return H5Zregister(H5PLget_plugin_info()) >= 0;
+#else
+    GMX_THROW(NotImplementedError("GROMACS was compiled without SZ3 support"));
+#endif
+}
+
 template<typename ValueType>
 void setSz3Compression(const hid_t creationPropertyList, const double absoluteError)
 {

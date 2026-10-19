@@ -65,6 +65,7 @@
 
 #    include "exceptions.h"
 #    include "h5md_attribute.h"
+#    include "h5md_compression.h"
 #    include "h5md_framedatasetbuilder.h"
 #    include "h5md_group.h"
 #    include "h5md_guard.h"
@@ -237,6 +238,16 @@ H5md::H5md(const std::filesystem::path& fileName, const H5mdFileMode mode)
     /* Disable automatic HDF5 error output, e.g. when items are not found. Explicit H5EPrint2() will
      * still print error messages. */
     H5Eset_auto2(H5E_DEFAULT, nullptr, nullptr);
+
+    // The SZ3 filter must be registered with HDF5 before it can be used
+    // to read and write data. If this registration fails, we can still
+    // open files with or without SZ3 data, but I/O operations on data
+    // sets with the filter active (if present) will fail. Until we know
+    // how to deal with such cases, we always throw if registration fails.
+    if (GMX_HAVE_SZ3)
+    {
+        GMX_H5MD_THROW_UPON_ERROR(!registerSz3Filter(), "Cannot register SZ3 filter with HDF5");
+    }
 
     switch (mode)
     {
