@@ -668,12 +668,13 @@ bool H5md::readNextFrame(t_trxframe* frame, const std::string& selectionName)
 }
 
 // NOLINTNEXTLINE(readability-convert-member-functions-to-static)
-void H5md::writeNextFrame(ArrayRef<const RVec> positions,
-                          ArrayRef<const RVec> velocities,
-                          ArrayRef<const RVec> forces,
-                          const matrix         box,
-                          const int64_t        step,
-                          const double         time)
+void H5md::writeNextFrame(ArrayRef<const RVec>      positions,
+                          ArrayRef<const RVec>      velocities,
+                          ArrayRef<const RVec>      forces,
+                          const matrix              box,
+                          const int64_t             step,
+                          const double              time,
+                          const std::optional<real> positionPrecision)
 {
 #if GMX_USE_HDF5
     // We don't want to do a try-catch block or expensive search for every write,
@@ -682,25 +683,45 @@ void H5md::writeNextFrame(ArrayRef<const RVec> positions,
     GMX_ASSERT(particleBlocks_.find(c_fullSystemGroupName) != particleBlocks_.cend(),
                "Could not find particle block when writing trajectory data");
 
-    const auto createTimeDataBlock = [&](const char* name, const char* unit, const ArrayRef<const RVec> values)
+    const auto createTimeDataBlock = [&](const char*                name,
+                                         const char*                unit,
+                                         const ArrayRef<const RVec> values,
+                                         const H5mdCompression      compression,
+                                         const double               absoluteError)
     {
         const std::string selectionGroupPath =
                 joinStrings({ c_particlesGroupPath, c_fullSystemGroupName }, "/");
         const auto [selectionGroup, selectionGroupGuard] =
                 makeH5mdGroupGuard(openGroup(fileid(), selectionGroupPath.c_str()));
-
         return H5mdTimeDataBlockBuilder<RVec>(selectionGroup, name)
+                .withCompression(compression, absoluteError)
                 .withFrameDimension({ values.size() })
                 .withUnit(unit)
                 .build();
     };
+
+    const auto createTimeDataBlockUncompressed =
+            [&](const char* name, const char* unit, const ArrayRef<const RVec> values)
+    { return createTimeDataBlock(name, unit, values, H5mdCompression::Uncompressed, 0.0); };
 
     H5mdParticleBlock& particleBlock = particleBlocks_.at(c_fullSystemGroupName).block();
     if (!positions.empty())
     {
         if (!particleBlock.hasPosition())
         {
-            particleBlock.addPosition(createTimeDataBlock(c_positionGroupName, c_positionUnit, positions));
+            if (positionPrecision.has_value())
+            {
+                GMX_H5MD_THROW_UPON_ERROR(positionPrecision.value() <= 0.0,
+                                          "Input precision for lossy compression must be positive");
+                const double absoluteError = 1.0 / (2.0 * positionPrecision.value());
+                particleBlock.addPosition(createTimeDataBlock(
+                        c_positionGroupName, c_positionUnit, positions, H5mdCompression::LossySz3BioMD, absoluteError));
+            }
+            else
+            {
+                particleBlock.addPosition(createTimeDataBlockUncompressed(
+                        c_positionGroupName, c_positionUnit, positions));
+            }
             setupSimulationBoxDataSet(fileid(), c_fullSystemGroupName, &particleBlock);
         }
 
@@ -715,7 +736,8 @@ void H5md::writeNextFrame(ArrayRef<const RVec> positions,
     {
         if (!particleBlock.hasVelocity())
         {
-            particleBlock.addVelocity(createTimeDataBlock(c_velocityGroupName, c_velocityUnit, velocities));
+            particleBlock.addVelocity(createTimeDataBlockUncompressed(
+                    c_velocityGroupName, c_velocityUnit, velocities));
         }
 
         particleBlock.velocity()->writeNextFrame(velocities, step, time);
@@ -724,7 +746,7 @@ void H5md::writeNextFrame(ArrayRef<const RVec> positions,
     {
         if (!particleBlock.hasForce())
         {
-            particleBlock.addForce(createTimeDataBlock(c_forceGroupName, c_forceUnit, forces));
+            particleBlock.addForce(createTimeDataBlockUncompressed(c_forceGroupName, c_forceUnit, forces));
         }
 
         particleBlock.force()->writeNextFrame(forces, step, time);
@@ -736,6 +758,7 @@ void H5md::writeNextFrame(ArrayRef<const RVec> positions,
     GMX_UNUSED_VALUE(box);
     GMX_UNUSED_VALUE(step);
     GMX_UNUSED_VALUE(time);
+    GMX_UNUSED_VALUE(positionPrecision);
 #endif
 }
 
@@ -876,15 +899,16 @@ void setupFromExistingFileForAppending(H5md* h5md, const int64_t restartingFromS
     h5md->setupFromExistingFileForAppending(restartingFromStep, numParticles);
 }
 
-void writeNextFrame(H5md*                h5md,
-                    ArrayRef<const RVec> positions,
-                    ArrayRef<const RVec> velocities,
-                    ArrayRef<const RVec> forces,
-                    const matrix         box,
-                    const int64_t        step,
-                    const double         time)
+void writeNextFrame(H5md*                     h5md,
+                    ArrayRef<const RVec>      positions,
+                    ArrayRef<const RVec>      velocities,
+                    ArrayRef<const RVec>      forces,
+                    const matrix              box,
+                    const int64_t             step,
+                    const double              time,
+                    const std::optional<real> positionPrecision)
 {
-    h5md->writeNextFrame(positions, velocities, forces, box, step, time);
+    h5md->writeNextFrame(positions, velocities, forces, box, step, time, positionPrecision);
 }
 
 //! Deallocate \c h5md

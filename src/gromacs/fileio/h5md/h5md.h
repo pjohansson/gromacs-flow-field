@@ -263,12 +263,19 @@ public:
 
     /*! \brief Write input data as the next frame of the trajectory.
      *
+     * \note Position data is only compressed if \p positionPrecision
+     * is not nullopt. Since this is set once-only, during data set
+     * creation, only the first call to writeNextFrame uses this parameter
+     * (and only if the data sets do not already exist, e.g. when resuming
+     * a simulation by appending to an old trajectory).
+     *
      * \param[in] positions     Position data to write (or empty if not to write).
      * \param[in] velocities    Velocity data to write (or empty if not to write).
      * \param[in] forces        Force data to write (or empty if not to write).
      * \param[in] box           Simulation box for frame.
      * \param[in] step          Simulation step for frame.
      * \param[in] time          Simulation time for frame.
+     * \param[in] positionPrecision (Optional) Precision for lossy compression of \p position.
      *
      * \throws H5mdError if the size of the data buffers do not match
      * the number of atoms of the system.
@@ -278,7 +285,8 @@ public:
                         ArrayRef<const RVec> forces,
                         const matrix         box,
                         int64_t              step,
-                        double               time);
+                        double               time,
+                        std::optional<real>  positionPrecision = std::nullopt);
 
 private:
     /*! \brief Set up particle blocks for trajectory writing according to the H5md specification.

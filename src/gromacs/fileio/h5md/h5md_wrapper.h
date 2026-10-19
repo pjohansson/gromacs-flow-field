@@ -42,6 +42,7 @@
 #define GMX_FILEIO_H5MD_H5MD_WRAPPER_H
 
 #include <filesystem>
+#include <optional>
 
 struct gmx_mtop_t;
 struct t_inputrec;
@@ -93,6 +94,7 @@ void setupFromExistingFileForAppending(H5md* h5md, int64_t restartingFromStep, i
  * \param[in] box           Simulation box for frame.
  * \param[in] step          Simulation step for frame.
  * \param[in] time          Simulation time for frame.
+ * \param[in] positionPrecision (Optional) Precision for lossy compression of \p position.
  *
  * \throws H5mdError if \p position, \p velocity or \p force data is given
  *     but the corresponding data set has not been created, or if the size of
@@ -104,7 +106,8 @@ void writeNextFrame(H5md*                h5md,
                     ArrayRef<const RVec> forces,
                     const matrix         box,
                     int64_t              step,
-                    double               time);
+                    double               time,
+                    std::optional<real>  positionPrecision = {});
 
 //! Deallocate \c h5md
 void destroyH5md(H5md* h5md);

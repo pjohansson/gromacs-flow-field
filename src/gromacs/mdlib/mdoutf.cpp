@@ -703,7 +703,7 @@ void mdoutf_write_to_trajectory_files(FILE*                          fplog,
             }
             else if (of->h5md)
             {
-                gmx::writeNextFrame(of->h5md, x, v, f, state_local->box, step, t);
+                gmx::writeNextFrame(of->h5md, x, v, f, state_local->box, step, t, std::nullopt);
             }
         }
         if (mdof_flags & MDOF_X_COMPRESSED)
