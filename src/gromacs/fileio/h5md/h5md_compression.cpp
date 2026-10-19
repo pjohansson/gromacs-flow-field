@@ -48,11 +48,28 @@
 #endif
 
 #include "gromacs/fileio/h5md/exceptions.h"
+#include "gromacs/fileio/h5md/h5md_guard.h"
 #include "gromacs/utility/exceptions.h"
 #include "gromacs/utility/vectypes.h"
 
 namespace gmx
 {
+
+std::optional<double> getAbsoluteError(const hid_t dataSet)
+{
+#if GMX_HAVE_SZ3
+    SZ3::Config conf;
+    const auto [creationPropertyList, creationPropertyListGuard] =
+            makeH5mdPropertyListGuard(H5Dget_create_plist(dataSet));
+
+    const herr_t status = get_SZ3_conf_from_H5(creationPropertyList, conf);
+    GMX_H5MD_THROW_UPON_ERROR(status < 0, "Error in SZ3: Cannot get filter configuration");
+    return status > 0 ? std::make_optional(conf.absErrorBound) : std::nullopt;
+#else
+    GMX_THROW(NotImplementedError("GROMACS was compiled without SZ3 support"));
+    GMX_UNUSED_VALUE(dataSet);
+#endif
+}
 
 bool registerSz3Filter()
 {

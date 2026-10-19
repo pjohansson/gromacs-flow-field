@@ -42,11 +42,24 @@
 
 #include <hdf5.h>
 
+#include <optional>
+
 namespace gmx
 {
 
 template<typename T>
 class BasicVector;
+
+/*! \brief Return the absolute error for SZ3 compression in \p dataSet.
+ *
+ * If a lossy SZ3 compression scheme is applied to the given \p dataSet
+ * the absolute error is retrieved and returned. Otherwise, including
+ * if no filter is applied, std::nullopt is returned.
+ *
+ * \throws H5mdError if there was an error getting the SZ3 filter
+ * configuration.
+ */
+std::optional<double> getAbsoluteError(hid_t dataSet);
 
 /*! \brief Register the active SZ3 filter and return if successful.
  *

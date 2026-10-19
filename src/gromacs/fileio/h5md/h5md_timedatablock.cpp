@@ -99,6 +99,12 @@ H5mdTimeDataBlock<ValueType>::H5mdTimeDataBlock(decltype(makeH5mdGroupGuard(H5I_
 }
 
 template<typename ValueType>
+std::optional<double> H5mdTimeDataBlock<ValueType>::absoluteError() const
+{
+    return valueDataSet_.absoluteError();
+}
+
+template<typename ValueType>
 std::optional<int64_t> H5mdTimeDataBlock<ValueType>::readStepAtIndex(const int64_t frameIndex)
 {
     if ((frameIndex >= 0) && (frameIndex < numFrames_))

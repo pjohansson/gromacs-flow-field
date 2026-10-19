@@ -130,6 +130,8 @@ private:
          * \param[out] hasBox      Whether or not simulation box data exist for the next frame.
          * \param[out] hasStep     Whether or not step data exist for the next frame.
          * \param[out] hasTime     Whether or not time data exist for the next frame.
+         * \param[out] hasPositionPrecision Whether or not the next frame has compressed position data.
+         * \param[out] positionPrecision    Precision of position data of the next frame.
          *
          * \returns True if a next frame exists to read, otherwise false.
          */
@@ -139,7 +141,9 @@ private:
                                bool* hasForce,
                                bool* hasBox,
                                bool* hasStep,
-                               bool* hasTime);
+                               bool* hasTime,
+                               bool* hasPositionPrecision,
+                               real* positionPrecision);
 
         /*! \brief Read the next frame into given data buffers.
          *

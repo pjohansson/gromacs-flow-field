@@ -109,6 +109,9 @@ public:
      */
     H5mdTimeDataBlock(hid_t container, const char* name);
 
+    //! \brief Return the absolute error bound of the value data set (if lossy compression is applied).
+    std::optional<double> absoluteError() const;
+
     //! \brief Return whether or not this block manages a time data set.
     bool hasTime() const { return timeDataSet_.has_value(); }
 

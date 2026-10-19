@@ -624,9 +624,6 @@ bool H5md::readNextFrame(t_trxframe* frame, const std::string& selectionName)
     bool frameWasRead = false;
 
     frame->bLambda = false;
-    // TODO: This should be read from the file
-    frame->bPrec = false;
-    frame->prec  = 0.0;
     // TODO: Due to current limitations, time is currently always read from double
     // precision data sets, but after this is addressed we need to read this from
     // the open file. See #5474.
@@ -634,7 +631,7 @@ bool H5md::readNextFrame(t_trxframe* frame, const std::string& selectionName)
 
     TrajectoryReadCursor& readCursor = particleBlocks_.at(selectionName);
     if (readCursor.nextFrameContents(
-                &frame->bX, &frame->bV, &frame->bF, &frame->bBox, &frame->bStep, &frame->bTime))
+                &frame->bX, &frame->bV, &frame->bF, &frame->bBox, &frame->bStep, &frame->bTime, &frame->bPrec, &frame->prec))
     {
         ArrayRef<RVec> positions{};
         ArrayRef<RVec> velocities{};
@@ -749,7 +746,9 @@ bool H5md::TrajectoryReadCursor::nextFrameContents(bool* hasPosition,
                                                    bool* hasForce,
                                                    bool* hasBox,
                                                    bool* hasStep,
-                                                   bool* hasTime)
+                                                   bool* hasTime,
+                                                   bool* hasPositionPrecision,
+                                                   real* positionPrecision)
 {
     const std::optional<int64_t> positionStep =
             block_.hasPosition() ? block_.position()->readStepAtIndex(nextPositionFrameToRead_)
@@ -786,6 +785,13 @@ bool H5md::TrajectoryReadCursor::nextFrameContents(bool* hasPosition,
         *hasTime     = (*hasPosition && block_.position()->hasTime())
                    || (*hasVelocity && block_.velocity()->hasTime())
                    || (*hasForce && block_.force()->hasTime());
+
+        *hasPositionPrecision = *hasPosition && block_.position()->absoluteError().has_value();
+        if (*hasPositionPrecision)
+        {
+            *positionPrecision = 1.0 / (2.0 * block_.position()->absoluteError().value());
+        }
+
         return true;
     }
     else

@@ -41,7 +41,10 @@
 
 #include "h5md_framedataset.h"
 
+#include "config.h"
+
 #include "gromacs/fileio/h5md/exceptions.h"
+#include "gromacs/fileio/h5md/h5md_compression.h"
 #include "gromacs/fileio/h5md/h5md_guard.h"
 #include "gromacs/utility/arrayref.h"
 #include "gromacs/utility/basedefinitions.h"
@@ -138,7 +141,8 @@ H5mdFrameDataSet<ValueType>::H5mdFrameDataSet(H5mdDataSetBase<ValueType>&& dataS
     Base(std::move(dataSet)),
     extentDimsPrimitive_{ Base::dims() },
     frameDescription_{ extentDimsPrimitive_ },
-    numFrames_{ extentDimsPrimitive_[0] } // FrameDescription would throw above for dims.empty()
+    numFrames_{ extentDimsPrimitive_[0] }, // FrameDescription would throw above for dims.empty()
+    absoluteError_{ GMX_HAVE_SZ3 ? getAbsoluteError(Base::id()) : std::nullopt }
 {
 }
 
@@ -153,6 +157,12 @@ H5mdFrameDataSet<ValueType>::~H5mdFrameDataSet() noexcept = default;
 
 template<typename ValueType>
 H5mdFrameDataSet<ValueType>::H5mdFrameDataSet(H5mdFrameDataSet<ValueType>&&) noexcept = default;
+
+template<typename ValueType>
+std::optional<double> H5mdFrameDataSet<ValueType>::absoluteError() const
+{
+    return absoluteError_;
+}
 
 template<typename ValueType>
 const DataSetDims& H5mdFrameDataSet<ValueType>::frameDims() const
