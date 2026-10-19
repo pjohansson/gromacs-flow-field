@@ -229,9 +229,10 @@ H5mdTimeDataBlockBuilder<ValueType>::H5mdTimeDataBlockBuilder(const hid_t       
 }
 
 template<typename ValueType>
-H5mdTimeDataBlockBuilder<ValueType>& H5mdTimeDataBlockBuilder<ValueType>::withCompression(H5mdCompression compression)
+H5mdTimeDataBlockBuilder<ValueType>&
+H5mdTimeDataBlockBuilder<ValueType>::withCompression(H5mdCompression compression, double absoluteError)
 {
-    valueDataSetBuilder_.withCompression(compression);
+    valueDataSetBuilder_.withCompression(compression, absoluteError);
     return *this;
 }
 

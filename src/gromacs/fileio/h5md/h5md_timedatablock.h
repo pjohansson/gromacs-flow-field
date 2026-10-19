@@ -258,8 +258,17 @@ public:
      */
     H5mdTimeDataBlockBuilder(hid_t container, const std::string& name);
 
-    //! \brief Set \p compression for value data set (default is uncompressed).
-    H5mdTimeDataBlockBuilder& withCompression(H5mdCompression compression);
+    /*! \brief Set \p compression for value data set (default is uncompressed).
+     *
+     * If \p is a lossy compression scheme a positive \p absoluteError
+     * must be provided.
+     *
+     * See H5mdDataSetBuilder::withCompression for more details.
+     *
+     * \param[in] compression   Compression scheme for value data set.
+     * \param[in] absoluteError Absolute error for lossy compression scheme.
+     */
+    H5mdTimeDataBlockBuilder& withCompression(H5mdCompression compression, double absoluteError = 0.0);
 
     //! \brief Set dimension for a single frame in the value data set.
     H5mdTimeDataBlockBuilder& withFrameDimension(ArrayRef<const hsize_t> dims);

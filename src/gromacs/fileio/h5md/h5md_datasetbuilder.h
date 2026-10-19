@@ -51,6 +51,7 @@
 
 #include "gromacs/fileio/h5md/exceptions.h"
 #include "gromacs/fileio/h5md/h5md_attribute.h"
+#include "gromacs/fileio/h5md/h5md_compression.h"
 #include "gromacs/fileio/h5md/h5md_datasetbase.h"
 #include "gromacs/fileio/h5md/h5md_guard.h"
 #include "gromacs/fileio/h5md/h5md_type.h"
@@ -67,7 +68,8 @@ enum class H5mdCompression : int
 {
     Uncompressed,      //!< No compression
     LosslessNoShuffle, //!< Lossless, only gzip (deflate)
-    LosslessShuffle    //!< Lossless, byte shuffle followed by gzip (deflate)
+    LosslessShuffle,   //!< Lossless, byte shuffle followed by gzip (deflate)
+    LossySz3BioMD,     //!< Lossy, SZ3 BioMD algorithm with an absolute error
 };
 
 // gzip (deflate) compression level: 1 = fastest, 9 = highest compression
@@ -104,10 +106,30 @@ public:
 
     GMX_DISALLOW_COPY_MOVE_AND_ASSIGN(H5mdDataSetBuilder);
 
-    //! \brief Set \p compression for data set.
-    H5mdDataSetBuilder& withCompression(const H5mdCompression compression)
+    /*! \brief Set \p compression for data set.
+     *
+     * If \p compression is a lossy compression scheme an \p absoluteError
+     * bound must also be given, such that a compressedValue lies within
+     * inputValue +/- absoluteError. For lossless compression schemes,
+     * \p absoluteError is ignored.
+     *
+     * \param[in] compression   Compression scheme.
+     * \param[in] absoluteError Absolute error for lossy compression scheme.
+     *
+     * \throws H5mdError if a lossy \p compression scheme is used
+     * and \p absoluteError is not positive, or if the \p compression
+     * algorithm is incompatible with the compiled \c ValueType.
+     */
+    H5mdDataSetBuilder& withCompression(const H5mdCompression compression, const double absoluteError = 0.0)
     {
-        compression_ = compression;
+        GMX_H5MD_THROW_UPON_ERROR(compression == H5mdCompression::LossySz3BioMD
+                                          && !(std::is_same_v<ValueType, BasicVector<float>>
+                                               || std::is_same_v<ValueType, BasicVector<double>>),
+                                  "SZ3 compression can only be applied to RVec-like data");
+        GMX_H5MD_THROW_UPON_ERROR(compression == H5mdCompression::LossySz3BioMD && absoluteError <= 0.0,
+                                  "SZ3 compression requires a positive absolute error bound");
+        compression_   = compression;
+        absoluteError_ = absoluteError;
         return *this;
     }
 
@@ -234,6 +256,8 @@ public:
                 H5Pset_chunk_opts(creationPropertyList, H5D_CHUNK_DONT_FILTER_PARTIAL_CHUNKS) < 0,
                 "Cannot set chunk options when creating data set.");
 
+        // If we add a checksum filter to data (e.g. Fletcher32), it must
+        // come after we set the compression filter to the property list
         switch (compression_)
         {
             case H5mdCompression::Uncompressed: break;
@@ -242,6 +266,17 @@ public:
                 [[fallthrough]];
             case H5mdCompression::LosslessNoShuffle:
                 H5Pset_deflate(creationPropertyList, c_h5mdDeflateCompressionLevel);
+                break;
+            case gmx::H5mdCompression::LossySz3BioMD:
+                if constexpr (std::is_same_v<ValueType, BasicVector<float>>
+                              || std::is_same_v<ValueType, BasicVector<double>>)
+                {
+                    setSz3Compression<ValueType>(creationPropertyList, absoluteError_);
+                }
+                else
+                {
+                    GMX_THROW(H5mdError("Unexpected type for SZ3 compression"));
+                }
                 break;
         }
 
@@ -342,8 +377,11 @@ private:
     //!< Unit for values in data set.
     std::string unit_;
 
-    //!< Compression scheme for data set.
+    //! Compression scheme for data set.
     H5mdCompression compression_ = H5mdCompression::Uncompressed;
+
+    //! Absolute error for lossy compression.
+    double absoluteError_ = 0.0;
 };
 
 } // namespace gmx
