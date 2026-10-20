@@ -50,6 +50,15 @@ namespace gmx
 template<typename T>
 class BasicVector;
 
+/*! \brief Return whether input \p dataSet uses SZ3 compression.
+ *
+ * Can be called regardless of whether GROMACS is compiled with SZ3 support
+ * or not. Should be used by non-SZ3 builds to check whether we are
+ * opening a data set which we cannot interact with, i.e. if SZ3
+ * compression is used for it.
+ */
+bool isCompressedWithSz3(hid_t dataSet);
+
 /*! \brief Return the absolute error for SZ3 compression in \p dataSet.
  *
  * If a lossy SZ3 compression scheme is applied to the given \p dataSet

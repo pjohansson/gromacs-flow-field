@@ -41,11 +41,15 @@
 
 #include "h5md_datasetbase.h"
 
+#include "config.h"
+
 #include <algorithm>
 
 #include "gromacs/fileio/h5md/exceptions.h"
+#include "gromacs/fileio/h5md/h5md_compression.h"
 #include "gromacs/fileio/h5md/h5md_guard.h"
 #include "gromacs/fileio/h5md/h5md_type.h"
+#include "gromacs/fileio/h5md/h5md_util.h"
 #include "gromacs/utility/arrayref.h"
 #include "gromacs/utility/basedefinitions.h"
 #include "gromacs/utility/exceptions.h"
@@ -74,6 +78,10 @@ static hid_t openDataSet(const hid_t container, const char* name)
 {
     const hid_t handle = H5Dopen(container, name, H5P_DEFAULT);
     GMX_H5MD_THROW_UPON_INVALID_HID(handle, formatString("Cannot open data set with name %s.", name));
+    GMX_H5MD_THROW_UPON_ERROR(!GMX_HAVE_SZ3 && isCompressedWithSz3(handle),
+                              formatString("Cannot open data set at %s: it uses SZ3 compression "
+                                           "and GROMACS is built without SZ3 support",
+                                           getHandlePath(handle).value_or("<unknown>").c_str()));
     return handle;
 }
 

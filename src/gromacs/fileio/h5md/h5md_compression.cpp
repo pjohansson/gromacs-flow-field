@@ -52,8 +52,20 @@
 #include "gromacs/utility/exceptions.h"
 #include "gromacs/utility/vectypes.h"
 
+//! \brief Registered id for the SZ3 filter in HDF5
+constexpr int c_sz3FilterId = 32024;
+
 namespace gmx
 {
+
+bool isCompressedWithSz3(hid_t dataSet)
+{
+    const auto [creationPropertyList, creationPropertyListGuard] =
+            makeH5mdPropertyListGuard(H5Dget_create_plist(dataSet));
+    return H5Pget_filter_by_id2(
+                   creationPropertyList, c_sz3FilterId, nullptr, nullptr, nullptr, 0, nullptr, nullptr)
+           >= 0;
+}
 
 std::optional<double> getAbsoluteError(const hid_t dataSet)
 {
