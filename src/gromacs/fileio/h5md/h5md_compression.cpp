@@ -41,9 +41,14 @@
 
 #include "gromacs/fileio/h5md/h5md_compression.h"
 
-#include <H5Z_SZ3.hpp>
+#include "config.h"
+
+#if GMX_HAVE_SZ3
+#    include <H5Z_SZ3.hpp>
+#endif
 
 #include "gromacs/fileio/h5md/exceptions.h"
+#include "gromacs/utility/exceptions.h"
 #include "gromacs/utility/vectypes.h"
 
 namespace gmx
@@ -52,11 +57,17 @@ namespace gmx
 template<typename ValueType>
 void setSz3Compression(const hid_t creationPropertyList, const double absoluteError)
 {
+#if GMX_HAVE_SZ3
     GMX_H5MD_THROW_UPON_ERROR(absoluteError <= 0.0,
                               "Absolute error for SZ3 compression must be positive");
     GMX_H5MD_THROW_UPON_ERROR(
             H5Pset_sz3(creationPropertyList, H5Z_SZ3_ALGO_BIOMD, H5Z_SZ3_EB_ABS, absoluteError, 0, 0, 0) < 0,
             "Cannot set SZ3 compression filter");
+#else
+    GMX_THROW(NotImplementedError("GROMACS was compiled without SZ3 support"));
+    GMX_UNUSED_VALUE(creationPropertyList);
+    GMX_UNUSED_VALUE(absoluteError);
+#endif
 }
 
 template void setSz3Compression<BasicVector<float>>(hid_t, double);

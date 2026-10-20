@@ -37,7 +37,7 @@ set(GMX_SZ3_MINIMUM_REQUIRED_VERSION "3.4.0")
 gmx_option_multichoice(GMX_USE_SZ3
     "How to handle the SZ3 dependency of GROMACS"
     AUTO
-    AUTO INTERNAL EXTERNAL)
+    AUTO INTERNAL EXTERNAL NONE)
 mark_as_advanced(GMX_USE_SZ3)
 
 # Macro which parses GMX_USE_SZ3 to configure GROMACS to build
@@ -71,10 +71,11 @@ macro(gmx_manage_sz3)
                 set(SZ3_ALREADY_PRINTED_EXTERNAL_STATUS_MESSAGE TRUE CACHE INTERNAL
                     "True if a status message has already been printed")
             endif()
+            set(GMX_HAVE_SZ3 1 CACHE INTERNAL "Are we building with SZ3?")
 
             # Reset status messages for internal library configuration
             set(SZ3_ALREADY_PRINTED_INTERNAL_STATUS_MESSAGE FALSE CACHE INTERNAL "")
-        else()
+        elseif (GMX_USE_SZ3 STREQUAL "INTERNAL")
             if(NOT SZ3_ALREADY_PRINTED_INTERNAL_STATUS_MESSAGE)
                 message(STATUS "Using internal SZ3 library")
                 set(SZ3_ALREADY_PRINTED_INTERNAL_STATUS_MESSAGE TRUE CACHE INTERNAL
@@ -86,6 +87,9 @@ macro(gmx_manage_sz3)
             set(SZ3_ALREADY_PRINTED_EXTERNAL_STATUS_MESSAGE FALSE CACHE INTERNAL "")
 
             gmx_setup_internal_sz3()
+            set(GMX_HAVE_SZ3 1 CACHE INTERNAL "Are we building with SZ3?")
+        else()
+            set(GMX_HAVE_SZ3 0 CACHE INTERNAL "Are we building with SZ3?")
         endif()
     endif()
 

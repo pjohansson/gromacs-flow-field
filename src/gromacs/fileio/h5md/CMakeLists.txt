@@ -54,7 +54,9 @@ if(GMX_USE_HDF5)
 
     target_include_directories(h5md SYSTEM PUBLIC ${HDF5_INCLUDE_DIRS})
     target_link_libraries(h5md PUBLIC ${HDF5_LIBRARIES})
-    target_link_libraries(h5md PRIVATE hdf5sz3)
+    if (GMX_HAVE_SZ3)
+        target_link_libraries(h5md PRIVATE hdf5sz3)
+    endif()
 else()
     # We do not need to compile H5md implementation files if we aren't building with it
     target_sources(h5md PRIVATE h5md.cpp)
