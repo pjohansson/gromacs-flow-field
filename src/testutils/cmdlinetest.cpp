@@ -414,7 +414,7 @@ std::filesystem::path CommandLineTestHelper::setOutputFile(CommandLine*         
                                                            const IFileMatcherSettings&  matcher)
 {
     std::string suffix = filename.string();
-    if (startsWith(filename, "."))
+    if (startsWith(suffix, "."))
     {
         suffix = formatString("%d.%s", args->argc(), filename.string().c_str());
     }
