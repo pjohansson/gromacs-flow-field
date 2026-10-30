@@ -75,7 +75,7 @@ macro(gmx_manage_sz3)
 
             # Reset status messages for internal library configuration
             set(SZ3_ALREADY_PRINTED_INTERNAL_STATUS_MESSAGE FALSE CACHE INTERNAL "")
-        elseif (GMX_USE_SZ3 STREQUAL "INTERNAL")
+        elseif (GMX_USE_SZ3 STREQUAL "AUTO" OR GMX_USE_SZ3 STREQUAL "INTERNAL")
             if(NOT SZ3_ALREADY_PRINTED_INTERNAL_STATUS_MESSAGE)
                 message(STATUS "Using internal SZ3 library")
                 set(SZ3_ALREADY_PRINTED_INTERNAL_STATUS_MESSAGE TRUE CACHE INTERNAL
